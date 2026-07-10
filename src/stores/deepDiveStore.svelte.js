@@ -5,12 +5,39 @@ import {
   getOrCreateTabState,
   getCurrentTabId,
 } from '@/services/tabCacheService.js'
+import { createConversationDeepDiveCache } from '@/services/tools/conversationDeepDiveCache.js'
 
 /**
  * Deep Dive UI state management
  * Uses Svelte 5 $state for fine-grained reactivity
  */
 export const deepDiveState = $state(createDefaultDeepDiveState())
+
+// Chat Deep Dive is deliberately independent from the legacy tab-keyed state.
+// Its key is a persisted conversation/message pair, so tab switches cannot
+// attach a generated question set to a different assistant response.
+export const conversationDeepDiveState = $state({ entries: {} })
+const conversationDeepDiveCache = createConversationDeepDiveCache(conversationDeepDiveState)
+
+export function getConversationDeepDive(conversationId, assistantMessageId) {
+  return conversationDeepDiveCache.get(conversationId, assistantMessageId)
+}
+
+export function startConversationDeepDive(conversationId, assistantMessageId) {
+  return conversationDeepDiveCache.start(conversationId, assistantMessageId)
+}
+
+export function resolveConversationDeepDive(conversationId, assistantMessageId, requestId, questions) {
+  return conversationDeepDiveCache.resolve(conversationId, assistantMessageId, requestId, questions)
+}
+
+export function rejectConversationDeepDive(conversationId, assistantMessageId, requestId, error) {
+  return conversationDeepDiveCache.reject(conversationId, assistantMessageId, requestId, error)
+}
+
+export function invalidateConversationDeepDive(conversationId) {
+  conversationDeepDiveCache.invalidateConversation(conversationId)
+}
 
 /**
  * Helper to update Deep Dive state for a specific tab (and global if active)

@@ -22,6 +22,7 @@ import {
 import { createZipFromFiles } from './zipService.js'
 import { sanitizeSettings } from '@/lib/config/settingsSchema.js'
 import { getCustomCredentials } from '@/services/cloudSync/cloudSyncService.svelte.js'
+import { exportConversationBackup } from '@/lib/db/conversationRepository.js'
 
 /**
  * Export all data to ZIP format
@@ -45,6 +46,7 @@ export async function exportDataToZip(settings, onProgress) {
     const summaries = await getAllSummaries()
     const history = await getAllHistory()
     const tags = await getAllTags()
+    const chatBackup = await exportConversationBackup()
 
     // Step 2: Create settings.json with sanitized settings
     if (onProgress) {
@@ -73,6 +75,7 @@ export async function exportDataToZip(settings, onProgress) {
           summaries: summaries.length,
           history: history.length,
           tags: tags.length,
+          conversations: chatBackup.conversations.length,
         },
       }
     }
@@ -137,6 +140,9 @@ export async function exportDataToZip(settings, onProgress) {
       'summarizerrrr-settings.json': settingsJson,
       'summarizerrrr-history.jsonl': historyJsonl,
       'summarizerrrr-library.jsonl': libraryJsonl,
+      // This is backup-only. Cloud sync continues to read/write its existing
+      // settings/history/library files and never receives conversation data.
+      'summarizerrrr-chat.json': JSON.stringify(chatBackup, null, 2),
     }
 
     // Add sync.json only if credentials exist

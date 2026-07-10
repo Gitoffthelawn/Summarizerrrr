@@ -4,6 +4,7 @@
   export let summarizePrompts
   export let customActionPrompts
   export let handlePromptMenuClick
+  export let onOpenSkills = null
 </script>
 
 <div
@@ -50,6 +51,18 @@
       </button>
     {/each}
   </div>
+
+  {#if onOpenSkills}
+    <div class="mt-auto flex flex-col px-2 py-3 border-t border-border/70">
+      <button
+        class="prompt-button relative flex w-full items-center justify-between py-2 px-4 text-left text-text-secondary transition-colors duration-125 hover:bg-blackwhite/5 hover:text-text-primary rounded-sm"
+        onclick={() => onOpenSkills()}
+      >
+        <span>Chat skills</span>
+        <span aria-hidden="true">→</span>
+      </button>
+    </div>
+  {/if}
 </div>
 
 <style>

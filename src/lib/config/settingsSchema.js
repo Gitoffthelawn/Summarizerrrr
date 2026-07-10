@@ -125,6 +125,11 @@ export const VALID_SETTING_KEYS = [
   'commentCustomPromptContent',
   'commentCustomSystemInstructionContent',
 
+  // Chat skills and persona
+  'chatGlobalPersona',
+  'chatUserSkills',
+  'chatSkillMigrationVersion',
+
   // Advanced Mode
   'isAdvancedMode',
   'temperature',

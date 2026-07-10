@@ -1,11 +1,14 @@
 // @ts-nocheck
 import { generateUUID } from '../utils/utils'
 
-const DB_NAME = 'summarizer_db'
+export const DB_NAME = 'summarizer_db'
 const STORE_NAME = 'summaries'
 const TAGS_STORE_NAME = 'tags'
-const DB_VERSION = 9 // Version increased for soft delete migration
+export const DB_VERSION = 10 // Version increased for conversation persistence
 const HISTORY_STORE_NAME = 'history'
+export const CONVERSATIONS_STORE_NAME = 'conversations'
+export const CONVERSATION_MESSAGES_STORE_NAME = 'conversation_messages'
+export const CONVERSATION_SOURCES_STORE_NAME = 'conversation_sources'
 const HISTORY_LIMIT = 100
 
 let db
@@ -65,6 +68,40 @@ function openDatabase() {
         })
         backupStore.createIndex('createdAt', 'createdAt', { unique: false })
         backupStore.createIndex('type', 'type', { unique: false })
+      }
+
+      // Chat stores are intentionally separate from legacy summaries/history.
+      // Their records are turn-based and must never be written into the old
+      // one-shot record shapes.
+      if (!db.objectStoreNames.contains(CONVERSATIONS_STORE_NAME)) {
+        const conversationStore = db.createObjectStore(CONVERSATIONS_STORE_NAME, {
+          keyPath: 'id',
+        })
+        conversationStore.createIndex('updatedAt', 'updatedAt', { unique: false })
+        conversationStore.createIndex('archived', 'archived', { unique: false })
+        conversationStore.createIndex('deleted', 'deleted', { unique: false })
+      }
+
+      if (!db.objectStoreNames.contains(CONVERSATION_MESSAGES_STORE_NAME)) {
+        const messageStore = db.createObjectStore(CONVERSATION_MESSAGES_STORE_NAME, {
+          keyPath: 'id',
+        })
+        messageStore.createIndex('conversationId', 'conversationId', { unique: false })
+        messageStore.createIndex(
+          'conversationId_sequence',
+          ['conversationId', 'sequence'],
+          { unique: true }
+        )
+        messageStore.createIndex('createdAt', 'createdAt', { unique: false })
+      }
+
+      if (!db.objectStoreNames.contains(CONVERSATION_SOURCES_STORE_NAME)) {
+        const sourceStore = db.createObjectStore(CONVERSATION_SOURCES_STORE_NAME, {
+          keyPath: 'id',
+        })
+        sourceStore.createIndex('sourceKey', 'sourceKey', { unique: true })
+        sourceStore.createIndex('normalizedUrl', 'normalizedUrl', { unique: false })
+        sourceStore.createIndex('capturedAt', 'capturedAt', { unique: false })
       }
 
       // Data migration: ensure all summaries have a 'tags' array
@@ -196,6 +233,17 @@ function openDatabase() {
       reject(error)
     }
   })
+}
+
+function closeDatabase() {
+  if (db) {
+    db.close()
+    db = undefined
+  }
+}
+
+function getDatabase() {
+  return db || openDatabase()
 }
 
 // --- Summary Functions ---
@@ -992,6 +1040,8 @@ async function cleanupStore(storeName, now) {
 
 export {
   openDatabase,
+  closeDatabase,
+  getDatabase,
   addSummary,
   getAllSummaries,
   getSummaryCount,

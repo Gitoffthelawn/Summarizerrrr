@@ -19,6 +19,11 @@
     clearAllTags,
     getDataCounts,
   } from '../../lib/db/indexedDBService.js'
+  import {
+    exportConversationBackup,
+    importConversationBackup,
+    clearConversationData,
+  } from '@/lib/db/conversationRepository.js'
   import { t } from 'svelte-i18n'
   import {
     exportDataToZip,
@@ -67,6 +72,7 @@
       history: true,
       archive: true,
       tags: true,
+      chat: true,
     },
     mergeMode: 'merge',
   })
@@ -103,6 +109,7 @@
     history: 0,
     archives: 0,
     tags: 0,
+    conversations: 0,
     isLoading: true,
   })
 
@@ -132,6 +139,7 @@
       dataCounts.history = counts.history
       dataCounts.archives = counts.summaries
       dataCounts.tags = counts.tags
+      dataCounts.conversations = (await exportConversationBackup()).conversations.length
     } catch (error) {
       console.error('Error loading data counts:', error)
     } finally {
@@ -378,9 +386,19 @@
         }
       }
 
+      // Chat is intentionally a separate backup file. Its absence means this
+      // is an older backup and must not block restore of legacy data.
+      if (files['summarizerrrr-chat.json']) {
+        try {
+          data.chat = JSON.parse(files['summarizerrrr-chat.json'])
+        } catch (error) {
+          throw new Error(`Failed to parse chat backup: ${error.message}`)
+        }
+      }
+
       if (
         Object.keys(data).length === 0 ||
-        (!data.settings && !data.history && !data.summaries && !data.tags)
+        (!data.settings && !data.history && !data.summaries && !data.tags && !data.chat)
       ) {
         throw new Error($t('exportImport.messages.no_valid_data'))
       }
@@ -391,6 +409,7 @@
         history: !!data.history,
         archive: !!(data.archive || data.summaries),
         tags: !!data.tags,
+        chat: !!data.chat,
       }
 
       state.showImportModal = true
@@ -454,6 +473,10 @@
 
     if (importOptions.dataTypes.tags && state.importData.tags) {
       data.tags = state.importData.tags
+    }
+
+    if (importOptions.dataTypes.chat && state.importData.chat) {
+      data.chat = state.importData.chat
     }
 
     // Sync credentials go with settings
@@ -620,6 +643,17 @@
         console.log('[Import] No tags data to import')
       }
     }
+
+    if (importOptions.dataTypes.chat && importedData.chat) {
+      await importConversationBackup(importedData.chat, { mode: importOptions.mergeMode })
+    }
+  }
+
+  async function clearChatOnly() {
+    if (!confirm('Clear all conversations and captured chat sources? Summary and history data will not be affected.')) return
+    await clearConversationData()
+    await loadDataCounts()
+    setMessage('success', 'Chat data cleared.')
   }
 
   function resetImportState(resetFileInput = true) {
@@ -629,6 +663,7 @@
       history: true,
       archive: true,
       tags: true,
+      chat: true,
     }
     importOptions.mergeMode = 'merge'
     if (resetFileInput && fileInputRef) {
@@ -674,6 +709,10 @@
 
   function getTagsCount() {
     return String(state.importData?.tags ? state.importData.tags.length : 0)
+  }
+
+  function getChatCount() {
+    return String(state.importData?.chat?.conversations?.length || 0)
   }
 
   // Reset all display texts to empty
@@ -839,6 +878,10 @@
             icon="tabler:tag"
             class="size-6 text-muted dark:text-text-primary  dark:drop-shadow-md dark:drop-shadow-primary shrink-0"
           />
+          <Icon
+            icon="heroicons:chat-bubble-left-right"
+            class="size-6 text-muted dark:text-text-primary dark:drop-shadow-md dark:drop-shadow-primary shrink-0"
+          />
         </div>
         <div class=" px-8 gap-1 flex flex-col w-full">
           <div class="flex justify-between">
@@ -848,6 +891,10 @@
             <div class="text-text-primary font-medium">
               {dataCounts.isLoading ? '...' : dataCounts.history}
             </div>
+          </div>
+          <div class="flex justify-between">
+            <div class="text-text-secondary text-xs">Chats</div>
+            <div class="text-text-primary font-medium">{dataCounts.isLoading ? '...' : dataCounts.conversations}</div>
           </div>
           <div class="flex justify-between">
             <div class="text-text-secondary text-xs">
@@ -926,6 +973,11 @@
             onchange={handleFileSelect}
           />
         </div>
+      </div>
+      <div class="flex flex-col gap-2 pb-4">
+        <div class="block text-text-secondary">Chat data</div>
+        <p class="text-xs text-text-muted">Conversations are included in local backups only. Cloud sync does not sync chats in v1.</p>
+        <button onclick={clearChatOnly} disabled={dataCounts.conversations === 0} class="text-left text-xs text-error disabled:opacity-50">Clear chat data</button>
       </div>
       <div class="flex flex-col gap-2 pb-4">
         <!-- svelte-ignore a11y_label_has_associated_control -->
@@ -1107,6 +1159,10 @@
                           </div>
                         </div>
                         <div class=" flex justify-between">
+                          <div class="text-text-secondary text-xs">Chats:</div>
+                          <div class="text-text-primary font-medium">{getChatCount()}</div>
+                        </div>
+                        <div class=" flex justify-between">
                           <div
                             bind:this={animatedRefs.historyLabel}
                             class="text-text-secondary text-xs"
@@ -1180,6 +1236,12 @@
                       id="tags-switch"
                       name={$t('exportImport.tags')}
                       bind:checked={importOptions.dataTypes.tags}
+                    />
+
+                    <SwitchPermission
+                      id="chat-switch"
+                      name="Chats"
+                      bind:checked={importOptions.dataTypes.chat}
                     />
                   </div>
                 </div>

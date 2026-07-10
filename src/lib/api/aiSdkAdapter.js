@@ -276,14 +276,60 @@ export function wrapModelWithReasoningExtraction(model) {
 }
 
 /**
- * Unified content generation function using AI SDK
- * WITH AUTO-FALLBACK for Gemini Basic when overloaded
- * @param {string} providerId - Provider identifier
- * @param {object} settings - User settings
- * @param {object} advancedModeSettings - Advanced mode settings
- * @param {object} basicModeSettings - Basic mode settings
- * @param {string} systemInstruction - System instruction/prompt
- * @param {string} userPrompt - User prompt
+ * Validate and normalize a provider-agnostic generation request.
+ * Exactly one input form is allowed so prompt callers and message callers use
+ * the same retry, fallback, proxy, and abort paths.
+ * @param {import('../chat/contracts.js').GenerationRequest & object} request
+ * @returns {import('../chat/contracts.js').GenerationRequest & object}
+ */
+export function normalizeGenerationRequest(request) {
+  if (!request || typeof request !== 'object') {
+    throw new TypeError('Generation request must be an object')
+  }
+
+  const hasPrompt = request.prompt !== undefined
+  const hasMessages = request.messages !== undefined
+
+  if (hasPrompt === hasMessages) {
+    throw new Error(
+      'Generation request must contain exactly one of "prompt" or "messages"'
+    )
+  }
+  if (hasMessages && !Array.isArray(request.messages)) {
+    throw new TypeError('Generation request messages must be an array')
+  }
+  if (!request.providerId) {
+    throw new Error('Generation request requires a providerId')
+  }
+  if (!request.settings || typeof request.settings !== 'object') {
+    throw new Error('Generation request requires settings')
+  }
+
+  const { systemInstruction, ...normalized } = request
+  return {
+    ...normalized,
+    system: normalized.system ?? systemInstruction,
+  }
+}
+
+function createPromptGenerationRequest(
+  providerId,
+  settings,
+  systemInstruction,
+  userPrompt,
+  options = {}
+) {
+  return normalizeGenerationRequest({
+    ...options,
+    providerId,
+    settings,
+    system: systemInstruction,
+    prompt: userPrompt,
+  })
+}
+
+/**
+ * Compatibility wrapper for existing positional prompt callers.
  * @returns {Promise<string>} Generated content
  */
 export async function generateContent(
@@ -293,6 +339,35 @@ export async function generateContent(
   userPrompt,
   options = {}
 ) {
+  return generateContentRequest(
+    createPromptGenerationRequest(
+      providerId,
+      settings,
+      systemInstruction,
+      userPrompt,
+      options
+    )
+  )
+}
+
+/**
+ * Generate content from a normalized prompt or messages request.
+ * @param {import('../chat/contracts.js').GenerationRequest & object} request
+ * @returns {Promise<string>} Generated content
+ */
+export async function generateContentRequest(request) {
+  const normalizedRequest = normalizeGenerationRequest(request)
+  const {
+    providerId,
+    settings,
+    system: systemInstruction,
+    prompt,
+    messages,
+    providerOptions,
+    abortSignal,
+    tools,
+    ...generationOptions
+  } = normalizedRequest
   // Check if auto-fallback is enabled (Gemini Basic only)
   const autoFallbackEnabled = shouldEnableAutoFallback(providerId, settings)
   // Check if API key retry is enabled (Both Gemini Basic and Advanced)
@@ -362,7 +437,7 @@ export async function generateContent(
       // User request: Remove system instruction completely for these smaller models as they don't handle long prompts well
       const isGemmaModel = modelName.toLowerCase().includes('gemma')
       const effectiveSystemInstruction = isGemmaModel ? undefined : systemInstruction
-      const effectiveUserPrompt = userPrompt
+      const input = messages ? { messages } : { prompt }
 
       // Check if this is a proxy model
       const isProxyModel = requiresApiProxy(providerId)
@@ -375,9 +450,12 @@ export async function generateContent(
         console.log('[aiSdkAdapter] Using proxy model for generateContent')
         const result = await model.generateText({
           system: effectiveSystemInstruction,
-          prompt: effectiveUserPrompt,
+          ...input,
           ...generationConfig,
-          ...(options.abortSignal && { abortSignal: options.abortSignal }),
+          ...generationOptions,
+          ...(tools && { tools }),
+          ...(providerOptions && { providerOptions }),
+          ...(abortSignal && { abortSignal }),
         })
         console.log('[DEBUG] Proxy raw result:', result.text) // Add debug log
         console.log(`[aiSdkAdapter] ✅ API Success - Model: ${modelName}`)
@@ -395,18 +473,20 @@ export async function generateContent(
 
         // Merge: caller options override auto-built thinking options
         const mergedProviderOptions = Object.keys(thinkingProviderOptions).length
-          ? { ...thinkingProviderOptions, ...(options.providerOptions || {}) }
-          : options.providerOptions
+          ? { ...thinkingProviderOptions, ...(providerOptions || {}) }
+          : providerOptions
 
         // Use the standard AI SDK generateText for direct calls - no middleware
         const { text } = await generateText({
           model,
           system: effectiveSystemInstruction,
-          prompt: effectiveUserPrompt,
+          ...input,
           maxRetries: 0, // Disable AI SDK built-in retry to allow custom fallback to work faster
           ...generationConfig,
+          ...generationOptions,
+          ...(tools && { tools }),
           ...(mergedProviderOptions && { providerOptions: mergedProviderOptions }),
-          ...(options.abortSignal && { abortSignal: options.abortSignal }),
+          ...(abortSignal && { abortSignal }),
         })
         console.log(`[aiSdkAdapter] ✅ API Success - Model: ${modelName}`)
         return text
@@ -521,16 +601,7 @@ export async function generateContent(
 }
 
 /**
- * Unified streaming content generation function using AI SDK
- * WITH AUTO-FALLBACK for Gemini Basic when overloaded
- * @param {string} providerId - Provider identifier
- * @param {object} settings - User settings
- * @param {object} advancedModeSettings - Advanced mode settings
- * @param {object} basicModeSettings - Basic mode settings
- * @param {string} systemInstruction - System instruction/prompt
- * @param {string} userPrompt - User prompt
- * @param {object} [streamOptions] - Additional streaming options
- * @param {AbortSignal} [streamOptions.abortSignal] - Optional abort signal for cancellation
+ * Compatibility wrapper for existing positional prompt streaming callers.
  * @returns {AsyncIterable<string>} Stream of generated content chunks
  */
 export async function* generateContentStream(
@@ -540,6 +611,36 @@ export async function* generateContentStream(
   userPrompt,
   streamOptions = {}
 ) {
+  yield* generateContentStreamRequest(
+    createPromptGenerationRequest(
+      providerId,
+      settings,
+      systemInstruction,
+      userPrompt,
+      streamOptions
+    )
+  )
+}
+
+/**
+ * Stream content from a normalized prompt or messages request.
+ * @param {import('../chat/contracts.js').GenerationRequest & object} request
+ * @returns {AsyncIterable<string>} Stream of generated content chunks
+ */
+export async function* generateContentStreamRequest(request) {
+  const normalizedRequest = normalizeGenerationRequest(request)
+  const {
+    providerId,
+    settings,
+    system: systemInstruction,
+    prompt,
+    messages,
+    providerOptions,
+    abortSignal,
+    tools,
+    useSmoothing,
+    ...generationOptions
+  } = normalizedRequest
   // Check if auto-fallback is enabled (Gemini Basic only)
   const autoFallbackEnabled = shouldEnableAutoFallback(providerId, settings)
   // Check if API key retry is enabled (Both Gemini Basic and Advanced)
@@ -613,7 +714,7 @@ export async function* generateContentStream(
       // User request: Remove system instruction completely for these smaller models as they don't handle long prompts well
       const isGemmaModel = modelName.toLowerCase().includes('gemma')
       const effectiveSystemInstruction = isGemmaModel ? undefined : systemInstruction
-      const effectiveUserPrompt = userPrompt
+      const input = messages ? { messages } : { prompt }
 
       // Check if this is a proxy model (doesn't need reasoning extraction wrapper)
       const isProxyModel = requiresApiProxy(providerId)
@@ -625,11 +726,12 @@ export async function* generateContentStream(
         // Use proxy model's streamText method directly
         const result = await model.streamText({
           system: effectiveSystemInstruction,
-          prompt: effectiveUserPrompt,
+          ...input,
           ...generationConfig,
-          ...(streamOptions.abortSignal && {
-            abortSignal: streamOptions.abortSignal,
-          }),
+          ...generationOptions,
+          ...(tools && { tools }),
+          ...(providerOptions && { providerOptions }),
+          ...(abortSignal && { abortSignal }),
         })
 
         // Yield chunks from proxy stream - now with full <think> content
@@ -647,7 +749,7 @@ export async function* generateContentStream(
 
         const shouldUseSmoothing =
           browserCompatibility.streamingOptions.useSmoothing &&
-          streamOptions.useSmoothing !== false
+          useSmoothing !== false
 
         // Build thinking providerOptions from user settings (Gemini-only)
         const thinkingLevel = currentSettings.isAdvancedMode
@@ -658,21 +760,21 @@ export async function* generateContentStream(
             ? buildThinkingProviderOptions(modelName, thinkingLevel)
             : {}
 
+        const mergedProviderOptions = Object.keys(thinkingProviderOptions).length
+          ? { ...thinkingProviderOptions, ...(providerOptions || {}) }
+          : providerOptions
+
         const streamConfig = {
           model,
           system: effectiveSystemInstruction,
-          prompt: effectiveUserPrompt,
+          ...input,
           ...generationConfig,
           maxRetries: 0, // Disable AI SDK built-in retry to allow custom fallback to work faster
           ...(shouldUseSmoothing ? defaultSmoothingOptions : {}),
-          ...(Object.keys(thinkingProviderOptions).length && {
-            providerOptions: thinkingProviderOptions,
-          }),
-          // Caller stream options (e.g. abortSignal) go last so they always win
-          ...streamOptions,
-          ...(streamOptions.abortSignal && {
-            abortSignal: streamOptions.abortSignal,
-          }),
+          ...generationOptions,
+          ...(tools && { tools }),
+          ...(mergedProviderOptions && { providerOptions: mergedProviderOptions }),
+          ...(abortSignal && { abortSignal }),
         }
 
         const result = await streamText(streamConfig)
@@ -801,15 +903,8 @@ export async function* generateContentStream(
 }
 
 /**
- * Enhanced streaming with full text accumulation for hybrid approach
- * @param {string} providerId - Provider identifier
- * @param {object} settings - User settings
- * @param {object} advancedModeSettings - Advanced mode settings
- * @param {object} basicModeSettings - Basic mode settings
- * @param {string} systemInstruction - System instruction/prompt
- * @param {string} userPrompt - User prompt
- * @param {object} [streamOptions] - Additional streaming options
- * @returns {AsyncIterable<{chunk: string, fullText: string, isComplete: boolean}>} Enhanced stream with full text
+ * Compatibility wrapper for existing positional enhanced streaming callers.
+ * @returns {AsyncIterable<{chunk: string, fullText: string, isComplete: boolean}>}
  */
 export async function* generateContentStreamEnhanced(
   providerId,
@@ -818,21 +913,31 @@ export async function* generateContentStreamEnhanced(
   userPrompt,
   streamOptions = {}
 ) {
-  let fullText = ''
-  let isComplete = false
-
-  // Get browser compatibility info
-  const browserCompatibility = getBrowserCompatibility()
-
-  try {
-    // Use our updated generateContentStream that handles both proxy and direct models
-    const streamGenerator = generateContentStream(
+  yield* generateContentStreamEnhancedRequest(
+    createPromptGenerationRequest(
       providerId,
       settings,
       systemInstruction,
       userPrompt,
       streamOptions
     )
+  )
+}
+
+/**
+ * Enhanced streaming with full text accumulation for normalized requests.
+ * @param {import('../chat/contracts.js').GenerationRequest & object} request
+ * @returns {AsyncIterable<{chunk: string, fullText: string, isComplete: boolean}>}
+ */
+export async function* generateContentStreamEnhancedRequest(request) {
+  const normalizedRequest = normalizeGenerationRequest(request)
+  let fullText = ''
+
+  // Get browser compatibility info
+  const browserCompatibility = getBrowserCompatibility()
+
+  try {
+    const streamGenerator = generateContentStreamRequest(normalizedRequest)
 
     for await (const chunk of streamGenerator) {
       fullText += chunk
@@ -893,4 +998,3 @@ function getDisplayModelName(providerId, settings) {
       return providerId
   }
 }
-

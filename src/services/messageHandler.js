@@ -219,6 +219,11 @@ function handleBackgroundMessage(request) {
       // We just log it here for debugging purposes
       // Components like PermissionWarningPrompt will handle this directly
       break
+    case 'resumeConversation':
+      import('../stores/chatStore.svelte.js')
+        .then(({ openConversation }) => openConversation(request.conversationId))
+        .catch((error) => console.error('[messageHandler] Failed to resume conversation:', error))
+      break
     default:
       console.warn(
         '[messageHandler.js] Unknown message action:',

@@ -70,8 +70,18 @@
   } from '@/stores/deepDiveStore.svelte.js'
   import { generateFollowUpQuestions } from '@/services/tools/deepDiveService.js'
 
+  // Chat harness (Phase 5): chat is the default side-panel surface
+  import ChatShell from '@/components/chat/ChatShell.svelte'
+  import {
+    chatState,
+    syncChatForActiveTab,
+  } from '@/stores/chatStore.svelte.js'
+
   // Track if settings are loaded
   let settingsLoaded = $state(false)
+
+  // Legacy summary UI remains reachable behind an explicit toggle
+  let showLegacySummary = $state(false)
 
   // Permission state for Firefox
   let hasPermission = $state(true) // Default to true for non-Firefox
@@ -116,6 +126,7 @@
     cachedTabsCount = getTabsWithSummary().length
   })
 
+
   // Use API key validation composable
   const { needsApiKeySetup, currentProviderDisplayName } = useApiKeyValidation()
 
@@ -137,6 +148,35 @@
     const unsubscribeTheme = subscribeToSystemThemeChanges()
 
     return unsubscribeTheme
+  })
+
+  // Restore the runtime chat conversation for the active tab, and re-sync
+  // when the user switches tabs. Conversations are captured lazily on first
+  // send, so no active tab having a mapped conversation yet is expected.
+  $effect(() => {
+    ;(async () => {
+      try {
+        const [tab] = await browser.tabs.query({
+          active: true,
+          currentWindow: true,
+        })
+        if (tab?.id) await syncChatForActiveTab(tab.id)
+      } catch (error) {
+        console.error('[App] Failed to resolve active tab for chat:', error)
+      }
+    })()
+
+    const handleTabActivated = (activeInfo) => {
+      syncChatForActiveTab(activeInfo.tabId).catch((error) =>
+        console.error('[App] Failed to sync chat for tab:', error),
+      )
+    }
+
+    browser.tabs.onActivated.addListener(handleTabActivated)
+
+    return () => {
+      browser.tabs.onActivated.removeListener(handleTabActivated)
+    }
   })
 
   // Apply reduce motion setting to DOM
@@ -491,6 +531,7 @@
     {/await}
   </div>
 {/if}
+{#if showLegacySummary}
 <div
   class="main-container flex min-w-[22.5rem] bg-surface-1 w-full flex-col"
   data-per-tab={settings.tools?.perTabCache?.enabled ? 'true' : undefined}
@@ -673,9 +714,43 @@
 {#if !summaryState.lastSummaryTypeDisplayed && settings.hasCompletedOnboarding && !needsApiKeySetup()()}
   <Noti />
 {/if}
+{:else}
+<div class="flex h-screen min-w-[22.5rem] w-full flex-col bg-surface-1">
+  <div class="flex items-center justify-between px-2 py-1 border-b border-border">
+    <BitsTooltip.Provider>
+      <Tooltip content={$t('archive.open_archive')} side="right" align="start">
+        {#snippet children({ builder })}
+          <button
+            onclick={() => {
+              browser.tabs.create({ url: 'archive.html' })
+            }}
+            class="p-1 setting-animation transition-colors hover:bg-surface-2 rounded-full hover:text-text-primary text-text-secondary"
+            {...builder}
+          >
+            <Icon icon="solar:history-linear" width="22" height="22" />
+          </button>
+        {/snippet}
+      </Tooltip>
+    </BitsTooltip.Provider>
+    <div class="size-6 text-text-secondary">
+      <SettingButton />
+    </div>
+  </div>
+
+  {#if needsApiKeySetup()()}
+    <div class="prose wrap-anywhere main-sidepanel p z-10 flex flex-col gap-8 px-6 pt-8 min-w-[22.5rem] max-w-[52rem] w-screen mx-auto">
+      <ApiKeySetupPrompt />
+    </div>
+  {:else}
+    <div class="min-h-0 flex-1">
+      <ChatShell onShowLegacySummary={() => (showLegacySummary = true)} />
+    </div>
+  {/if}
+</div>
+{/if}
 <Toaster />
 <!-- Deep Dive FAB & Section with Error Boundary -->
-{#if shouldShowDeepDiveNow}
+{#if shouldShowDeepDiveNow && showLegacySummary}
   {#await Promise.resolve()}
     <!-- Loading placeholder -->
   {:then}

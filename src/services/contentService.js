@@ -131,10 +131,15 @@ export async function getPageContent(
   preferredLang = 'en'
 ) {
   try {
-    const [tab] = await browser.tabs.query({
-      active: true,
-      currentWindow: true,
-    })
+    const options = typeof contentType === 'object'
+      ? contentType
+      : { contentType, preferredLang }
+    const requestedContentType = options.contentType || 'webpageText'
+    const requestedLanguage = options.preferredLang || 'en'
+    // Explicit target capture must never silently fall back to the active tab.
+    const tab = options.tabId
+      ? await browser.tabs.get(options.tabId)
+      : (await browser.tabs.query({ active: true, currentWindow: true }))[0]
     if (!tab || !tab.id || !tab.url) {
       throw new Error('Could not get active tab information.')
     }
@@ -146,10 +151,10 @@ export async function getPageContent(
     else if (isCourseVideo) actualPageType = 'course'
 
     console.log(
-      `[contentService] Processing tab ${tab.id} (${tab.url}) as ${actualPageType} for ${contentType}`
+      `[contentService] Processing tab ${tab.id} (${tab.url}) as ${actualPageType} for ${requestedContentType}`
     )
 
-    if (contentType === 'webpageText') {
+    if (requestedContentType === 'webpageText') {
       const pageText = await getAccessibilityTreeWebpageContent(tab.id)
 
       if (pageText && pageText.length >= 50) {
@@ -163,7 +168,7 @@ export async function getPageContent(
 
     if (
       isYouTubeVideo &&
-      (contentType === 'transcript' || contentType === 'timestampedTranscript')
+      (requestedContentType === 'transcript' || requestedContentType === 'timestampedTranscript')
     ) {
       // Always use timestamped transcript for better AI understanding and accuracy
       const action = 'fetchTranscriptWithTimestamp'
@@ -171,7 +176,7 @@ export async function getPageContent(
       try {
         const response = await sendMessageWithRetry(
           tab.id,
-          { action, lang: preferredLang },
+          { action, lang: requestedLanguage },
           3,
           500
         )
@@ -181,7 +186,7 @@ export async function getPageContent(
         }
         throw new Error(
           response?.error ||
-            `Failed to get ${contentType} from YouTube content script.`
+            `Failed to get ${requestedContentType} from YouTube content script.`
         )
       } catch (error) {
         console.error('[contentService] YouTube transcript error:', error)
@@ -191,11 +196,11 @@ export async function getPageContent(
       }
     }
 
-    if (isCourseVideo && contentType === 'transcript') {
+    if (isCourseVideo && requestedContentType === 'transcript') {
       try {
         const response = await sendMessageWithRetry(
           tab.id,
-          { action: 'fetchCourseContent', lang: preferredLang },
+          { action: 'fetchCourseContent', lang: requestedLanguage },
           3,
           500
         )
@@ -208,7 +213,7 @@ export async function getPageContent(
         }
         throw new Error(
           response?.error ||
-            `Failed to get ${contentType} from Course content script.`
+            `Failed to get ${requestedContentType} from Course content script.`
         )
       } catch (error) {
         console.error('[contentService] Course content error:', error)
@@ -222,10 +227,10 @@ export async function getPageContent(
     if (
       !isYouTubeVideo &&
       !isCourseVideo &&
-      (contentType === 'transcript' || contentType === 'timestampedTranscript')
+      (requestedContentType === 'transcript' || requestedContentType === 'timestampedTranscript')
     ) {
       const error = new Error(
-        `Cannot get ${contentType} from a non-video page.`
+        `Cannot get ${requestedContentType} from a non-video page.`
       )
       throw error
     }
@@ -236,8 +241,8 @@ export async function getPageContent(
     // Use simple error handler
     const handledError = handleError(error, {
       source: 'contentService',
-      contentType,
-      preferredLang,
+      contentType: requestedContentType,
+      preferredLang: requestedLanguage,
     })
     throw handledError
   }

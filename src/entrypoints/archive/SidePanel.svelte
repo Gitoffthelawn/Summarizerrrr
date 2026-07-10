@@ -36,6 +36,7 @@
     clearContentTypeFilter,
   } from '@/stores/historyFilterStore.svelte.js'
   import { preloadTagsData } from '@/stores/tagsCacheStore.svelte.js'
+  import ConversationList from '@/components/displays/archive/ConversationList.svelte'
 
   const {
     list,
@@ -395,6 +396,10 @@
         <HistoryTagFilter />
       {/if}
 
+      {#if activeTab === 'conversations'}
+        <ConversationList onRefresh={onRefresh} />
+      {:else}
+
       <!-- Render matched items -->
       {#each categorizedList.matchedItems as item (item.id)}
         <div class="relative group h-10">
@@ -627,6 +632,7 @@
       {/if}
 
       <div class="">&nbsp;</div>
+      {/if}
     </div>
   </div>
 

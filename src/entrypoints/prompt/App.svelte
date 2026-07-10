@@ -11,6 +11,7 @@
   import PlusIcon from '@/components/icons/PlusIcon.svelte'
   import TextScramble from '@/lib/ui/textScramble.js'
   import PromptMenu from './PromptMenu.svelte'
+  import SkillsPage from './SkillsPage.svelte'
   import CustomToast from '@/components/feedback/CustomToast.svelte'
   import Logdev from '@/components/settings/Logdev.svelte'
   import { Toaster, toast } from 'svelte-sonner'
@@ -235,6 +236,23 @@
     window.history.pushState({}, '', `?promptKey=${key}`)
   }
 
+  let view = $state(
+    new URLSearchParams(window.location.search).get('view') === 'skills'
+      ? 'skills'
+      : 'editor',
+  )
+
+  function openSkills() {
+    view = 'skills'
+    window.history.pushState({}, '', `?view=skills`)
+  }
+
+  function backToPrompts() {
+    view = 'editor'
+    const query = promptKey ? `?promptKey=${promptKey}` : window.location.pathname
+    window.history.pushState({}, '', query)
+  }
+
   let selectedTemplate = $state(null)
 
   function handleTemplateChange(event) {
@@ -304,6 +322,9 @@
     unstyled: true,
   }}
 />
+{#if view === 'skills'}
+  <SkillsPage onBack={backToPrompts} />
+{:else}
 <main
   class="flex font-mono text-xs 2xl:text-sm relative p-8 min-w-4xl min-h-dvh bg-background text-text-primary"
 >
@@ -329,6 +350,7 @@
     {summarizePrompts}
     {customActionPrompts}
     {handlePromptMenuClick}
+    onOpenSkills={openSkills}
   />
 
   <!-- Right Column: Prompt Editor -->
@@ -616,3 +638,4 @@
     </Dialog.Content>
   </Dialog.Portal>
 </Dialog.Root>
+{/if}

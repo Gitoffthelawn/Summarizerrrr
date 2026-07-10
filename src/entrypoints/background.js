@@ -247,15 +247,26 @@ class OllamaCorsService {
 }
 
 class OllamaApiProxyService {
-  async handleApiRequest(providerId, settings, systemInstruction, userPrompt) {
+  async handleApiRequest(
+    providerId,
+    settings,
+    systemInstruction,
+    userPrompt,
+    messages,
+    requestConfig = {}
+  ) {
     try {
       const baseModel = getAISDKModel(providerId, settings)
       const generationConfig = mapGenerationConfig(settings)
+      const { providerOptions, tools, ...proxyGenerationConfig } = requestConfig
       const { text } = await generateText({
         model: baseModel,
         system: systemInstruction,
-        prompt: userPrompt,
+        ...(messages ? { messages } : { prompt: userPrompt }),
         ...generationConfig,
+        ...proxyGenerationConfig,
+        ...(providerOptions && { providerOptions }),
+        ...(tools && { tools }),
       })
       return text
     } catch (error) {
@@ -385,6 +396,7 @@ export default defineBackground(() => {
   const ollamaApiProxy = new OllamaApiProxyService()
   let sidePanelPort = null
   let pendingSelectedText = null
+  let pendingConversationResume = null
   // Sync cache of settings.showFloatingButton — updated from storage so we can read it synchronously
   // in the context menu handler (before any await, within the user gesture window).
   let cachedFabEnabled = true // Default true; will be updated on init and on storage changes
@@ -1275,7 +1287,9 @@ export default defineBackground(() => {
             message.providerId,
             message.settings,
             message.systemInstruction,
-            message.userPrompt
+            message.userPrompt,
+            message.messages,
+            message.config
           )
           sendResponse({
             type: 'OLLAMA_API_RESPONSE',
@@ -1461,6 +1475,23 @@ export default defineBackground(() => {
     }
 
     // Sync handlers
+    if (message.type === 'RESUME_CONVERSATION') {
+      ;(async () => {
+        try {
+          if (!message.conversationId) throw new Error('A conversation ID is required')
+          const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true })
+          // Keep this message in the existing side-panel port path so an
+          // archive page never needs to import chat state directly.
+          if (sidePanelPort) sidePanelPort.postMessage({ action: 'resumeConversation', conversationId: message.conversationId })
+          else pendingConversationResume = message.conversationId
+          if (activeTab?.id && globalThis.chrome?.sidePanel?.open) await globalThis.chrome.sidePanel.open({ tabId: activeTab.id })
+          sendResponse({ success: true })
+        } catch (error) {
+          sendResponse({ success: false, error: error.message })
+        }
+      })()
+      return true
+    }
     if (message.type === 'OPEN_ARCHIVE') {
       browser.tabs.create({
         url: browser.runtime.getURL('archive.html'),
@@ -1519,6 +1550,11 @@ export default defineBackground(() => {
   browser.runtime.onConnect.addListener((port) => {
     if (port.name === 'side-panel') {
       sidePanelPort = port
+      if (pendingConversationResume) {
+        const conversationId = pendingConversationResume
+        pendingConversationResume = null
+        setTimeout(() => sidePanelPort?.postMessage({ action: 'resumeConversation', conversationId }), 500)
+      }
       if (pendingSelectedText) {
         // Delay sending to allow sidepanel's messageHandler to fully mount and register its listener.
         // Without delay, the message can arrive before the Svelte component's onMount has run.

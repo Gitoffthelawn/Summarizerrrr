@@ -32,7 +32,8 @@ export async function generateFollowUpQuestions(
   pageUrl,
   summaryLang = 'English',
   questionHistory = [],
-  isRegenerate = false
+  isRegenerate = false,
+  { abortSignal } = {},
 ) {
   console.log('[deepDiveService] Generating follow-up questions...')
   console.log('[deepDiveService] History size:', questionHistory.length)
@@ -96,7 +97,7 @@ export async function generateFollowUpQuestions(
       toolSettings,
       systemInstruction,
       userPrompt,
-      { providerOptions: noThinkingOptions }
+      { providerOptions: noThinkingOptions, abortSignal }
     )
 
     console.log('[deepDiveService] Raw AI response (attempt 1):', response)
@@ -125,7 +126,7 @@ export async function generateFollowUpQuestions(
           toolSettings,
           correctedSystemInstruction,
           userPrompt,
-          { providerOptions: noThinkingOptions }
+          { providerOptions: noThinkingOptions, abortSignal }
         )
 
         console.log(

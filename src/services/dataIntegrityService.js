@@ -6,8 +6,15 @@ import {
   addMultipleSummaries,
   addMultipleTags,
   addMultipleHistory,
-  openDatabase,
+  DB_VERSION,
+  getDatabase,
 } from '../lib/db/indexedDBService.js'
+import {
+  exportConversationBackup,
+  restoreConversationBackup,
+  clearConversationData,
+  validateConversationBackup,
+} from '../lib/db/conversationRepository.js'
 import { generateUUID } from '../lib/utils/utils.js'
 
 const BACKUP_STORE_NAME = 'data_backups'
@@ -27,7 +34,7 @@ class DataIntegrityService {
    * Initialize the backup store if it doesn't exist
    */
   async initializeBackupStore() {
-    if (!db) db = await openDatabase()
+    if (!db) db = await getDatabase()
 
     // Check if backup store exists
     if (!db.objectStoreNames.contains(BACKUP_STORE_NAME)) {
@@ -38,7 +45,7 @@ class DataIntegrityService {
 
       // Open with higher version to trigger upgrade
       return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 9) // Sync with indexedDBService version
+        const request = indexedDB.open(DB_NAME, DB_VERSION)
 
         request.onupgradeneeded = (event) => {
           const upgradedDb = event.target.result
@@ -84,16 +91,20 @@ class DataIntegrityService {
       const summaries = await getAllSummaries()
       const history = await getAllHistory()
       const tags = await getAllTags()
+      const chatBackup = await exportConversationBackup()
 
       const backupData = {
         id: generateUUID(),
         createdAt: new Date().toISOString(),
         description,
         type: 'pre_import',
+        backupSchemaVersion: 2,
         data: {
           summaries,
           history,
           tags,
+          ...chatBackup,
+          chatSchemaVersion: chatBackup.schemaVersion,
         },
       }
 
@@ -113,7 +124,7 @@ class DataIntegrityService {
    * @param {Object} backupData - Backup data object
    */
   async storeBackup(backupData) {
-    if (!db) db = await openDatabase()
+    if (!db) db = await getDatabase()
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([BACKUP_STORE_NAME], 'readwrite')
@@ -135,6 +146,7 @@ class DataIntegrityService {
       const currentSummaries = await getAllSummaries()
       const currentHistory = await getAllHistory()
       const currentTags = await getAllTags()
+      const currentChatBackup = await exportConversationBackup()
 
       const conflicts = {
         uuidConflicts: {
@@ -147,6 +159,11 @@ class DataIntegrityService {
           history: [],
         },
         tagConflicts: [],
+        chat: {
+          conversations: [],
+          messages: [],
+          sources: [],
+        },
         totalConflicts: 0,
       }
 
@@ -230,6 +247,21 @@ class DataIntegrityService {
         })
       }
 
+      const chat = importedData.chat || importedData
+      const currentConversationIds = new Set(currentChatBackup.conversations.map((conversation) => conversation.id))
+      const currentMessageIds = new Set(currentChatBackup.conversationMessages.map((message) => message.id))
+      const currentSourceIds = new Set(currentChatBackup.conversationSources.map((source) => source.id))
+      for (const conversation of chat.conversations || []) {
+        if (currentConversationIds.has(conversation.id)) conflicts.chat.conversations.push(conversation.id)
+      }
+      for (const message of chat.conversationMessages || []) {
+        if (currentMessageIds.has(message.id)) conflicts.chat.messages.push(message.id)
+      }
+      for (const source of chat.conversationSources || []) {
+        if (currentSourceIds.has(source.id)) conflicts.chat.sources.push(source.id)
+      }
+      conflicts.totalConflicts += conflicts.chat.conversations.length + conflicts.chat.messages.length + conflicts.chat.sources.length
+
       return conflicts
     } catch (error) {
       console.error('Error detecting conflicts:', error)
@@ -304,6 +336,21 @@ class DataIntegrityService {
           }
           validation.warnings.push(...itemValidation.warnings)
         })
+      }
+
+      // Older backups have no chat arrays. Treat that as a valid empty chat
+      // backup so users can restore legacy exports without a migration step.
+      try {
+        const chatBackup = importedData.chat || importedData
+        validateConversationBackup({
+          schemaVersion: chatBackup.schemaVersion || importedData.chatSchemaVersion || 1,
+          conversations: chatBackup.conversations || [],
+          conversationMessages: chatBackup.conversationMessages || [],
+          conversationSources: chatBackup.conversationSources || [],
+        })
+      } catch (error) {
+        validation.isValid = false
+        validation.errors.push(`Chat data: ${error.message}`)
       }
 
       return validation
@@ -468,6 +515,12 @@ class DataIntegrityService {
       if (backup.data.tags && backup.data.tags.length > 0) {
         await addMultipleTags(backup.data.tags)
       }
+
+      await restoreConversationBackup({
+        conversations: backup.data.conversations || [],
+        conversationMessages: backup.data.conversationMessages || [],
+        conversationSources: backup.data.conversationSources || [],
+      })
     } catch (error) {
       console.error('Error during rollback:', error)
       throw new Error(`Failed to rollback: ${error.message}`)
@@ -480,7 +533,7 @@ class DataIntegrityService {
    * @returns {Promise<Object>} Backup data
    */
   async getBackupById(backupId) {
-    if (!db) db = await openDatabase()
+    if (!db) db = await getDatabase()
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([BACKUP_STORE_NAME], 'readonly')
@@ -497,7 +550,7 @@ class DataIntegrityService {
    * @returns {Promise<Array>} Array of backups
    */
   async getAllBackups() {
-    if (!db) db = await openDatabase()
+    if (!db) db = await getDatabase()
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([BACKUP_STORE_NAME], 'readonly')
@@ -519,15 +572,22 @@ class DataIntegrityService {
   }
 
   /**
-   * Clear all current data (summaries, history, tags)
+   * Clear all current data, including chat stores.
    * @returns {Promise<boolean>} Success status
    */
   async clearAllData() {
-    if (!db) db = await openDatabase()
+    if (!db) db = await getDatabase()
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(
-        ['summaries', 'history', 'tags'],
+        [
+          'summaries',
+          'history',
+          'tags',
+          'conversations',
+          'conversation_messages',
+          'conversation_sources',
+        ],
         'readwrite'
       )
 
@@ -538,7 +598,15 @@ class DataIntegrityService {
       transaction.objectStore('summaries').clear()
       transaction.objectStore('history').clear()
       transaction.objectStore('tags').clear()
+      transaction.objectStore('conversations').clear()
+      transaction.objectStore('conversation_messages').clear()
+      transaction.objectStore('conversation_sources').clear()
     })
+  }
+
+  /** Clear conversation records without touching legacy summaries/history/tags. */
+  async clearChatData() {
+    return clearConversationData()
   }
 
   /**
@@ -547,7 +615,7 @@ class DataIntegrityService {
    * @returns {Promise<boolean>} Success status
    */
   async restoreHistoryData(historyData) {
-    if (!db) db = await openDatabase()
+    if (!db) db = await getDatabase()
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(['history'], 'readwrite')
@@ -575,7 +643,7 @@ class DataIntegrityService {
    * @returns {Promise<boolean>} Success status
    */
   async deleteBackup(backupId) {
-    if (!db) db = await openDatabase()
+    if (!db) db = await getDatabase()
 
     return new Promise((resolve, reject) => {
       const transaction = db.transaction([BACKUP_STORE_NAME], 'readwrite')

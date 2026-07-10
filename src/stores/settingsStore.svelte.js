@@ -120,6 +120,17 @@ const DEFAULT_SETTINGS = {
   commentCustomPromptContent: '',
   commentCustomSystemInstructionContent: '',
 
+  // Chat (Phase 6A). This is deliberately separate from summary tone and
+  // prompt templates: it contains stable, conversation-level instructions.
+  chatGlobalPersona: {
+    content: '',
+    language: 'English',
+    tone: null,
+    version: 1,
+  },
+  chatUserSkills: [],
+  chatSkillMigrationVersion: 0,
+
   // Advanced Mode (from former stores)
   isAdvancedMode: false,
   temperature: 0.7,
@@ -395,6 +406,15 @@ export async function loadSettings() {
 
         // ✅ MIGRATION: Upgrade Deep Dive model to gemma-4-26b-a4b-it
         migrateDeepDiveModel(cleanStoredSettings)
+
+        // Phase 6A keeps legacy prompt settings intact while exposing enabled
+        // or customized pairs as chat skills. The migration version makes the
+        // operation idempotent across every settings initialization.
+        const { migrateLegacyPromptsToSkills } = await import(
+          '@/lib/chat/skills/skillMigration.js'
+        )
+        const skillMigration = migrateLegacyPromptsToSkills(cleanStoredSettings)
+        Object.assign(cleanStoredSettings, skillMigration.settings)
 
         // MIGRATION: Split geminiApiKeys into geminiApiKey + geminiAdditionalApiKeys
         if (cleanStoredSettings.geminiApiKeys && cleanStoredSettings.geminiApiKeys.length > 0) {
