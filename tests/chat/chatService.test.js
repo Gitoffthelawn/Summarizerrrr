@@ -46,6 +46,46 @@ function createRepository() {
       messages.set(message.id, message)
       return message
     },
+    async createStreamingAssistantMessage(conversationId, data) {
+      const message = { id: `message-${++sequence}`, conversationId, sequence, status: 'streaming', ...data }
+      messages.set(message.id, message)
+      return message
+    },
+    async checkpointStreamingContent(messageId, content) {
+      const msg = messages.get(messageId)
+      if (!msg || msg.status !== 'streaming') return msg || null
+      msg.content = content
+      return msg
+    },
+    async recoverStreamingMessages(conversationId) {
+      const recovered = []
+      for (const msg of messages.values()) {
+        if (msg.conversationId === conversationId && msg.status === 'streaming') {
+          msg.status = 'interrupted'
+          recovered.push(msg)
+        }
+      }
+      return recovered
+    },
+    async finalizeStreamingAssistantMessage(messageId, updates) {
+      const msg = messages.get(messageId)
+      if (!msg) return null
+      Object.assign(msg, updates)
+      msg.status = updates.status || 'complete'
+      return msg
+    },
+    async getGenerationPath(id) {
+      return [...messages.values()].filter((message) => message.conversationId === id)
+    },
+    async getGenerationContextForUser(userMessageId) {
+      const userMessage = messages.get(userMessageId)
+      const all = [...messages.values()].filter((message) => message.conversationId === userMessage.conversationId)
+      const userIndex = all.findIndex((m) => m.id === userMessageId)
+      return {
+        history: all.slice(0, userIndex),
+        currentUserMessage: userMessage,
+      }
+    },
     async getSourceById(id) {
       return sources.get(id) || null
     },

@@ -42,6 +42,20 @@ export async function buildContextPipeline(input, dependencies) {
     contextWindowTokens: capabilities.contextWindowTokens,
     requestedOutputTokens: input.requestedOutputTokens || capabilities.defaultOutputTokens,
   })
+
+  // Build groundingRefs from budgeted sources — store source IDs only;
+  // title/url resolved from the source store at render time.
+  const groundingRefs = [
+    ...budget.conversationSources.map((s) => ({
+      sourceId: String(s.sourceId || s.id),
+      contentKind: s.selectedContentKind || 'condensed',
+    })),
+    ...budget.attachmentSources.map((s) => ({
+      sourceId: String(s.sourceId || s.id),
+      contentKind: s.selectedContentKind || 'condensed',
+    })),
+  ]
+
   const assembled = assembleContext({
     conversation: input.conversation,
     history: budget.history,
@@ -57,6 +71,7 @@ export async function buildContextPipeline(input, dependencies) {
 
   return {
     ...assembled,
+    groundingRefs,
     capabilities,
     unresolvedRefs: sourceResolution.unresolvedRefs,
   }

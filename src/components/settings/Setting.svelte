@@ -16,6 +16,7 @@
   import AppearanceSettings from './AppearanceSettings.svelte'
   import DataSyncSettings from './DataSyncSettings.svelte'
   import SummarySettings from './SummarySettings.svelte'
+  import ChatSettings from './ChatSettings.svelte'
   import FABSettings from '@/components/settings/FABSettings.svelte'
   import AboutSettings from './AboutSettings.svelte'
   import ReleaseNote from './ReleaseNote.svelte'
@@ -36,6 +37,12 @@
       label: 'Summary',
       iconSolid: 'heroicons:sparkles-solid',
       iconOutline: 'heroicons:sparkles',
+    },
+    {
+      id: 'chat',
+      label: 'Chat',
+      iconSolid: 'heroicons:chat-bubble-left-right-solid',
+      iconOutline: 'heroicons:chat-bubble-left-right',
     },
     {
       id: 'appearance',
@@ -147,6 +154,8 @@
     'heroicons:cpu-chip',
     'heroicons:sparkles-solid',
     'heroicons:sparkles',
+    'heroicons:chat-bubble-left-right-solid',
+    'heroicons:chat-bubble-left-right',
     'heroicons:swatch-solid',
     'heroicons:swatch',
     'heroicons:cursor-arrow-rays-solid',
@@ -247,6 +256,8 @@
         <AIProviderSettings />
       {:else if activeTab === 'summary'}
         <SummarySettings />
+      {:else if activeTab === 'chat'}
+        <ChatSettings />
       {:else if activeTab === 'appearance'}
         <AppearanceSettings />
       {:else if activeTab === 'fab'}

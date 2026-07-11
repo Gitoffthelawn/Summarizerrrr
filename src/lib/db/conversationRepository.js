@@ -11,8 +11,8 @@ const CHAT_STORES = [
   CONVERSATION_MESSAGES_STORE_NAME,
   CONVERSATION_SOURCES_STORE_NAME,
 ]
-const CONVERSATION_BUNDLE_SCHEMA_VERSION = 1
-export const CONVERSATION_BACKUP_SCHEMA_VERSION = 1
+const CONVERSATION_BUNDLE_SCHEMA_VERSION = 2
+export const CONVERSATION_BACKUP_SCHEMA_VERSION = 2
 const VALID_MESSAGE_ROLES = new Set(['user', 'assistant'])
 
 /** @param {IDBRequest} request */
@@ -72,6 +72,7 @@ function createConversationRecord(conversationData) {
     tags: conversationData.tags || [],
     personaSnapshot: conversationData.personaSnapshot || {
       content: '',
+      type: conversationData.personaSnapshot?.type || 'preset',
       language: 'en',
       tone: null,
       version: 1,
@@ -80,10 +81,13 @@ function createConversationRecord(conversationData) {
     modelId: conversationData.modelId || null,
     deleted: conversationData.deleted || false,
     deletedAt: conversationData.deletedAt || null,
+    activeLeafMessageId: conversationData.activeLeafMessageId || null,
   }
 }
 
 function createMessageRecord(conversationId, sequence, messageData) {
+  const parentId = messageData.parentId !== undefined ? messageData.parentId : null
+  const parentKey = messageData.parentKey !== undefined ? messageData.parentKey : (parentId ?? '__root__')
   return {
     ...messageData,
     id: messageData.id || generateUUID(),
@@ -93,10 +97,13 @@ function createMessageRecord(conversationId, sequence, messageData) {
     status: messageData.status || 'complete',
     skillInvocation: messageData.skillInvocation || null,
     attachmentRefs: messageData.attachmentRefs || [],
+    groundingRefs: messageData.groundingRefs || [],
     providerId: messageData.providerId || null,
     modelId: messageData.modelId || null,
     usage: messageData.usage || null,
     error: messageData.error || null,
+    parentId,
+    parentKey,
   }
 }
 
@@ -187,13 +194,15 @@ export async function addMessage(conversationId, messageData) {
         throw new Error(`Conversation ${conversationId} was not found`)
       }
 
+      const parentId = messageData.parentId !== undefined ? messageData.parentId : conversation.activeLeafMessageId
       const message = createMessageRecord(
         conversationId,
         await getNextSequence(messageStore, conversationId),
-        messageData
+        { ...messageData, parentId }
       )
       await requestAsPromise(messageStore.add(message))
 
+      conversation.activeLeafMessageId = message.id
       conversation.updatedAt = new Date().toISOString()
       await requestAsPromise(conversationStore.put(conversation))
       return message
@@ -224,17 +233,19 @@ export async function finalizeAssistantMessage(conversationId, messageData) {
         throw new Error(`Conversation ${conversationId} was not found`)
       }
 
+      const parentId = messageData.parentId !== undefined ? messageData.parentId : conversation.activeLeafMessageId
       const message = createMessageRecord(
         conversationId,
         await getNextSequence(messageStore, conversationId),
-        { ...messageData, role: 'assistant', status }
+        { ...messageData, role: 'assistant', status, parentId }
       )
       await requestAsPromise(messageStore.add(message))
 
+      conversation.activeLeafMessageId = message.id
       if (status === 'complete') {
         conversation.updatedAt = new Date().toISOString()
-        await requestAsPromise(conversationStore.put(conversation))
       }
+      await requestAsPromise(conversationStore.put(conversation))
       return message
     }
   )
@@ -320,6 +331,196 @@ export async function deleteUnreferencedSources() {
   )
 }
 
+export async function getAncestorPath(messageId, { includeSelf = false } = {}) {
+  if (!messageId) return []
+  return runTransaction([CONVERSATION_MESSAGES_STORE_NAME], 'readonly', async (transaction) => {
+    const messageStore = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+    const path = []
+    const visited = new Set()
+    let currentId = messageId
+
+    while (currentId) {
+      if (visited.has(currentId)) {
+        throw new Error(`Cycle detected in ancestor path for message ${messageId}`)
+      }
+      visited.add(currentId)
+
+      const message = await requestAsPromise(messageStore.get(currentId))
+      if (!message) break
+
+      if (path.length > 0 && message.conversationId !== path[0].conversationId) {
+        throw new Error(`Mismatched conversationId in ancestor path for message ${messageId}`)
+      }
+
+      path.unshift(message)
+      currentId = message.parentId
+    }
+
+    if (!includeSelf && path.length > 0) {
+      path.pop()
+    }
+    return path
+  })
+}
+
+export async function getGenerationPath(conversationId) {
+  return runTransaction([CONVERSATIONS_STORE_NAME, CONVERSATION_MESSAGES_STORE_NAME], 'readonly', async (transaction) => {
+    const conversationStore = transaction.objectStore(CONVERSATIONS_STORE_NAME)
+    const conversation = await requestAsPromise(conversationStore.get(conversationId))
+    if (!conversation || !conversation.activeLeafMessageId) return []
+
+    const messageStore = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+    const path = []
+    const visited = new Set()
+    let currentId = conversation.activeLeafMessageId
+
+    while (currentId) {
+      if (visited.has(currentId)) {
+        throw new Error(`Cycle detected in generation path for conversation ${conversationId}`)
+      }
+      visited.add(currentId)
+
+      const message = await requestAsPromise(messageStore.get(currentId))
+      if (!message) break
+      if (message.conversationId !== conversationId) {
+        throw new Error(`Mismatched conversationId in generation path for conversation ${conversationId}`)
+      }
+
+      path.unshift(message)
+      currentId = message.parentId
+    }
+    return path
+  })
+}
+
+export async function getGenerationContextForUser(userMessageId) {
+  return runTransaction([CONVERSATION_MESSAGES_STORE_NAME], 'readonly', async (transaction) => {
+    const messageStore = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+    const currentUserMessage = await requestAsPromise(messageStore.get(userMessageId))
+    if (!currentUserMessage) {
+      throw new Error(`User message ${userMessageId} was not found`)
+    }
+
+    const history = []
+    if (currentUserMessage.parentId) {
+      const visited = new Set()
+      let currentId = currentUserMessage.parentId
+
+      while (currentId) {
+        if (visited.has(currentId)) {
+          throw new Error(`Cycle detected in ancestor path for user message ${userMessageId}`)
+        }
+        visited.add(currentId)
+
+        const message = await requestAsPromise(messageStore.get(currentId))
+        if (!message) break
+        if (message.conversationId !== currentUserMessage.conversationId) {
+          throw new Error(`Mismatched conversationId in ancestor path for user message ${userMessageId}`)
+        }
+
+        history.unshift(message)
+        currentId = message.parentId
+      }
+    }
+
+    return {
+      history,
+      currentUserMessage,
+    }
+  })
+}
+
+export async function getSiblings(conversationId, parentKey) {
+  return runTransaction([CONVERSATION_MESSAGES_STORE_NAME], 'readonly', async (transaction) => {
+    const messageStore = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+    const key = [conversationId, parentKey || '__root__']
+    const messages = await requestAsPromise(
+      messageStore.index('conversationId_parentKey').getAll(key)
+    )
+    return messages.sort((left, right) => left.sequence - right.sequence)
+  })
+}
+
+export async function activateBranch(messageId) {
+  return runTransaction([CONVERSATIONS_STORE_NAME, CONVERSATION_MESSAGES_STORE_NAME], 'readwrite', async (transaction) => {
+    const messageStore = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+    const message = await requestAsPromise(messageStore.get(messageId))
+    if (!message) throw new Error(`Message ${messageId} was not found`)
+
+    const activeLeafId = await findLatestDescendantInternal(messageStore, messageId)
+
+    const conversationStore = transaction.objectStore(CONVERSATIONS_STORE_NAME)
+    const conversation = await requestAsPromise(conversationStore.get(message.conversationId))
+    if (!conversation) throw new Error(`Conversation ${message.conversationId} was not found`)
+
+    conversation.activeLeafMessageId = activeLeafId
+    conversation.updatedAt = new Date().toISOString()
+    await requestAsPromise(conversationStore.put(conversation))
+    return activeLeafId
+  })
+}
+
+export async function findLatestDescendant(messageId) {
+  return runTransaction([CONVERSATION_MESSAGES_STORE_NAME], 'readonly', async (transaction) => {
+    const messageStore = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+    return findLatestDescendantInternal(messageStore, messageId)
+  })
+}
+
+async function findLatestDescendantInternal(messageStore, messageId) {
+  const visited = new Set()
+  let currentId = messageId
+  while (currentId) {
+    if (visited.has(currentId)) {
+      throw new Error(`Cycle detected while descending from message ${messageId}`)
+    }
+    visited.add(currentId)
+
+    const msg = await requestAsPromise(messageStore.get(currentId))
+    if (!msg) break
+    const childrenKey = [msg.conversationId, currentId]
+    const children = await requestAsPromise(
+      messageStore.index('conversationId_parentKey').getAll(childrenKey)
+    )
+    if (children.length === 0) {
+      break
+    }
+    children.sort((left, right) => right.sequence - left.sequence)
+    currentId = children[0].id
+  }
+  return currentId
+}
+
+function backfillBackupData(conversations, messages) {
+  const messagesByConversation = new Map()
+  for (const message of messages) {
+    if (!messagesByConversation.has(message.conversationId)) {
+      messagesByConversation.set(message.conversationId, [])
+    }
+    messagesByConversation.get(message.conversationId).push(message)
+  }
+
+  const conversationMap = new Map(conversations.map(c => [c.id, c]))
+
+  for (const [conversationId, msgs] of messagesByConversation.entries()) {
+    msgs.sort((left, right) => left.sequence - right.sequence)
+    let previousMessageId = null
+    for (const msg of msgs) {
+      if (msg.parentId === undefined || msg.parentId === null) {
+        msg.parentId = previousMessageId
+      }
+      if (msg.parentKey === undefined || msg.parentKey === null) {
+        msg.parentKey = msg.parentId ?? '__root__'
+      }
+      previousMessageId = msg.id
+    }
+    const conversation = conversationMap.get(conversationId)
+    if (conversation && (conversation.activeLeafMessageId === undefined || conversation.activeLeafMessageId === null)) {
+      conversation.activeLeafMessageId = previousMessageId
+    }
+  }
+}
+
 function validateConversationBundle(bundle) {
   if (!bundle?.conversation?.id || !Array.isArray(bundle.messages) || !Array.isArray(bundle.sources)) {
     throw new Error('Invalid conversation bundle')
@@ -359,6 +560,32 @@ function validateConversationBundle(bundle) {
     for (const sourceId of message.attachmentRefs || []) {
       if (!sourceIds.has(sourceId)) {
         throw new Error(`Conversation bundle references missing source ${sourceId}`)
+      }
+    }
+  }
+
+  if ((bundle.schemaVersion === 2 || bundle.messages.some(m => m.parentId !== undefined)) && bundle.messages.length > 0) {
+    const messageMap = new Map(bundle.messages.map((m) => [m.id, m]))
+    for (const message of bundle.messages) {
+      if (message.parentId !== undefined && message.parentId !== null) {
+        const parent = messageMap.get(message.parentId)
+        if (!parent) {
+          throw new Error(`Message parentId references missing message: ${message.parentId}`)
+        }
+        if (parent.conversationId !== message.conversationId) {
+          throw new Error(`Parent message has mismatched conversation ID`)
+        }
+        
+        const visited = new Set()
+        let currentParentId = message.parentId
+        while (currentParentId) {
+          if (visited.has(currentParentId)) {
+            throw new Error('Cycle detected in message parents')
+          }
+          visited.add(currentParentId)
+          const parentMsg = messageMap.get(currentParentId)
+          currentParentId = parentMsg ? parentMsg.parentId : null
+        }
       }
     }
   }
@@ -404,21 +631,45 @@ export async function importConversationBundle(bundle) {
     const conversationId = (await requestAsPromise(conversationStore.get(bundle.conversation.id)))
       ? generateUUID()
       : bundle.conversation.id
-    const importedConversation = { ...bundle.conversation, id: conversationId }
-    await requestAsPromise(conversationStore.add(importedConversation))
 
+    const isV1 = !bundle.schemaVersion || bundle.schemaVersion < 2
     const messageIdMap = new Map()
-    for (const message of bundle.messages) {
+    let prevMessageImportedId = null
+
+    const sortedMessages = [...bundle.messages].sort((left, right) => left.sequence - right.sequence)
+    for (const message of sortedMessages) {
       const messageId = (await requestAsPromise(messageStore.get(message.id))) ? generateUUID() : message.id
+      messageIdMap.set(message.id, messageId)
+
+      let parentId = null
+      if (isV1) {
+        parentId = prevMessageImportedId
+      } else {
+        parentId = message.parentId ? messageIdMap.get(message.parentId) : null
+      }
+
       const importedMessage = {
         ...message,
         id: messageId,
         conversationId,
         attachmentRefs: (message.attachmentRefs || []).map((sourceId) => sourceIdMap.get(sourceId)),
+        parentId,
+        parentKey: parentId ?? '__root__',
       }
       await requestAsPromise(messageStore.add(importedMessage))
-      messageIdMap.set(message.id, messageId)
+      prevMessageImportedId = messageId
     }
+
+    const activeLeafId = isV1
+      ? prevMessageImportedId
+      : (bundle.conversation.activeLeafMessageId ? messageIdMap.get(bundle.conversation.activeLeafMessageId) : null)
+
+    const importedConversation = {
+      ...bundle.conversation,
+      id: conversationId,
+      activeLeafMessageId: activeLeafId,
+    }
+    await requestAsPromise(conversationStore.add(importedConversation))
 
     return {
       conversationId,
@@ -478,6 +729,32 @@ export function validateConversationBackup(backup) {
       }
     }
   }
+
+  if ((backup.schemaVersion === 2 || messages.some(m => m.parentId !== undefined)) && messages.length > 0) {
+    const messageMap = new Map(messages.map((m) => [m.id, m]))
+    for (const message of messages) {
+      if (message.parentId !== undefined && message.parentId !== null) {
+        const parent = messageMap.get(message.parentId)
+        if (!parent) {
+          throw new Error(`Message parentId references missing message: ${message.parentId}`)
+        }
+        if (parent.conversationId !== message.conversationId) {
+          throw new Error(`Parent message has mismatched conversation ID`)
+        }
+        
+        const visited = new Set()
+        let currentParentId = message.parentId
+        while (currentParentId) {
+          if (visited.has(currentParentId)) {
+            throw new Error('Cycle detected in message parents')
+          }
+          visited.add(currentParentId)
+          const parentMsg = messageMap.get(currentParentId)
+          currentParentId = parentMsg ? parentMsg.parentId : null
+        }
+      }
+    }
+  }
 }
 
 export async function exportConversationBackup() {
@@ -514,7 +791,6 @@ export async function restoreConversationBackup(backup) {
 }
 
 export async function importConversationBackup(backup, { mode = 'merge' } = {}) {
-  // Pre-chat backups intentionally omit all three arrays and remain valid.
   const normalizedBackup = {
     schemaVersion: backup?.schemaVersion || 1,
     conversations: backup?.conversations || [],
@@ -522,6 +798,12 @@ export async function importConversationBackup(backup, { mode = 'merge' } = {}) 
     conversationSources: backup?.conversationSources || [],
   }
   validateConversationBackup(normalizedBackup)
+
+  const isV1 = normalizedBackup.schemaVersion < 2
+  if (isV1) {
+    backfillBackupData(normalizedBackup.conversations, normalizedBackup.conversationMessages)
+  }
+
   if (mode === 'replace') return restoreConversationBackup(normalizedBackup)
   if (mode !== 'merge') throw new Error(`Unsupported conversation import mode: ${mode}`)
 
@@ -546,21 +828,37 @@ export async function importConversationBackup(backup, { mode = 'merge' } = {}) 
       const conversationId = (await requestAsPromise(conversationStore.get(conversation.id)))
         ? generateUUID()
         : conversation.id
-      await requestAsPromise(conversationStore.add({ ...conversation, id: conversationId }))
       conversationIdMap.set(conversation.id, conversationId)
     }
 
-    for (const message of normalizedBackup.conversationMessages) {
+    const sortedMessages = [...normalizedBackup.conversationMessages].sort((left, right) => left.sequence - right.sequence)
+    for (const message of sortedMessages) {
       const messageId = (await requestAsPromise(messageStore.get(message.id)))
         ? generateUUID()
         : message.id
+      messageIdMap.set(message.id, messageId)
+
+      const parentId = message.parentId ? messageIdMap.get(message.parentId) : null
       await requestAsPromise(messageStore.add({
         ...message,
         id: messageId,
         conversationId: conversationIdMap.get(message.conversationId),
         attachmentRefs: (message.attachmentRefs || []).map((sourceId) => sourceIdMap.get(sourceId)),
+        parentId,
+        parentKey: parentId ?? '__root__',
       }))
-      messageIdMap.set(message.id, messageId)
+    }
+
+    for (const conversation of normalizedBackup.conversations) {
+      const conversationId = conversationIdMap.get(conversation.id)
+      const activeLeafMessageId = conversation.activeLeafMessageId
+        ? messageIdMap.get(conversation.activeLeafMessageId)
+        : null
+      await requestAsPromise(conversationStore.add({
+        ...conversation,
+        id: conversationId,
+        activeLeafMessageId,
+      }))
     }
 
     return {
@@ -571,11 +869,233 @@ export async function importConversationBackup(backup, { mode = 'merge' } = {}) 
   })
 }
 
+export async function getMessage(messageId) {
+  return runTransaction([CONVERSATION_MESSAGES_STORE_NAME], 'readonly', async (transaction) =>
+    requestAsPromise(transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME).get(messageId))
+  )
+}
+
+export async function updateMessageContent(messageId, content) {
+  return runTransaction([CONVERSATION_MESSAGES_STORE_NAME], 'readwrite', async (transaction) => {
+    const store = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+    const message = await requestAsPromise(store.get(messageId))
+    if (!message) throw new Error(`Message ${messageId} was not found`)
+    message.content = content
+    message.updatedAt = new Date().toISOString()
+    await requestAsPromise(store.put(message))
+    return message
+  })
+}
+
+/**
+ * Flip an existing terminal message back to 'streaming' so it can be
+ * checkpointed and recovered while a "continue" generation appends to it.
+ */
+export async function markMessageStreaming(messageId) {
+  return runTransaction([CONVERSATION_MESSAGES_STORE_NAME], 'readwrite', async (transaction) => {
+    const store = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+    const message = await requestAsPromise(store.get(messageId))
+    if (!message) throw new Error(`Message ${messageId} was not found`)
+    message.status = 'streaming'
+    message.updatedAt = new Date().toISOString()
+    await requestAsPromise(store.put(message))
+    return message
+  })
+}
+
+export async function deleteSubtree(messageId) {
+  return runTransaction(
+    [CONVERSATIONS_STORE_NAME, CONVERSATION_MESSAGES_STORE_NAME],
+    'readwrite',
+    async (transaction) => {
+      const conversationStore = transaction.objectStore(CONVERSATIONS_STORE_NAME)
+      const messageStore = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+
+      const root = await requestAsPromise(messageStore.get(messageId))
+      if (!root) throw new Error(`Message ${messageId} was not found`)
+
+      // Collect all descendants via BFS within the transaction
+      const toDelete = [root]
+      const queue = [messageId]
+      while (queue.length > 0) {
+        const parentId = queue.shift()
+        const childKey = [root.conversationId, parentId]
+        const children = await requestAsPromise(
+          messageStore.index('conversationId_parentKey').getAll(childKey)
+        )
+        for (const child of children) {
+          toDelete.push(child)
+          queue.push(child.id)
+        }
+      }
+
+      const deletedIds = new Set(toDelete.map((m) => m.id))
+
+      // Delete all collected messages
+      for (const msg of toDelete) {
+        await requestAsPromise(messageStore.delete(msg.id))
+      }
+
+      // Re-point activeLeafMessageId
+      const conversation = await requestAsPromise(conversationStore.get(root.conversationId))
+      if (conversation) {
+        if (deletedIds.has(conversation.activeLeafMessageId)) {
+          // Walk up to the deleted root's parent and find its latest descendant
+          const newAnchor = root.parentId
+          if (newAnchor) {
+            // Find latest descendant of the parent that is still alive
+            const visited = new Set()
+            let currentId = newAnchor
+            while (currentId) {
+              if (visited.has(currentId)) {
+                throw new Error(`Cycle detected while re-pointing active leaf for message ${messageId}`)
+              }
+              visited.add(currentId)
+              const msg = await requestAsPromise(messageStore.get(currentId))
+              if (!msg) break
+              const childKey = [root.conversationId, currentId]
+              const children = await requestAsPromise(
+                messageStore.index('conversationId_parentKey').getAll(childKey)
+              )
+              const alive = children.filter((c) => !deletedIds.has(c.id))
+              if (alive.length === 0) break
+              alive.sort((a, b) => b.sequence - a.sequence)
+              currentId = alive[0].id
+            }
+            conversation.activeLeafMessageId = currentId
+          } else {
+            conversation.activeLeafMessageId = null
+          }
+          conversation.updatedAt = new Date().toISOString()
+          await requestAsPromise(conversationStore.put(conversation))
+        }
+      }
+
+      return { deletedCount: toDelete.length, deletedIds: [...deletedIds] }
+    }
+  )
+}
+
 export async function clearConversationData() {
   return runTransaction(CHAT_STORES, 'readwrite', async (transaction) => {
     await Promise.all(CHAT_STORES.map((storeName) => requestAsPromise(transaction.objectStore(storeName).clear())))
     return true
   })
+}
+
+/**
+ * Pre-persist an assistant message with status 'streaming' before generation
+ * starts. This makes the message durable so recovery-on-open can detect it
+ * if the panel closes or crashes mid-stream.
+ */
+export async function createStreamingAssistantMessage(conversationId, messageData) {
+  return runTransaction(
+    [CONVERSATIONS_STORE_NAME, CONVERSATION_MESSAGES_STORE_NAME],
+    'readwrite',
+    async (transaction) => {
+      const conversationStore = transaction.objectStore(CONVERSATIONS_STORE_NAME)
+      const messageStore = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+      const conversation = await requestAsPromise(conversationStore.get(conversationId))
+      if (!conversation || conversation.deleted) {
+        throw new Error(`Conversation ${conversationId} was not found`)
+      }
+
+      const parentId = messageData.parentId !== undefined ? messageData.parentId : conversation.activeLeafMessageId
+      const message = createMessageRecord(
+        conversationId,
+        await getNextSequence(messageStore, conversationId),
+        { ...messageData, role: 'assistant', status: 'streaming', parentId }
+      )
+      await requestAsPromise(messageStore.add(message))
+
+      conversation.activeLeafMessageId = message.id
+      conversation.updatedAt = new Date().toISOString()
+      await requestAsPromise(conversationStore.put(conversation))
+      return message
+    }
+  )
+}
+
+/**
+ * Checkpoint the content of a streaming assistant message. Called on a throttle
+ * (~500 ms) during generation so partial content survives panel close/crash.
+ */
+export async function checkpointStreamingContent(messageId, content) {
+  return runTransaction([CONVERSATION_MESSAGES_STORE_NAME], 'readwrite', async (transaction) => {
+    const store = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+    const message = await requestAsPromise(store.get(messageId))
+    if (!message) return null
+    // Only checkpoint if the message is still in streaming state
+    if (message.status !== 'streaming') return message
+    message.content = content
+    message.updatedAt = new Date().toISOString()
+    await requestAsPromise(store.put(message))
+    return message
+  })
+}
+
+/**
+ * Recovery-on-open: find all messages in a conversation still marked
+ * 'streaming' and flip them to 'interrupted'. This is the **source of truth**
+ * for durable streaming — close hooks are best-effort only.
+ */
+export async function recoverStreamingMessages(conversationId) {
+  return runTransaction([CONVERSATION_MESSAGES_STORE_NAME], 'readwrite', async (transaction) => {
+    const store = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+    const messages = await requestAsPromise(
+      store.index('conversationId').getAll(conversationId)
+    )
+    const recovered = []
+    for (const message of messages) {
+      if (message.status === 'streaming') {
+        message.status = 'interrupted'
+        message.updatedAt = new Date().toISOString()
+        await requestAsPromise(store.put(message))
+        recovered.push(message)
+      }
+    }
+    return recovered
+  })
+}
+
+/**
+ * Finalize a pre-persisted streaming assistant message. Updates the existing
+ * record's status, content, and metadata in place rather than creating a new
+ * record (which is what finalizeAssistantMessage does for the non-durable path).
+ */
+export async function finalizeStreamingAssistantMessage(messageId, updates) {
+  return runTransaction(
+    [CONVERSATIONS_STORE_NAME, CONVERSATION_MESSAGES_STORE_NAME],
+    'readwrite',
+    async (transaction) => {
+      const messageStore = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+      const message = await requestAsPromise(messageStore.get(messageId))
+      if (!message) throw new Error(`Streaming message ${messageId} was not found`)
+
+      const status = updates.status || 'complete'
+      message.content = updates.content ?? message.content
+      message.status = status
+      message.providerId = updates.providerId ?? message.providerId
+      message.modelId = updates.modelId ?? message.modelId
+      message.usage = updates.usage ?? message.usage
+      message.error = updates.error ?? message.error
+      message.groundingRefs = updates.groundingRefs ?? message.groundingRefs
+      message.updatedAt = new Date().toISOString()
+      await requestAsPromise(messageStore.put(message))
+
+      // Update conversation timestamp on success
+      if (status === 'complete') {
+        const conversationStore = transaction.objectStore(CONVERSATIONS_STORE_NAME)
+        const conversation = await requestAsPromise(conversationStore.get(message.conversationId))
+        if (conversation) {
+          conversation.updatedAt = new Date().toISOString()
+          await requestAsPromise(conversationStore.put(conversation))
+        }
+      }
+
+      return message
+    }
+  )
 }
 
 export const conversationRepository = {
@@ -589,6 +1109,10 @@ export const conversationRepository = {
   finalizeAssistantMessage,
   listMessagesByConversation,
   deleteMessagesByConversation,
+  getMessage,
+  updateMessageContent,
+  markMessageStreaming,
+  deleteSubtree,
   putSourceSnapshot,
   getSourceById,
   getSourceByKey,
@@ -599,4 +1123,14 @@ export const conversationRepository = {
   exportConversationBackup,
   importConversationBackup,
   clearConversationData,
+  getAncestorPath,
+  getGenerationPath,
+  getGenerationContextForUser,
+  getSiblings,
+  activateBranch,
+  findLatestDescendant,
+  createStreamingAssistantMessage,
+  checkpointStreamingContent,
+  recoverStreamingMessages,
+  finalizeStreamingAssistantMessage,
 }

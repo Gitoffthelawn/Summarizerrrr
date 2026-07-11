@@ -75,16 +75,29 @@ export async function resolveSources({
     }
   }
 
+  // Dedupe by resolved sourceId so a single source is never emitted twice.
+  // A source carried in from history (conversation) that is also re-attached on
+  // the current turn (e.g. the active tab captured every send) would otherwise
+  // have its full content included twice — doubling input tokens and the
+  // grounding-source count.
+  const seenSourceIds = new Set()
+
   const conversationSources = []
   for (const ref of conversationSourceRefs) {
     const source = await resolveRef(ref, 'conversation')
-    if (source) conversationSources.push(source)
+    if (source && !seenSourceIds.has(source.sourceId)) {
+      seenSourceIds.add(source.sourceId)
+      conversationSources.push(source)
+    }
   }
 
   const attachmentSources = []
   for (const ref of newAttachmentRefs) {
     const source = await resolveRef(ref, 'attachment')
-    if (source) attachmentSources.push(source)
+    if (source && !seenSourceIds.has(source.sourceId)) {
+      seenSourceIds.add(source.sourceId)
+      attachmentSources.push(source)
+    }
   }
 
   return { conversationSources, attachmentSources, unresolvedRefs, warnings }

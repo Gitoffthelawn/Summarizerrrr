@@ -310,16 +310,16 @@
       },
       "perTabCache": {
         "title": "サイドパネルのタブ",
-        "description": "各ブラウザタブに個別の要約状態を保持します。",
+        "description": "各ブラウザタブに個別のサイドパネル状態を保持します。",
         "enabled": "有効",
         "disabled": "無効",
         "clear_on_navigation": {
           "title": "ナビゲーション時にクリア",
-          "description": "ページURLが変更されたときにキャッシュされた要約に何が起こるか。",
-          "keep_summary": "要約を保持",
-          "keep_summary_desc": "URL変更時も要約をキャッシュに保持",
+          "description": "ページURLが変更されたときのサイドパネル状態を設定します。",
+          "keep_summary": "状態を保持",
+          "keep_summary_desc": "URL変更時もサイドパネル状態を保持",
           "auto_clear": "自動クリア",
-          "auto_clear_desc": "URL変更時に要約をクリア"
+          "auto_clear_desc": "URL変更時にサイドパネル状態をクリア"
         },
         "auto_scroll": {
           "title": "アクティブなタブに自動スクロール",

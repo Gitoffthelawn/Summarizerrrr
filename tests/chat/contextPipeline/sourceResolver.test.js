@@ -31,4 +31,32 @@ describe('sourceResolver', () => {
       },
     })
   })
+
+  it('does not include the same source twice when it is both a conversation source and a re-attached source', async () => {
+    const sources = {
+      A: {
+        id: 'A',
+        sourceKey: 'https://example.com:hash',
+        normalizedUrl: 'https://example.com',
+        title: 'Active tab',
+        rawContent: 'Full page content',
+        condensedContent: 'Condensed page content',
+      },
+    }
+
+    const result = await resolveSources({
+      // Carried in from history and re-attached on the current turn (active tab).
+      conversationSourceRefs: ['A'],
+      newAttachmentRefs: ['A'],
+      repository: { getSourceById: async (id) => sources[id] },
+    })
+
+    const allIds = [
+      ...result.conversationSources.map((s) => s.sourceId),
+      ...result.attachmentSources.map((s) => s.sourceId),
+    ]
+    expect(allIds).toEqual(['A'])
+    expect(result.conversationSources).toHaveLength(1)
+    expect(result.attachmentSources).toHaveLength(0)
+  })
 })

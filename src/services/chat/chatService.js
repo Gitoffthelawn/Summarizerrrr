@@ -62,8 +62,7 @@ export function createChatService({
         personaSnapshot:
           personaSnapshot ||
           createPersonaSnapshot(settings?.chatGlobalPersona, {
-            language: settings?.summaryLang || 'English',
-            tone: settings?.summaryTone || null,
+            language: settings?.summaryLang || null,
           }),
         providerId: settings?.selectedProvider || 'gemini',
         modelId: getModelId(settings?.selectedProvider || 'gemini', settings || {}),
@@ -118,10 +117,40 @@ export function createChatService({
       content: '',
       status: 'complete',
       retryOfMessageId,
+      parentId: currentUserMessage.id,
     }
     let pipeline
+    let usage = null
+    let streamingMessageId = null
+    let checkpointTimer = null
+
+    function cancelCheckpoint() {
+      if (checkpointTimer != null) {
+        clearTimeout(checkpointTimer)
+        checkpointTimer = null
+      }
+    }
+
+    function scheduleCheckpoint(content) {
+      cancelCheckpoint()
+      if (!streamingMessageId) return
+      checkpointTimer = setTimeout(() => {
+        repository.checkpointStreamingContent(streamingMessageId, content).catch(() => {})
+      }, 500)
+    }
+
     try {
       const attachmentRefs = currentUserMessage.attachmentRefs || []
+
+      // Pre-persist the assistant message with status 'streaming' before calling the model.
+      const streamingMessage = await repository.createStreamingAssistantMessage(conversation.id, {
+        ...transient,
+        content: '',
+        providerId: conversation.providerId || settings.selectedProvider,
+        modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
+      })
+      streamingMessageId = streamingMessage.id
+
       pipeline = await buildPipeline(
         {
           conversation,
@@ -144,27 +173,43 @@ export function createChatService({
         messages: pipeline.messages,
         abortSignal: abortController.signal,
       })) {
-        if (event.isComplete) continue
+        if (event.isComplete) {
+          usage = event.usage || null
+          continue
+        }
         transient.content = event.fullText
         onChunk?.({ ...transient })
+        scheduleCheckpoint(event.fullText)
       }
 
+      cancelCheckpoint()
+
       if (abortController.signal.aborted) transient.status = 'aborted'
-      const assistant = await repository.finalizeAssistantMessage(conversation.id, {
-        ...transient,
+      const assistant = await repository.finalizeStreamingAssistantMessage(streamingMessageId, {
+        content: transient.content,
+        status: transient.status,
         providerId: conversation.providerId || settings.selectedProvider,
         modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
+        usage,
+        groundingRefs: pipeline?.groundingRefs || [],
       })
       return { assistant, transient, diagnostics: pipeline }
     } catch (error) {
+      cancelCheckpoint()
+
       if (isAbortError(error, abortController)) {
         transient.status = 'aborted'
-        const assistant = await repository.finalizeAssistantMessage(conversation.id, {
-          ...transient,
-          providerId: conversation.providerId || settings.selectedProvider,
-          modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
-        })
-        return { assistant, transient, diagnostics: pipeline }
+        if (streamingMessageId) {
+          const assistant = await repository.finalizeStreamingAssistantMessage(streamingMessageId, {
+            content: transient.content,
+            status: 'aborted',
+            providerId: conversation.providerId || settings.selectedProvider,
+            modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
+            groundingRefs: pipeline?.groundingRefs || [],
+          })
+          return { assistant, transient, diagnostics: pipeline }
+        }
+        return { assistant: null, transient, diagnostics: pipeline }
       }
 
       const handledError = handleError(error, {
@@ -172,12 +217,19 @@ export function createChatService({
       })
       transient.status = 'error'
       transient.error = handledError
-      const assistant = await repository.finalizeAssistantMessage(conversation.id, {
-        ...transient,
-        providerId: conversation.providerId || settings.selectedProvider,
-        modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
-      })
-      return { assistant, transient, error: handledError, diagnostics: pipeline }
+      if (streamingMessageId) {
+        const assistant = await repository.finalizeStreamingAssistantMessage(streamingMessageId, {
+          content: transient.content,
+          status: 'error',
+          error: handledError,
+          providerId: conversation.providerId || settings.selectedProvider,
+          modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
+          usage,
+          groundingRefs: pipeline?.groundingRefs || [],
+        })
+        return { assistant, transient, error: handledError, diagnostics: pipeline }
+      }
+      return { assistant: null, transient, error: handledError, diagnostics: pipeline }
     }
   }
 
@@ -208,6 +260,9 @@ export function createChatService({
       } catch (error) {
         throw handleError(error, { source: 'chatCapture' })
       }
+
+      const history = await repository.getGenerationPath(conversation.id)
+
       const userMessage = await repository.addMessage(conversation.id, {
         role: 'user',
         content: String(content || '').trim(),
@@ -218,7 +273,7 @@ export function createChatService({
 
       return runGeneration({
         conversation,
-        history: messages,
+        history,
         currentUserMessage: userMessage,
         settings,
         abortController,
@@ -228,13 +283,32 @@ export function createChatService({
     },
 
     async retry({ conversation, messages, userMessageId, settings, abortController, onChunk, onWarnings }) {
-      const userIndex = messages.findIndex((message) => message.id === userMessageId && message.role === 'user')
-      if (userIndex < 0) throw new Error('The selected user message is not available for retry.')
-      const userMessage = messages[userIndex]
+      const { history, currentUserMessage } = await repository.getGenerationContextForUser(userMessageId)
       return runGeneration({
         conversation,
-        history: messages.slice(0, userIndex),
-        currentUserMessage: userMessage,
+        history,
+        currentUserMessage,
+        settings,
+        abortController: abortController || new AbortController(),
+        retryOfMessageId: userMessageId,
+        onChunk,
+        onWarnings,
+      })
+    },
+
+    async regenerate({ conversation, assistantMessageId, settings, abortController, onChunk, onWarnings }) {
+      const allMessages = await repository.listMessagesByConversation(conversation.id)
+      const assistantMessage = allMessages.find((m) => m.id === assistantMessageId)
+      if (!assistantMessage) throw new Error('The assistant message was not found.')
+
+      const userMessageId = assistantMessage.parentId
+      if (!userMessageId) throw new Error('The assistant message has no parent user turn.')
+
+      const { history, currentUserMessage } = await repository.getGenerationContextForUser(userMessageId)
+      return runGeneration({
+        conversation,
+        history,
+        currentUserMessage,
         settings,
         abortController: abortController || new AbortController(),
         retryOfMessageId: userMessageId,
@@ -249,6 +323,154 @@ export function createChatService({
 
     archiveConversation(id) {
       return repository.archiveConversation(id)
+    },
+
+    async edit({ conversation, messageId, content, settings, abortController, onChunk, onWarnings }) {
+      const original = await repository.getMessage(messageId)
+      if (!original) throw new Error('The message to edit was not found.')
+      if (original.role !== 'user') throw new Error('Only user messages can be edited.')
+
+      // Create a new user sibling with the same parentId as the edited message
+      const newUser = await repository.addMessage(conversation.id, {
+        role: 'user',
+        content: String(content || '').trim(),
+        skillInvocation: original.skillInvocation,
+        attachmentRefs: original.attachmentRefs,
+        parentId: original.parentId,
+      })
+
+      const { history, currentUserMessage } = await repository.getGenerationContextForUser(newUser.id)
+      return runGeneration({
+        conversation,
+        history,
+        currentUserMessage,
+        settings,
+        abortController: abortController || new AbortController(),
+        onChunk,
+        onWarnings,
+      })
+    },
+
+    async continueResponse({ conversation, assistantMessageId, settings, abortController, onChunk, onWarnings }) {
+      const assistantMessage = await repository.getMessage(assistantMessageId)
+      if (!assistantMessage) throw new Error('The assistant message was not found.')
+      if (assistantMessage.status !== 'aborted' && assistantMessage.status !== 'interrupted') {
+        throw new Error('Only aborted or interrupted replies can be continued.')
+      }
+
+      const userMessageId = assistantMessage.parentId
+      if (!userMessageId) throw new Error('The assistant message has no parent user turn.')
+
+      const { history, currentUserMessage } = await repository.getGenerationContextForUser(userMessageId)
+
+      // Include the partial assistant content in history so the model sees what was already generated
+      const historyWithPartial = [
+        ...history,
+        { role: 'user', content: currentUserMessage.content },
+        { role: 'assistant', content: assistantMessage.content },
+      ]
+
+      // Build a continue instruction as the current user message
+      const continueInstruction = {
+        ...currentUserMessage,
+        content: 'Continue your previous response from exactly where you left off. Do not repeat any content you already wrote.',
+      }
+
+      const controller = abortController || new AbortController()
+      const baseContent = assistantMessage.content || ''
+      const transient = {
+        role: 'assistant',
+        content: '',
+        status: 'complete',
+        parentId: userMessageId,
+      }
+      let pipeline
+      let usage = null
+      let checkpointTimer = null
+
+      function cancelCheckpoint() {
+        if (checkpointTimer != null) {
+          clearTimeout(checkpointTimer)
+          checkpointTimer = null
+        }
+      }
+
+      function scheduleCheckpoint(combined) {
+        cancelCheckpoint()
+        checkpointTimer = setTimeout(() => {
+          repository.checkpointStreamingContent(assistantMessageId, combined).catch(() => {})
+        }, 500)
+      }
+
+      // Flip the existing record to 'streaming' so partial continuation content
+      // is durable (checkpointed) and recoverable if the panel closes mid-stream.
+      await repository.markMessageStreaming(assistantMessageId)
+
+      try {
+        const attachmentRefs = currentUserMessage.attachmentRefs || []
+        pipeline = await buildPipeline(
+          {
+            conversation,
+            history: historyWithPartial,
+            currentUserMessage: continueInstruction,
+            skillInvocation: currentUserMessage.skillInvocation,
+            conversationSourceRefs: sourceIdsFrom(historyWithPartial),
+            newAttachmentRefs: attachmentRefs,
+            providerId: conversation.providerId || settings.selectedProvider,
+            modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
+          },
+          { repository }
+        )
+        onWarnings?.(pipeline.warnings)
+
+        for await (const event of streamRequest({
+          providerId: conversation.providerId || settings.selectedProvider,
+          settings,
+          system: pipeline.system,
+          messages: pipeline.messages,
+          abortSignal: controller.signal,
+        })) {
+          if (event.isComplete) {
+            usage = event.usage || null
+            continue
+          }
+          transient.content = event.fullText
+          // Show the combined content during streaming
+          const combined = baseContent + event.fullText
+          onChunk?.({ ...transient, content: combined })
+          scheduleCheckpoint(combined)
+        }
+
+        cancelCheckpoint()
+
+        // Aborted continuation stays continuable; a finished one becomes complete.
+        const combined = baseContent + transient.content
+        const status = controller.signal.aborted ? 'aborted' : 'complete'
+        transient.status = status
+        const updated = await repository.finalizeStreamingAssistantMessage(assistantMessageId, {
+          content: combined,
+          status,
+          usage,
+          groundingRefs: pipeline?.groundingRefs || [],
+        })
+        return { assistant: updated, transient, diagnostics: pipeline }
+      } catch (error) {
+        cancelCheckpoint()
+        const combined = baseContent + transient.content
+        if (isAbortError(error, controller)) {
+          transient.status = 'aborted'
+          const updated = await repository.finalizeStreamingAssistantMessage(assistantMessageId, {
+            content: combined,
+            status: 'aborted',
+          })
+          return { assistant: updated, transient }
+        }
+        // Leave the record in a continuable terminal state rather than 'streaming'.
+        await repository
+          .finalizeStreamingAssistantMessage(assistantMessageId, { content: combined, status: 'aborted' })
+          .catch(() => {})
+        throw handleError(error, { source: pipeline ? 'chatGeneration' : 'chatAssembly' })
+      }
     },
   }
 }

@@ -789,6 +789,16 @@ export async function* generateContentStreamRequest(request) {
         for await (const chunk of streamToUse) {
           yield chunk
         }
+
+        // Yield usage metadata from AI SDK result (if available)
+        try {
+          const usage = normalizeUsage(await result.usage)
+          if (usage) {
+            yield { __streamMeta: true, usage }
+          }
+        } catch {
+          // Usage may not be available for all providers
+        }
       }
 
       // If we successfully streamed, log success and return
@@ -903,6 +913,35 @@ export async function* generateContentStreamRequest(request) {
 }
 
 /**
+ * Normalize AI SDK usage into a canonical shape. AI SDK v5 reports
+ * `inputTokens`/`outputTokens`/`totalTokens`; v4 reported
+ * `promptTokens`/`completionTokens`. We persist both key styles so downstream
+ * consumers (and older stored records) stay compatible.
+ * @param {object|null|undefined} usage
+ */
+function normalizeUsage(usage) {
+  if (!usage || typeof usage !== 'object') return null
+  const promptTokens = usage.promptTokens ?? usage.inputTokens ?? null
+  const completionTokens = usage.completionTokens ?? usage.outputTokens ?? null
+  const totalTokens =
+    usage.totalTokens ??
+    (promptTokens != null && completionTokens != null ? promptTokens + completionTokens : null)
+  // Cross-provider cached-prompt count. AI SDK v5 normalizes this to
+  // `cachedInputTokens`; some providers surface it under other names.
+  const cachedInputTokens =
+    usage.cachedInputTokens ?? usage.cachedPromptTokens ?? usage.cacheReadInputTokens ?? null
+  if (promptTokens == null && completionTokens == null && totalTokens == null) return null
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    inputTokens: promptTokens,
+    outputTokens: completionTokens,
+    cachedInputTokens,
+  }
+}
+
+/**
  * Compatibility wrapper for existing positional enhanced streaming callers.
  * @returns {AsyncIterable<{chunk: string, fullText: string, isComplete: boolean}>}
  */
@@ -932,6 +971,7 @@ export async function* generateContentStreamEnhanced(
 export async function* generateContentStreamEnhancedRequest(request) {
   const normalizedRequest = normalizeGenerationRequest(request)
   let fullText = ''
+  let usage = null
 
   // Get browser compatibility info
   const browserCompatibility = getBrowserCompatibility()
@@ -940,6 +980,11 @@ export async function* generateContentStreamEnhancedRequest(request) {
     const streamGenerator = generateContentStreamRequest(normalizedRequest)
 
     for await (const chunk of streamGenerator) {
+      // Detect metadata marker from generateContentStreamRequest
+      if (chunk && typeof chunk === 'object' && chunk.__streamMeta) {
+        usage = chunk.usage || null
+        continue
+      }
       fullText += chunk
       yield {
         chunk,
@@ -948,11 +993,12 @@ export async function* generateContentStreamEnhancedRequest(request) {
       }
     }
 
-    // Final yield with completion flag
+    // Final yield with completion flag and usage data
     yield {
       chunk: '',
       fullText,
       isComplete: true,
+      usage,
     }
   } catch (error) {
     // Check if this is a Firefox mobile specific error

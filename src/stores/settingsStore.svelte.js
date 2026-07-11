@@ -124,8 +124,9 @@ const DEFAULT_SETTINGS = {
   // prompt templates: it contains stable, conversation-level instructions.
   chatGlobalPersona: {
     content: '',
-    language: 'English',
+    language: null,
     tone: null,
+    length: null,
     version: 1,
   },
   chatUserSkills: [],

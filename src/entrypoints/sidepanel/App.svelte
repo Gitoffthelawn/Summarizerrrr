@@ -72,10 +72,7 @@
 
   // Chat harness (Phase 5): chat is the default side-panel surface
   import ChatShell from '@/components/chat/ChatShell.svelte'
-  import {
-    chatState,
-    syncChatForActiveTab,
-  } from '@/stores/chatStore.svelte.js'
+  import ChatTabTitleBar from '@/components/chat/ChatTabTitleBar.svelte'
 
   // Track if settings are loaded
   let settingsLoaded = $state(false)
@@ -148,35 +145,6 @@
     const unsubscribeTheme = subscribeToSystemThemeChanges()
 
     return unsubscribeTheme
-  })
-
-  // Restore the runtime chat conversation for the active tab, and re-sync
-  // when the user switches tabs. Conversations are captured lazily on first
-  // send, so no active tab having a mapped conversation yet is expected.
-  $effect(() => {
-    ;(async () => {
-      try {
-        const [tab] = await browser.tabs.query({
-          active: true,
-          currentWindow: true,
-        })
-        if (tab?.id) await syncChatForActiveTab(tab.id)
-      } catch (error) {
-        console.error('[App] Failed to resolve active tab for chat:', error)
-      }
-    })()
-
-    const handleTabActivated = (activeInfo) => {
-      syncChatForActiveTab(activeInfo.tabId).catch((error) =>
-        console.error('[App] Failed to sync chat for tab:', error),
-      )
-    }
-
-    browser.tabs.onActivated.addListener(handleTabActivated)
-
-    return () => {
-      browser.tabs.onActivated.removeListener(handleTabActivated)
-    }
   })
 
   // Apply reduce motion setting to DOM
@@ -715,7 +683,28 @@
   <Noti />
 {/if}
 {:else}
-<div class="flex h-screen min-w-[22.5rem] w-full flex-col bg-surface-1">
+<div
+  class="flex h-screen min-w-[22.5rem] w-full flex-col bg-surface-1"
+  data-per-tab={settings.tools?.perTabCache?.enabled ? 'true' : undefined}
+>
+  <div
+    class="relative flex h-9 shrink-0 items-center justify-center bg-surface-1"
+  >
+    <ChatTabTitleBar />
+    <div
+      class="absolute -bottom-3 h-3 w-screen bg-linear-to-b from-surface-1 to-surface-1/0 {settings
+        .tools?.perTabCache?.enabled
+        ? ''
+        : 'hidden'}"
+    ></div>
+  </div>
+  {#if settings.tools?.perTabCache?.enabled}
+    <div
+      class="flex h-8 w-screen shrink-0 items-center justify-center px-2 text-center text-[0.7rem] text-text-secondary"
+    >
+      <div class="line-clamp-1 w-full !text-center">{$tabTitle}</div>
+    </div>
+  {/if}
   <div class="flex items-center justify-between px-2 py-1 border-b border-border">
     <BitsTooltip.Provider>
       <Tooltip content={$t('archive.open_archive')} side="right" align="start">

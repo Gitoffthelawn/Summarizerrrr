@@ -215,7 +215,7 @@ describe('AI SDK generation requests', () => {
     expect(enhanced).toEqual([
       { chunk: 'one', fullText: 'one', isComplete: false },
       { chunk: 'two', fullText: 'onetwo', isComplete: false },
-      { chunk: '', fullText: 'onetwo', isComplete: true },
+      { chunk: '', fullText: 'onetwo', isComplete: true, usage: null },
     ])
     expect(mocks.streamText.mock.calls[1][0].messages).toEqual([
       { role: 'user', content: 'enhance me' },

@@ -119,7 +119,7 @@ describe('conversationRepository', () => {
     await createVersionNineFixture()
 
     const database = await getDatabase()
-    expect(database.version).toBe(10)
+    expect(database.version).toBe(11)
     expect([...database.objectStoreNames]).toEqual(
       expect.arrayContaining([
         'summaries',

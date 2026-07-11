@@ -310,16 +310,16 @@
       },
       "perTabCache": {
         "title": "Pestaña en el panel lateral",
-        "description": "Mantener estado de resumen separado para cada pestaña del navegador.",
+        "description": "Mantener un estado separado del panel lateral para cada pestaña del navegador.",
         "enabled": "Activado",
         "disabled": "Desactivado",
         "clear_on_navigation": {
           "title": "Borrar al navegar",
-          "description": "Qué sucede con el resumen en caché cuando cambia la URL de la página.",
-          "keep_summary": "Mantener resumen",
-          "keep_summary_desc": "El resumen permanece en caché cuando cambia la URL",
+          "description": "Qué sucede con el estado del panel lateral cuando cambia la URL de la página.",
+          "keep_summary": "Mantener estado",
+          "keep_summary_desc": "El estado del panel lateral se conserva cuando cambia la URL",
           "auto_clear": "Borrar automático",
-          "auto_clear_desc": "Borrar resumen cuando cambia la URL"
+          "auto_clear_desc": "Borrar el estado del panel lateral cuando cambia la URL"
         },
         "auto_scroll": {
           "title": "Desplazar automáticamente a la pestaña activa",

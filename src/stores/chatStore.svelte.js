@@ -5,7 +5,16 @@ import { settings } from './settingsStore.svelte.js'
 import { handleError } from '@/lib/error/simpleErrorHandler.js'
 import { skillService } from '@/lib/chat/skills/skillService.js'
 import { invalidateConversationDeepDive } from '@/stores/deepDiveStore.svelte.js'
+
+/** Number of messages to show in the visible window — pagination decoupled from context. */
+const VISIBLE_MESSAGE_WINDOW = 25
 import { MAX_TAB_ATTACHMENTS, tabMentionService } from '@/services/chat/tabMentionService.js'
+import {
+  abortChatTabSession,
+  chatSessionHasActivity,
+  shouldResetChatOnNavigation,
+  toChatTabRuntimeDescriptor,
+} from '@/services/chat/chatTabPolicy.js'
 
 /**
  * Per-tab chat runtime.
@@ -30,6 +39,9 @@ function createChatSessionState() {
     error: null,
     contextWarnings: [],
     abortController: null,
+    currentUrl: null,
+    /** True when there are earlier messages not yet loaded into the visible window. */
+    hasEarlierMessages: false,
   }
 }
 
@@ -37,8 +49,20 @@ const SESSION_KEYS = Object.keys(createChatSessionState())
 
 export const chatState = $state(createChatSessionState())
 
+export const chatTabsState = $state({
+  activeBrowserTabId: null,
+  activeSessionTabId: null,
+  version: 0,
+})
+
 const tabSessions = new Map() // tabId -> plain session snapshot
 let activeTabId = null
+let perTabFeatureEnabled = settings.tools?.perTabCache?.enabled ?? true
+
+function markChatTabsChanged() {
+  chatTabsState.activeSessionTabId = activeTabId
+  chatTabsState.version += 1
+}
 
 function getSession(tabId) {
   if (!tabId) return null
@@ -66,6 +90,7 @@ function projectSessionToView(session) {
 function writeSession(tabId, patch) {
   if (tabId == null || tabId === activeTabId) Object.assign(chatState, patch)
   else Object.assign(getSession(tabId), patch)
+  markChatTabsChanged()
 }
 
 function readSession(tabId) {
@@ -74,6 +99,25 @@ function readSession(tabId) {
 
 function resetView() {
   Object.assign(chatState, createChatSessionState())
+  markChatTabsChanged()
+}
+
+export function getChatTabRuntimeDescriptors() {
+  const ids = new Set(tabSessions.keys())
+  if (activeTabId != null) ids.add(activeTabId)
+
+  const descriptors = []
+  for (const tabId of ids) {
+    const session = tabId === activeTabId ? chatState : tabSessions.get(tabId)
+    if (chatSessionHasActivity(session)) {
+      descriptors.push(toChatTabRuntimeDescriptor(tabId, session))
+    }
+  }
+  return descriptors
+}
+
+export function notifyChatDraftChanged() {
+  markChatTabsChanged()
 }
 
 export function canSendChat() {
@@ -87,6 +131,7 @@ export function selectChatSkill(skill, { seedStarterPrompt = true } = {}) {
   if (seedStarterPrompt && !chatState.composerText.trim() && skill.starterPrompt) {
     chatState.composerText = skill.starterPrompt
   }
+  markChatTabsChanged()
   return invocation
 }
 
@@ -95,6 +140,7 @@ export function consumeLeadingSkillCommand(text = chatState.composerText) {
   if (!parsed.skill) return false
   chatState.selectedSkill = skillService.select(parsed.skill)
   chatState.composerText = parsed.text
+  markChatTabsChanged()
   return true
 }
 
@@ -105,24 +151,34 @@ export async function addTabAttachment(tab) {
   const attachment = await tabMentionService.select(tab)
   if (!chatState.pendingAttachments.some((item) => item.tabId === attachment.tabId)) {
     chatState.pendingAttachments = [...chatState.pendingAttachments, attachment]
+    markChatTabsChanged()
   }
   return attachment
 }
 
 export function removeTabAttachment(tabId) {
   chatState.pendingAttachments = chatState.pendingAttachments.filter((item) => item.tabId !== tabId)
+  markChatTabsChanged()
 }
 
-function applyTerminalResult(tabId, result) {
+async function reloadActivePath(tabId, result) {
   const owner = readSession(tabId)
-  const patch = { streamingMessage: null, error: result.error || null }
-  if (result.assistant) patch.messages = [...owner.messages, result.assistant]
-  writeSession(tabId, patch)
+  if (!owner.conversation) return
+  const fullPath = await conversationRepository.getGenerationPath(owner.conversation.id)
+  const hasEarlier = fullPath.length > VISIBLE_MESSAGE_WINDOW
+  const windowed = hasEarlier ? fullPath.slice(-VISIBLE_MESSAGE_WINDOW) : fullPath
+  writeSession(tabId, {
+    messages: windowed,
+    hasEarlierMessages: hasEarlier,
+    streamingMessage: null,
+    error: result?.error || null,
+  })
 }
 
 export async function startConversationForActiveTab() {
   const { conversation, tab } = await chatService.startConversationForActiveTab({ settings })
-  if (activeTabId == null) activeTabId = tab.id
+  if (activeTabId == null || !perTabFeatureEnabled) activeTabId = tab.id
+  chatTabsState.activeBrowserTabId = tab.id
   writeSession(tab.id, {
     activeConversationId: conversation.id,
     conversation,
@@ -134,11 +190,20 @@ export async function startConversationForActiveTab() {
 }
 
 export async function openConversation(id) {
-  const { conversation, messages } = await chatService.openConversation(id)
+  const conversation = await conversationRepository.getConversation(id)
+  if (!conversation || conversation.deleted) throw new Error(`Conversation ${id} was not found`)
+
+  // Recovery-on-open: mark any stale 'streaming' messages as 'interrupted'
+  await conversationRepository.recoverStreamingMessages(id)
+
+  const fullPath = await conversationRepository.getGenerationPath(id)
+  const hasEarlier = fullPath.length > VISIBLE_MESSAGE_WINDOW
+  const windowed = hasEarlier ? fullPath.slice(-VISIBLE_MESSAGE_WINDOW) : fullPath
   writeSession(activeTabId, {
     activeConversationId: id,
     conversation,
-    messages,
+    messages: windowed,
+    hasEarlierMessages: hasEarlier,
     error: null,
     contextWarnings: [],
   })
@@ -168,29 +233,115 @@ export function closeConversation() {
   resetView()
 }
 
+export function removeChatTabSession(tabId, { preserveActiveView = false } = {}) {
+  if (tabId == null) return false
+
+  const isActiveSession = tabId === activeTabId
+  const session = isActiveSession ? chatState : tabSessions.get(tabId)
+  abortChatTabSession(session)
+  tabSessions.delete(tabId)
+  chatSessionService.clearConversationId(tabId)
+
+  if (isActiveSession && !preserveActiveView) resetView()
+  else if (isActiveSession) activeTabId = null
+
+  markChatTabsChanged()
+  return Boolean(session)
+}
+
+export function handleChatBrowserTabRemoved(tabId) {
+  const preserveActiveView = !perTabFeatureEnabled && tabId === activeTabId
+  return removeChatTabSession(tabId, { preserveActiveView })
+}
+
+export function handleChatTabNavigation(tabId, nextUrl) {
+  if (!perTabFeatureEnabled || tabId == null || !nextUrl) return false
+
+  const session = tabId === activeTabId ? chatState : getSession(tabId)
+  const previousUrl = session.currentUrl
+  const shouldReset = shouldResetChatOnNavigation({
+    enabled: perTabFeatureEnabled,
+    autoResetOnNavigation:
+      settings.tools?.perTabCache?.autoResetOnNavigation ?? false,
+    previousUrl,
+    nextUrl,
+  })
+
+  if (shouldReset) {
+    removeChatTabSession(tabId)
+    const nextSession = tabId === activeTabId ? chatState : getSession(tabId)
+    nextSession.currentUrl = nextUrl
+    markChatTabsChanged()
+    return true
+  }
+
+  session.currentUrl = nextUrl
+  markChatTabsChanged()
+  return false
+}
+
+export async function setChatTabFeatureEnabled(enabled, browserTabId = null) {
+  const nextEnabled = Boolean(enabled)
+  if (browserTabId != null) chatTabsState.activeBrowserTabId = browserTabId
+  if (nextEnabled === perTabFeatureEnabled) return chatState.conversation
+
+  if (activeTabId != null) stashViewInto(getSession(activeTabId))
+  perTabFeatureEnabled = nextEnabled
+  markChatTabsChanged()
+
+  if (nextEnabled && browserTabId != null) {
+    return syncChatForActiveTab(browserTabId)
+  }
+  return chatState.conversation
+}
+
 /**
  * Swap the chat view to a tab. Never touches other tabs' generations. A tab
  * with a persisted conversation but no loaded messages is hydrated lazily.
  */
-export async function syncChatForActiveTab(tabId) {
-  if (tabId == null || tabId === activeTabId) return chatState.conversation
+export async function syncChatForActiveTab(tabId, { url = null } = {}) {
+  if (tabId == null) return chatState.conversation
+  chatTabsState.activeBrowserTabId = tabId
+
+  if (!perTabFeatureEnabled) {
+    if (activeTabId == null) activeTabId = tabId
+    if (url && !chatState.currentUrl) chatState.currentUrl = url
+    markChatTabsChanged()
+    return chatState.conversation
+  }
+
+  if (tabId === activeTabId) {
+    if (url) handleChatTabNavigation(tabId, url)
+    return chatState.conversation
+  }
 
   if (activeTabId != null) stashViewInto(getSession(activeTabId))
   activeTabId = tabId
 
   const session = getSession(tabId)
+  if (url && !session.currentUrl) session.currentUrl = url
   projectSessionToView(session)
+  markChatTabsChanged()
 
   if (!session.conversation) {
     const conversationId = chatSessionService.getConversationId(tabId)
     if (conversationId) {
       try {
-        const { conversation, messages } = await chatService.openConversation(conversationId)
-        session.activeConversationId = conversation.id
-        session.conversation = conversation
-        session.messages = messages
-        // Only repaint if the user is still on this tab after the async load.
-        if (activeTabId === tabId) projectSessionToView(session)
+        const conversation = await conversationRepository.getConversation(conversationId)
+        if (conversation && !conversation.deleted) {
+          // Recovery-on-open for tab restore
+          await conversationRepository.recoverStreamingMessages(conversationId)
+          const fullPath = await conversationRepository.getGenerationPath(conversationId)
+          const hasEarlier = fullPath.length > VISIBLE_MESSAGE_WINDOW
+          const windowed = hasEarlier ? fullPath.slice(-VISIBLE_MESSAGE_WINDOW) : fullPath
+          session.activeConversationId = conversation.id
+          session.conversation = conversation
+          session.messages = windowed
+          session.hasEarlierMessages = hasEarlier
+          // Only repaint if the user is still on this tab after the async load.
+          if (activeTabId === tabId) projectSessionToView(session)
+          markChatTabsChanged()
+        }
       } catch (error) {
         console.error('[chatStore] Failed to restore conversation for tab:', error)
       }
@@ -215,8 +366,6 @@ export async function sendChatMessage(content = chatState.composerText) {
   const conversation = owner.conversation
   const history = owner.messages
 
-  // A fresh user turn makes any outstanding suggestions for older replies
-  // stale. Keep completed cached suggestions, but ignore pending results.
   invalidateConversationDeepDive(conversation.id)
 
   const abortController = new AbortController()
@@ -257,7 +406,7 @@ export async function sendChatMessage(content = chatState.composerText) {
         writeSession(targetTabId, { contextWarnings: warnings })
       },
     })
-    applyTerminalResult(targetTabId, result)
+    await reloadActivePath(targetTabId, result)
     return result
   } catch (error) {
     writeSession(targetTabId, {
@@ -313,7 +462,7 @@ export async function retryChatMessage(userMessageId) {
         writeSession(targetTabId, { contextWarnings: warnings })
       },
     })
-    applyTerminalResult(targetTabId, result)
+    await reloadActivePath(targetTabId, result)
     return result
   } catch (error) {
     writeSession(targetTabId, {
@@ -323,5 +472,191 @@ export async function retryChatMessage(userMessageId) {
     return null
   } finally {
     writeSession(targetTabId, { isSending: false, abortController: null })
+  }
+}
+
+export async function switchBranch(messageId) {
+  const activeLeafId = await conversationRepository.activateBranch(messageId)
+  const conversationId = chatState.activeConversationId
+  if (conversationId) {
+    const fullPath = await conversationRepository.getGenerationPath(conversationId)
+    const hasEarlier = fullPath.length > VISIBLE_MESSAGE_WINDOW
+    const windowed = hasEarlier ? fullPath.slice(-VISIBLE_MESSAGE_WINDOW) : fullPath
+    writeSession(activeTabId, {
+      messages: windowed,
+      hasEarlierMessages: hasEarlier,
+      error: null,
+    })
+  }
+  return activeLeafId
+}
+
+/**
+ * Load earlier messages beyond the visible window. Fetches the full active
+ * path and shows all of them. Called by the “Load earlier” button in
+ * ChatMessageList.
+ */
+export async function loadEarlierMessages() {
+  const conversationId = chatState.activeConversationId
+  if (!conversationId) return
+  const fullPath = await conversationRepository.getGenerationPath(conversationId)
+  writeSession(activeTabId, {
+    messages: fullPath,
+    hasEarlierMessages: false,
+  })
+}
+
+export async function regenerateChatMessage(assistantMessageId) {
+  if (!chatState.conversation || chatState.isSending) return null
+
+  const targetTabId = activeTabId
+  const owner = readSession(targetTabId)
+  const abortController = new AbortController()
+
+  const allMessages = owner.messages
+  const assistantMessage = allMessages.find((m) => m.id === assistantMessageId)
+  const userMessageId = assistantMessage?.parentId
+
+  writeSession(targetTabId, {
+    error: null,
+    isSending: true,
+    abortController,
+    streamingMessage: {
+      role: 'assistant',
+      content: '',
+      status: 'complete',
+      retryOfMessageId: userMessageId,
+    },
+  })
+
+  try {
+    const result = await chatService.regenerate({
+      conversation: owner.conversation,
+      assistantMessageId,
+      settings,
+      abortController,
+      onChunk: (message) => {
+        writeSession(targetTabId, { streamingMessage: message })
+      },
+      onWarnings: (warnings) => {
+        writeSession(targetTabId, { contextWarnings: warnings })
+      },
+    })
+    await reloadActivePath(targetTabId, result)
+    return result
+  } catch (error) {
+    writeSession(targetTabId, {
+      error: handleError(error, { source: 'chatGeneration' }),
+      streamingMessage: null,
+    })
+    return null
+  } finally {
+    writeSession(targetTabId, { isSending: false, abortController: null })
+  }
+}
+
+export async function editChatMessage(messageId, content) {
+  if (!chatState.conversation || chatState.isSending) return null
+
+  const targetTabId = activeTabId
+  const owner = readSession(targetTabId)
+  const abortController = new AbortController()
+
+  writeSession(targetTabId, {
+    error: null,
+    isSending: true,
+    abortController,
+    streamingMessage: {
+      role: 'assistant',
+      content: '',
+      status: 'complete',
+    },
+  })
+
+  try {
+    const result = await chatService.edit({
+      conversation: owner.conversation,
+      messageId,
+      content,
+      settings,
+      abortController,
+      onChunk: (message) => {
+        writeSession(targetTabId, { streamingMessage: message })
+      },
+      onWarnings: (warnings) => {
+        writeSession(targetTabId, { contextWarnings: warnings })
+      },
+    })
+    await reloadActivePath(targetTabId, result)
+    return result
+  } catch (error) {
+    writeSession(targetTabId, {
+      error: handleError(error, { source: 'chatGeneration' }),
+      streamingMessage: null,
+    })
+    return null
+  } finally {
+    writeSession(targetTabId, { isSending: false, abortController: null })
+  }
+}
+
+export async function continueChatMessage(assistantMessageId) {
+  if (!chatState.conversation || chatState.isSending) return null
+
+  const targetTabId = activeTabId
+  const owner = readSession(targetTabId)
+  const abortController = new AbortController()
+
+  const assistantMessage = owner.messages.find((m) => m.id === assistantMessageId)
+
+  writeSession(targetTabId, {
+    error: null,
+    isSending: true,
+    abortController,
+    streamingMessage: {
+      role: 'assistant',
+      content: assistantMessage?.content || '',
+      status: 'complete',
+    },
+  })
+
+  try {
+    const result = await chatService.continueResponse({
+      conversation: owner.conversation,
+      assistantMessageId,
+      settings,
+      abortController,
+      onChunk: (message) => {
+        writeSession(targetTabId, { streamingMessage: message })
+      },
+      onWarnings: (warnings) => {
+        writeSession(targetTabId, { contextWarnings: warnings })
+      },
+    })
+    await reloadActivePath(targetTabId, result)
+    return result
+  } catch (error) {
+    writeSession(targetTabId, {
+      error: handleError(error, { source: 'chatGeneration' }),
+      streamingMessage: null,
+    })
+    return null
+  } finally {
+    writeSession(targetTabId, { isSending: false, abortController: null })
+  }
+}
+
+export async function deleteChatMessage(messageId) {
+  if (!chatState.conversation) return null
+
+  try {
+    const result = await conversationRepository.deleteSubtree(messageId)
+    await reloadActivePath(activeTabId)
+    return result
+  } catch (error) {
+    writeSession(activeTabId, {
+      error: handleError(error, { source: 'chatDelete' }),
+    })
+    return null
   }
 }

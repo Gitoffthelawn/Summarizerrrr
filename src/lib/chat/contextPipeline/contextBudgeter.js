@@ -1,5 +1,15 @@
 const TRUNCATION_MARKER = '\n[TRUNCATED SOURCE: only the beginning of this source was included]\n'
 
+/**
+ * Fraction of the model's input budget reserved for grounding sources. The
+ * source allowance is derived only from this fraction and the (stable) system
+ * prompt — never from the current question or history length — so the rendered
+ * source block stays byte-identical across turns and provider prompt caching
+ * can hit the shared prefix. History and the current turn draw from whatever
+ * the budget has left after this allowance.
+ */
+const SOURCE_BUDGET_FRACTION = 0.6
+
 /** @param {unknown} value */
 export function estimateTokens(value) {
   return Math.ceil(String(value || '').length / 4)
@@ -88,19 +98,21 @@ export function budgetContext({
   requestedOutputTokens,
 }) {
   const inputBudgetTokens = Math.max(0, contextWindowTokens - requestedOutputTokens)
+  const systemTokens = estimateTokens(system)
   const currentText = currentUserMessage?.content || ''
   const skillText = skillInvocation?.instructionSnapshot || skillInvocation?.instruction || ''
-  let remainingTokens = inputBudgetTokens - estimateTokens(system) - estimateTokens(currentText) - estimateTokens(skillText)
   const warnings = []
   const includedSourceIds = []
   const droppedSourceIds = []
   const budgetedConversationSources = []
   const budgetedAttachmentSources = []
 
-  if (remainingTokens < 0) {
-    warnings.push('System persona, skill, and current user request exceed the available input budget.')
-    remainingTokens = 0
-  }
+  // Deterministic source allowance — depends only on the model input budget and
+  // the (stable per conversation) system prompt, never on the current turn. This
+  // keeps the rendered source block byte-stable across turns so prompt caching
+  // hits the shared prefix.
+  const sourceBudgetTokens = Math.max(0, Math.floor(inputBudgetTokens * SOURCE_BUDGET_FRACTION) - systemTokens)
+  let sourceRemaining = sourceBudgetTokens
 
   const sourceGroups = [
     ...conversationSources.map((source) => ({ source, destination: budgetedConversationSources })),
@@ -112,7 +124,7 @@ export function budgetContext({
   sourceGroups.sort((left, right) => Number(right.source.isActive) - Number(left.source.isActive))
 
   for (const { source, destination } of sourceGroups) {
-    const selection = selectedSourceContent(source, remainingTokens)
+    const selection = selectedSourceContent(source, sourceRemaining)
     const sourceId = String(source.sourceId || source.id)
     if (!selection) {
       droppedSourceIds.push(sourceId)
@@ -121,12 +133,24 @@ export function budgetContext({
     }
 
     const tokens = estimateTokens(selection.content)
-    remainingTokens -= tokens
+    sourceRemaining -= tokens
     includedSourceIds.push(sourceId)
     if (selection.truncated) {
       warnings.push(`Truncated active source ${sourceId} to fit the context budget.`)
     }
     destination.push({ ...source, selectedContent: selection.content, selectedContentKind: selection.kind, truncated: selection.truncated })
+  }
+
+  const sourcesUsedTokens = sourceBudgetTokens - sourceRemaining
+
+  // History and the current turn draw from what the budget has left after the
+  // fixed source allowance. Trimming history here can never alter the cached
+  // source prefix above.
+  let remainingTokens =
+    inputBudgetTokens - systemTokens - estimateTokens(currentText) - estimateTokens(skillText) - sourcesUsedTokens
+  if (remainingTokens < 0) {
+    warnings.push('System persona, skill, and current user request exceed the available input budget.')
+    remainingTokens = 0
   }
 
   const historyGroups = groupHistoryIntoTurns(history)

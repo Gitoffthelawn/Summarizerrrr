@@ -17,7 +17,8 @@ export function assembleContext({
   attachmentSources = [],
   diagnostics,
 }) {
-  const persona = conversation?.personaSnapshot?.content || conversation?.persona || ''
+  const persona = conversation?.personaSnapshot ||
+    (conversation?.persona ? { content: conversation.persona } : {})
   const system = buildThinSystemInstruction(persona)
   const messages = []
 
@@ -31,7 +32,17 @@ export function assembleContext({
   }
 
   for (const message of history) {
-    if (message.role === 'user' || message.role === 'assistant') {
+    if (message.role === 'user') {
+      messages.push({ role: message.role, content: message.content })
+    } else if (message.role === 'assistant') {
+      if (
+        message.status === 'error' ||
+        message.status === 'streaming' ||
+        !message.content ||
+        !message.content.trim()
+      ) {
+        continue
+      }
       messages.push({ role: message.role, content: message.content })
     }
   }

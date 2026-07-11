@@ -8,6 +8,7 @@
 const VALID_TABS = [
   'ai-provider',
   'summary',
+  'chat',
   'appearance',
   'fab',
   'data-sync',

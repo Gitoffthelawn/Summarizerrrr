@@ -310,16 +310,16 @@
       },
       "perTabCache": {
         "title": "侧边栏标签页",
-        "description": "为每个浏览器标签页保持独立的摘要状态。",
+        "description": "为每个浏览器标签页保持独立的侧边栏状态。",
         "enabled": "已启用",
         "disabled": "已禁用",
         "clear_on_navigation": {
           "title": "导航时清除",
-          "description": "当页面URL更改时，缓存的摘要会发生什么。",
-          "keep_summary": "保留摘要",
-          "keep_summary_desc": "URL更改时摘要保持缓存",
+          "description": "设置页面URL更改时如何处理侧边栏状态。",
+          "keep_summary": "保留状态",
+          "keep_summary_desc": "URL更改时保留侧边栏状态",
           "auto_clear": "自动清除",
-          "auto_clear_desc": "URL更改时清除摘要"
+          "auto_clear_desc": "URL更改时清除侧边栏状态"
         },
         "auto_scroll": {
           "title": "自动滚动到活动标签页",

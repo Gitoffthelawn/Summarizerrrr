@@ -310,16 +310,16 @@
       },
       "perTabCache": {
         "title": "Tab im Seitenbereich",
-        "description": "Separaten Zusammenfassungsstatus für jeden Browser-Tab beibehalten.",
+        "description": "Separaten Seitenleistenstatus für jeden Browser-Tab beibehalten.",
         "enabled": "Aktiviert",
         "disabled": "Deaktiviert",
         "clear_on_navigation": {
           "title": "Bei Navigation löschen",
-          "description": "Was mit der gecachten Zusammenfassung passiert, wenn sich die Seiten-URL ändert.",
-          "keep_summary": "Zusammenfassung behalten",
-          "keep_summary_desc": "Zusammenfassung bleibt gecacht bei URL-Änderung",
+          "description": "Was mit dem gecachten Seitenleistenstatus passiert, wenn sich die Seiten-URL ändert.",
+          "keep_summary": "Status behalten",
+          "keep_summary_desc": "Seitenleistenstatus bleibt bei URL-Änderung erhalten",
           "auto_clear": "Automatisch löschen",
-          "auto_clear_desc": "Zusammenfassung bei URL-Änderung löschen"
+          "auto_clear_desc": "Seitenleistenstatus bei URL-Änderung löschen"
         },
         "auto_scroll": {
           "title": "Automatisch zum aktiven Tab scrollen",

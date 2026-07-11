@@ -84,8 +84,9 @@ export function createPersonaSnapshot(chatGlobalPersona, fallback = {}) {
   const persona = chatGlobalPersona || {}
   return {
     content: String(persona.content || '').trim(),
-    language: String(persona.language || fallback.language || 'English'),
+    language: persona.language || fallback.language || null,
     tone: persona.tone || fallback.tone || null,
+    length: persona.length || fallback.length || null,
     version: Number(persona.version) || 1,
   }
 }
@@ -104,7 +105,6 @@ export function createSkillService({
       current = current || {}
       return createPersonaSnapshot(current.chatGlobalPersona, {
         language: current.summaryLang,
-        tone: current.summaryTone,
       })
     },
 

@@ -11,6 +11,7 @@
     onArchive = null,
     onOpenConversation = null,
     onShowLegacySummary = null,
+    onEditSystemPrompt = null,
   } = $props()
 
   let recentConversations = $state([])
@@ -51,6 +52,14 @@
       >
         <Icon icon="heroicons:plus" width="18" height="18" />
         <span>New chat</span>
+      </DropdownMenu.Item>
+
+      <DropdownMenu.Item
+        class="px-4 py-2.5 text-left hover:bg-surface-2 dark:hover:bg-surface-3 flex items-center gap-2 text-sm"
+        onSelect={() => onEditSystemPrompt?.()}
+      >
+        <Icon icon="heroicons:adjustments-horizontal" width="18" height="18" />
+        <span>Edit system prompt</span>
       </DropdownMenu.Item>
 
       {#if activeConversationId}

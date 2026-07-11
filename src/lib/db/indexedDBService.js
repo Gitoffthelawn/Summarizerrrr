@@ -4,7 +4,7 @@ import { generateUUID } from '../utils/utils'
 export const DB_NAME = 'summarizer_db'
 const STORE_NAME = 'summaries'
 const TAGS_STORE_NAME = 'tags'
-export const DB_VERSION = 10 // Version increased for conversation persistence
+export const DB_VERSION = 11 // Version increased for conversation persistence
 const HISTORY_STORE_NAME = 'history'
 export const CONVERSATIONS_STORE_NAME = 'conversations'
 export const CONVERSATION_MESSAGES_STORE_NAME = 'conversation_messages'
@@ -93,6 +93,20 @@ function openDatabase() {
           { unique: true }
         )
         messageStore.createIndex('createdAt', 'createdAt', { unique: false })
+        messageStore.createIndex(
+          'conversationId_parentKey',
+          ['conversationId', 'parentKey'],
+          { unique: false }
+        )
+      } else {
+        const messageStore = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+        if (!messageStore.indexNames.contains('conversationId_parentKey')) {
+          messageStore.createIndex(
+            'conversationId_parentKey',
+            ['conversationId', 'parentKey'],
+            { unique: false }
+          )
+        }
       }
 
       if (!db.objectStoreNames.contains(CONVERSATION_SOURCES_STORE_NAME)) {
@@ -102,6 +116,47 @@ function openDatabase() {
         sourceStore.createIndex('sourceKey', 'sourceKey', { unique: true })
         sourceStore.createIndex('normalizedUrl', 'normalizedUrl', { unique: false })
         sourceStore.createIndex('capturedAt', 'capturedAt', { unique: false })
+      }
+
+      // Data migration for messages: chain parentId/parentKey and set activeLeafMessageId (v10 -> v11)
+      if (event.oldVersion < 11 && transaction.objectStoreNames.contains(CONVERSATIONS_STORE_NAME) && transaction.objectStoreNames.contains(CONVERSATION_MESSAGES_STORE_NAME)) {
+        const conversationStore = transaction.objectStore(CONVERSATIONS_STORE_NAME)
+        const messageStore = transaction.objectStore(CONVERSATION_MESSAGES_STORE_NAME)
+
+        conversationStore.openCursor().onsuccess = (e) => {
+          const conversationCursor = e.target.result
+          if (conversationCursor) {
+            const conversation = conversationCursor.value
+            const conversationId = conversation.id
+
+            let previousMessageId = null
+            let lastMessageId = null
+            const range = IDBKeyRange.bound([conversationId, 0], [conversationId, Number.MAX_SAFE_INTEGER])
+
+            messageStore.index('conversationId_sequence').openCursor(range).onsuccess = (ev) => {
+              const msgCursor = ev.target.result
+              if (msgCursor) {
+                const msg = msgCursor.value
+                if (msg.parentId === undefined) {
+                  msg.parentId = previousMessageId
+                }
+                if (msg.parentKey === undefined) {
+                  msg.parentKey = msg.parentId ?? '__root__'
+                }
+                previousMessageId = msg.id
+                lastMessageId = msg.id
+                msgCursor.update(msg)
+                msgCursor.continue()
+              } else {
+                if (conversation.activeLeafMessageId === undefined) {
+                  conversation.activeLeafMessageId = lastMessageId
+                  conversationCursor.update(conversation)
+                }
+                conversationCursor.continue()
+              }
+            }
+          }
+        }
       }
 
       // Data migration: ensure all summaries have a 'tags' array

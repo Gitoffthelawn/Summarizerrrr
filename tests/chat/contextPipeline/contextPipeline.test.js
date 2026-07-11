@@ -116,6 +116,36 @@ describe('Context Pipeline', () => {
     expect(budget.droppedSourceIds).toEqual(['tab-source'])
   })
 
+  it('renders an identical source block regardless of the current question length (cache-stable prefix)', () => {
+    const source = {
+      id: 'active-source',
+      isActive: true,
+      rawContent: 'r'.repeat(2_000),
+      condensedContent: 'c'.repeat(2_000),
+    }
+    const base = {
+      system: 'Persona',
+      skillInvocation: null,
+      history: [],
+      conversationSources: [source],
+      attachmentSources: [],
+      contextWindowTokens: 16_384,
+      requestedOutputTokens: 4_000,
+    }
+
+    const shortTurn = budgetContext({ ...base, currentUserMessage: { content: 'Hi' } })
+    const longTurn = budgetContext({
+      ...base,
+      currentUserMessage: { content: 'Q'.repeat(5_000) },
+    })
+
+    expect(longTurn.conversationSources[0].selectedContent).toBe(
+      shortTurn.conversationSources[0].selectedContent
+    )
+    expect(longTurn.includedSourceIds).toEqual(shortTurn.includedSourceIds)
+    expect(longTurn.conversationSources[0].truncated).toBe(shortTurn.conversationSources[0].truncated)
+  })
+
   it('removes old history as complete user/assistant pairs', () => {
     const history = [1, 2, 3].flatMap((turn) => [
       { sequence: turn * 2 - 1, role: 'user', content: `user-${turn}-${'u'.repeat(80)}` },

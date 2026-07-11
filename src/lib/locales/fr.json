@@ -310,16 +310,16 @@
       },
       "perTabCache": {
         "title": "Onglet dans le panneau latéral",
-        "description": "Conserver un état de résumé séparé pour chaque onglet du navigateur.",
+        "description": "Conserver un état du panneau latéral séparé pour chaque onglet du navigateur.",
         "enabled": "Activé",
         "disabled": "Désactivé",
         "clear_on_navigation": {
           "title": "Effacer lors de la navigation",
-          "description": "Ce qui arrive au résumé en cache lorsque l'URL de la page change.",
-          "keep_summary": "Conserver le résumé",
-          "keep_summary_desc": "Le résumé reste en cache lorsque l'URL change",
+          "description": "Ce qui arrive à l'état du panneau latéral lorsque l'URL de la page change.",
+          "keep_summary": "Conserver l'état",
+          "keep_summary_desc": "L'état du panneau latéral est conservé lorsque l'URL change",
           "auto_clear": "Effacer automatiquement",
-          "auto_clear_desc": "Effacer le résumé quand l'URL change"
+          "auto_clear_desc": "Effacer l'état du panneau latéral quand l'URL change"
         },
         "auto_scroll": {
           "title": "Défiler automatiquement vers l'onglet actif",

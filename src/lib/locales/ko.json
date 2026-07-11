@@ -310,16 +310,16 @@
       },
       "perTabCache": {
         "title": "사이드패널의 탭",
-        "description": "각 브라우저 탭에 대해 별도의 요약 상태를 유지합니다.",
+        "description": "각 브라우저 탭에 대해 별도의 사이드패널 상태를 유지합니다.",
         "enabled": "활성화",
         "disabled": "비활성화",
         "clear_on_navigation": {
           "title": "탐색 시 지우기",
-          "description": "페이지 URL이 변경될 때 캐시된 요약에 어떤 일이 발생하는지.",
-          "keep_summary": "요약 유지",
-          "keep_summary_desc": "URL 변경 시 요약이 캐시에 유지됨",
+          "description": "페이지 URL이 변경될 때 사이드패널 상태를 처리하는 방법입니다.",
+          "keep_summary": "상태 유지",
+          "keep_summary_desc": "URL 변경 시 사이드패널 상태 유지",
           "auto_clear": "자동 지우기",
-          "auto_clear_desc": "URL 변경 시 요약 지우기"
+          "auto_clear_desc": "URL 변경 시 사이드패널 상태 지우기"
         },
         "auto_scroll": {
           "title": "활성 탭으로 자동 스크롤",

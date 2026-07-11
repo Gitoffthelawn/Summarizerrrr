@@ -316,16 +316,16 @@
       },
       "perTabCache": {
         "title": "Tab trên Sidepanel",
-        "description": "Giữ trạng thái tóm tắt riêng cho mỗi tab trình duyệt.",
+        "description": "Giữ trạng thái sidepanel riêng cho mỗi tab trình duyệt.",
         "enabled": "Đang bật",
         "disabled": "Đang tắt",
         "clear_on_navigation": {
           "title": "Xóa khi điều hướng",
-          "description": "Điều gì xảy ra với tóm tắt được lưu khi URL trang thay đổi.",
-          "keep_summary": "Giữ tóm tắt",
-          "keep_summary_desc": "Tóm tắt vẫn được lưu khi URL thay đổi",
+          "description": "Điều gì xảy ra với trạng thái sidepanel đã lưu khi URL trang thay đổi.",
+          "keep_summary": "Giữ trạng thái",
+          "keep_summary_desc": "Trạng thái sidepanel vẫn được lưu khi URL thay đổi",
           "auto_clear": "Tự động xóa",
-          "auto_clear_desc": "Xóa tóm tắt khi URL thay đổi"
+          "auto_clear_desc": "Xóa trạng thái sidepanel khi URL thay đổi"
         },
         "auto_scroll": {
           "title": "Tự động cuộn đến Tab đang hoạt động",

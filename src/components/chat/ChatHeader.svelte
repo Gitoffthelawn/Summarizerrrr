@@ -11,6 +11,10 @@
 
   let { onOpenConversation = null, onShowLegacySummary = null } = $props()
 
+  function openChatSettings() {
+    browser.tabs.create({ url: browser.runtime.getURL('settings.html') + '?tab=chat' })
+  }
+
   let isRenaming = $state(false)
   let draftTitle = $state('')
   let titleInputEl = $state()
@@ -87,5 +91,6 @@
     onArchive={handleArchive}
     {onOpenConversation}
     {onShowLegacySummary}
+    onEditSystemPrompt={openChatSettings}
   />
 </div>

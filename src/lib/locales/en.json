@@ -316,16 +316,16 @@
       },
       "perTabCache": {
         "title": "Tab on Sidepanel",
-        "description": "Keep separate summary state for each browser tab.",
+        "description": "Keep separate sidepanel state for each browser tab.",
         "enabled": "Enabled",
         "disabled": "Disabled",
         "clear_on_navigation": {
           "title": "Clear on Navigation",
-          "description": "What happens to the cached summary when the page URL changes.",
-          "keep_summary": "Keep Summary",
-          "keep_summary_desc": "Summary remains cached when URL changes",
+          "description": "What happens to the cached sidepanel state when the page URL changes.",
+          "keep_summary": "Keep State",
+          "keep_summary_desc": "Sidepanel state remains cached when URL changes",
           "auto_clear": "Auto Clear",
-          "auto_clear_desc": "Clear summary when URL changes"
+          "auto_clear_desc": "Clear sidepanel state when URL changes"
         },
         "auto_scroll": {
           "title": "Auto Scroll to Active Tab",
