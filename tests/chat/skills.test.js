@@ -31,7 +31,26 @@ describe('chat skills', () => {
     selected.instruction = 'A newer instruction.'
 
     expect(oldTurn.instructionSnapshot).not.toBe(selected.instruction)
-    expect(oldTurn.instructionSnapshot).toContain('LEGACY_SYSTEM_INSTRUCTION')
+    expect(oldTurn.instructionSnapshot).toBe(BUILT_IN_SKILLS[0].instruction)
+  })
+
+  it('uses version 2 for rewritten skills and version 1 for Translate', () => {
+    const translate = BUILT_IN_SKILLS.find((s) => s.id === 'translate')
+    const summarize = BUILT_IN_SKILLS.find((s) => s.id === 'summarize')
+    const chapterSummary = BUILT_IN_SKILLS.find((s) => s.id === 'chapter-summary')
+
+    expect(translate.version).toBe(1)
+    expect(summarize.version).toBe(2)
+    expect(chapterSummary.version).toBe(2)
+  })
+
+  it('does not contain legacy template wrappers in any built-in skill', () => {
+    for (const skill of BUILT_IN_SKILLS) {
+      expect(skill.instruction).not.toContain('LEGACY_SYSTEM_INSTRUCTION')
+      expect(skill.instruction).not.toContain('<OUTPUT_FORMAT>')
+      expect(skill.instruction).not.toContain('<EXAMPLE>')
+      expect(skill.instruction).not.toContain('TASK_TEMPLATE')
+    }
   })
 
   it('migrates customized legacy prompt pairs into one-shot instructions once', () => {

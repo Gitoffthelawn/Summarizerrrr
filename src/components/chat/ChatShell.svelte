@@ -39,7 +39,7 @@
 
   <div
     bind:clientHeight={composerBlockHeight}
-    class="fixed bottom-0 left-0 z-30 w-full min-w-[22.5rem] bg-surface-1"
+    class="fixed bottom-0 left-0 z-30 w-full min-w-[22.5rem]"
   >
     <div class="flex flex-col gap-2 px-3">
       <ChatContextWarning warnings={chatState.contextWarnings} />

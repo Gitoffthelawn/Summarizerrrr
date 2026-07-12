@@ -8,6 +8,7 @@ export { budgetContext } from './contextBudgeter.js'
 export { assembleContext } from './contextAssembler.js'
 export { resolveSources } from './sourceResolver.js'
 export {
+  DEFAULT_RESPONSE_BEHAVIOR,
   SOURCE_GUARDRAIL,
   buildThinSystemInstruction,
   escapeSourceValue,
@@ -29,9 +30,9 @@ export async function buildContextPipeline(input, dependencies) {
     captureSource: dependencies.captureSource,
   })
   const capabilities = getProviderCapabilities(input.providerId, input.modelId)
-  const system = buildThinSystemInstruction(
-    input.conversation?.personaSnapshot?.content || input.conversation?.persona || ''
-  )
+  const persona = input.conversation?.personaSnapshot ||
+    (input.conversation?.persona ? { content: input.conversation.persona } : {})
+  const system = buildThinSystemInstruction(persona)
   const budget = budgetContext({
     system,
     currentUserMessage: input.currentUserMessage,

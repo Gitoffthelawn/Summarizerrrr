@@ -111,7 +111,10 @@
   }
 
   function handleInitError(err) {
-    console.warn('[ChatComposer] Fallback to textarea due to editor init error:', err)
+    console.warn(
+      '[ChatComposer] Fallback to textarea due to editor init error:',
+      err,
+    )
     editorError = true
   }
 
@@ -122,7 +125,10 @@
         richTextRef.deleteRange(mentionRange)
         richTextRef.focus()
       } else {
-        chatState.composerText = chatState.composerText.replace(/(?:^|\s)@[^\s@]*$/, (value) => value.startsWith(' ') ? ' ' : '')
+        chatState.composerText = chatState.composerText.replace(
+          /(?:^|\s)@[^\s@]*$/,
+          (value) => (value.startsWith(' ') ? ' ' : ''),
+        )
         textareaEl?.focus()
       }
       composerError = ''
@@ -139,7 +145,7 @@
     } else {
       chatState.composerText = chatState.composerText.replace(
         /(?:^|\s)\/[^\s/]*$/,
-        (value) => value.startsWith(' ') ? ' ' : '',
+        (value) => (value.startsWith(' ') ? ' ' : ''),
       )
       textareaEl?.focus()
     }
@@ -153,64 +159,82 @@
   })
 </script>
 
-<div class="flex w-full flex-col gap-2 border-t border-border bg-surface-1 px-3 pt-2 pb-3">
+<div class="flex w-full flex-col gap-2 px-3 pt-2 pb-3">
   {#if chatState.selectedSkill || chatState.pendingAttachments.length}
     <div class="flex flex-wrap items-center gap-1.5">
       <ChatSkillChip skill={chatState.selectedSkill} onClear={clearSkill} />
       {#each chatState.pendingAttachments as attachment (attachment.tabId)}
-        <ChatSourceChip label={attachment.title || attachment.hostname || 'Attached tab'} onRemove={() => removeTabAttachment(attachment.tabId)} />
+        <ChatSourceChip
+          label={attachment.title || attachment.hostname || 'Attached tab'}
+          onRemove={() => removeTabAttachment(attachment.tabId)}
+        />
       {/each}
     </div>
   {/if}
 
   <div class="relative">
-  <TabMentionMenu bind:this={mentionMenuRef} open={mentionOpen} query={mentionQuery} onSelect={handleTabSelect} onClose={() => (mentionOpen = false)} />
-  <SkillPicker bind:this={skillMenuRef} open={skillOpen} query={skillQuery} {skills} onSelect={handleSkillSelect} onClose={() => (skillOpen = false)} />
-  <div class="relative">
-    {#if !editorError}
-      {#key chatTabsState.activeSessionTabId}
-        <ChatRichTextInput
-          bind:this={richTextRef}
+    <TabMentionMenu
+      bind:this={mentionMenuRef}
+      open={mentionOpen}
+      query={mentionQuery}
+      onSelect={handleTabSelect}
+      onClose={() => (mentionOpen = false)}
+    />
+    <SkillPicker
+      bind:this={skillMenuRef}
+      open={skillOpen}
+      query={skillQuery}
+      {skills}
+      onSelect={handleSkillSelect}
+      onClose={() => (skillOpen = false)}
+    />
+    <div class="relative">
+      {#if !editorError}
+        {#key chatTabsState.activeSessionTabId}
+          <ChatRichTextInput
+            bind:this={richTextRef}
+            value={chatState.composerText}
+            onchange={handleComposerChange}
+            onkeydown={handleRichTextKeyDown}
+            onmentionchange={handleMentionChange}
+            onskillchange={handleSkillChange}
+            oniniterror={handleInitError}
+            onsubmit={handleSend}
+            disabled={chatState.isSending}
+            placeholder="Ask about this page..."
+          />
+        {/key}
+      {:else}
+        <ChatComposerInput
+          bind:this={textareaEl}
           value={chatState.composerText}
-          onchange={handleComposerChange}
-          onkeydown={handleRichTextKeyDown}
-          onmentionchange={handleMentionChange}
-          onskillchange={handleSkillChange}
-          oniniterror={handleInitError}
-          onsubmit={handleSend}
+          oninput={handleComposerInput}
+          onkeydown={handleKeydown}
           disabled={chatState.isSending}
           placeholder="Ask about this page..."
         />
-      {/key}
-    {:else}
-      <ChatComposerInput
-        bind:this={textareaEl}
-        value={chatState.composerText}
-        oninput={handleComposerInput}
-        onkeydown={handleKeydown}
-        disabled={chatState.isSending}
-        placeholder="Ask about this page..."
-      />
-    {/if}
-
-    <button
-      type="button"
-      class="absolute bottom-1.5 right-1.5 z-20 flex size-10 items-center justify-center rounded-full transition-all duration-300 {chatState.isSending
-        ? 'bg-error text-whiteblack hover:bg-error/90'
-        : canSendChat()
-          ? 'dark:bg-white !bg-black !text-white ring-black hover:ring-2 dark:ring-white'
-          : '!scale-75 !bg-muted/30 text-muted cursor-not-allowed'}"
-      disabled={!chatState.isSending && !canSendChat()}
-      aria-label={chatState.isSending ? 'Stop generating' : 'Send message'}
-      onclick={handleSend}
-    >
-      {#if chatState.isSending}
-        <Icon icon="heroicons:stop-solid" width="18" height="18" />
-      {:else}
-        <Icon icon="heroicons:arrow-long-right" width="20" height="20" />
       {/if}
-    </button>
-  </div>
-  {#if composerError}<p class="mt-1 text-xs text-error">{composerError}</p>{/if}
+
+      <button
+        type="button"
+        class="absolute bottom-1.5 right-1.5 z-20 flex size-10 items-center justify-center rounded-full transition-all duration-300 {chatState.isSending
+          ? 'bg-error text-whiteblack hover:bg-error/90'
+          : canSendChat()
+            ? 'dark:bg-white !bg-black !text-white ring-black hover:ring-2 dark:ring-white'
+            : '!scale-75 !bg-muted/30 text-muted cursor-not-allowed'}"
+        disabled={!chatState.isSending && !canSendChat()}
+        aria-label={chatState.isSending ? 'Stop generating' : 'Send message'}
+        onclick={handleSend}
+      >
+        {#if chatState.isSending}
+          <Icon icon="heroicons:stop-solid" width="18" height="18" />
+        {:else}
+          <Icon icon="heroicons:arrow-long-right" width="20" height="20" />
+        {/if}
+      </button>
+    </div>
+    {#if composerError}<p class="mt-1 text-xs text-error">
+        {composerError}
+      </p>{/if}
   </div>
 </div>

@@ -64,7 +64,6 @@ export function createPersonaSnapshot(chatGlobalPersona, fallback = {}) {
     content: String(persona.content || '').trim(),
     language: persona.language || fallback.language || null,
     tone: persona.tone || fallback.tone || null,
-    length: persona.length || fallback.length || null,
     version: Number(persona.version) || 1,
   }
 }

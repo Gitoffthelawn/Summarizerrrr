@@ -126,7 +126,6 @@ const DEFAULT_SETTINGS = {
     content: '',
     language: null,
     tone: null,
-    length: null,
     version: 1,
   },
   chatUserSkills: [],

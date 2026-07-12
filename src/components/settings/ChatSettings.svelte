@@ -4,28 +4,22 @@
   // @ts-nocheck
   import ButtonSet from '../buttons/ButtonSet.svelte'
   import { settings, updateSettings } from '../../stores/settingsStore.svelte.js'
-  import { toneDefinitions } from '@/lib/prompts/modules/toneDefinitions.js'
+  import { CHAT_TONE_ROLES } from '@/lib/chat/chatToneRoles.js'
 
-  // Chat's tone/length are independent from Settings > Summary. Reusing
-  // toneDefinitions here only keeps the wording identical when a tone is
-  // shared by name (e.g. "witty") — the two settings are not kept in sync.
-  // Response language is the exception: chat always follows the Summary
-  // language so users only have to set it in one place.
+  // Chat's tone is independent from Settings > Summary and uses its own
+  // chat-native tone roles (CHAT_TONE_ROLES) rather than the summarize-flow
+  // toneDefinitions. Response language is the exception: chat always follows
+  // the Summary language so users only have to set it in one place.
   const TONE_OPTIONS = [
     { value: '', label: 'none', description: 'No tone instruction.' },
-    ...Object.entries(toneDefinitions).map(([value, def]) => ({
+    ...Object.entries(CHAT_TONE_ROLES).map(([value, def]) => ({
       value,
       label: value,
       description: def.toneDescription,
     })),
   ]
 
-  const LENGTH_OPTIONS = [
-    { value: '', label: 'none', description: 'No length instruction.' },
-    { value: 'short', label: 'short', description: 'Brief replies.' },
-    { value: 'medium', label: 'medium', description: 'Moderately detailed replies.' },
-    { value: 'long', label: 'long', description: 'Thorough, detailed replies.' },
-  ]
+
 
   function currentPersona() {
     return settings.chatGlobalPersona || {}
@@ -36,7 +30,6 @@
       content: currentPersona().content || '',
       language: currentPersona().language || null,
       tone: currentPersona().tone || null,
-      length: currentPersona().length || null,
       version: (currentPersona().version || 1) + 1,
       ...patch,
     }
@@ -60,8 +53,8 @@
 
   <div class="setting-secsion flex flex-col gap-6 px-5">
     <p class="text-text-secondary">
-      Controls the assistant persona used in the chat panel. Tone and reply length
-      are independent from Summary settings; response language always follows
+      Controls the assistant persona used in the chat panel. Tone is
+      independent from Summary settings; response language always follows
       Summary's Language output.
     </p>
 
@@ -76,7 +69,7 @@
         bind:value={contentDraft}
         oninput={handleContentInput}
         rows="4"
-        placeholder="e.g. Always cite the source you're quoting. Prefer bullet points."
+        placeholder="e.g. Distinguish source facts from general knowledge. Prefer bullet points."
         class="w-full resize-none px-3 py-2 text-text-primary bg-muted/5 dark:bg-muted/5 border border-border hover:border-blackwhite/15 focus:border-blackwhite/30 dark:border-blackwhite/10 dark:focus:border-blackwhite/20 focus:outline-none focus:ring-0 transition-colors duration-150"
       ></textarea>
       <p class="text-[0.65rem] text-text-secondary">
@@ -106,22 +99,6 @@
             title={option.label}
             class="setting-btn {(currentPersona().tone || '') === option.value ? 'active' : ''}"
             onclick={() => patchPersona({ tone: option.value || null })}
-            Description={option.description}
-          ></ButtonSet>
-        {/each}
-      </div>
-    </div>
-
-    <!-- Reply length -->
-    <div class="flex flex-col gap-2">
-      <!-- svelte-ignore a11y_label_has_associated_control -->
-      <label class="block text-text-secondary">Reply length</label>
-      <div class="grid grid-cols-4 w-full gap-1">
-        {#each LENGTH_OPTIONS as option (option.value)}
-          <ButtonSet
-            title={option.label}
-            class="setting-btn {(currentPersona().length || '') === option.value ? 'active' : ''}"
-            onclick={() => patchPersona({ length: option.value || null })}
             Description={option.description}
           ></ButtonSet>
         {/each}
