@@ -8,9 +8,6 @@
   let {
     tabs = [],
     activeTabId = null,
-    currentTitle = '',
-    enabled = true,
-    autoScrollBehavior = 'smooth',
     onSelectTab = null,
     onRemoveTab = null,
     onPrevious = null,
@@ -35,12 +32,12 @@
   $effect(() => {
     const tabId = activeTabId
     const tabCount = tabs.length
-    if (!enabled || !tabId || tabCount === 0) return
+    if (!tabId || tabCount === 0) return
     setTimeout(() => scrollToActiveTab(tabId), ANIMATION_DELAY_MS)
   })
 
   function scrollToActiveTab(tabId) {
-    if (autoScrollBehavior === 'off' || !tabListContainer) return
+    if (!tabListContainer) return
     const tabButton = tabListContainer.querySelector(`[data-tab-id="${tabId}"]`)
     if (!tabButton) return
 
@@ -51,7 +48,7 @@
     const maxScroll = tabListContainer.scrollWidth - containerWidth
     const clampedTarget = Math.max(0, Math.min(targetScroll, maxScroll))
 
-    if (autoScrollBehavior === 'smooth' && !isReduceMotionEnabled()) {
+    if (!isReduceMotionEnabled()) {
       targetScrollLeft = clampedTarget
       currentScrollLeft = tabListContainer.scrollLeft
       startLerpAnimation()
@@ -178,25 +175,22 @@
 </script>
 
 <div
-  class="text-text-secondary relative {enabled
-    ? ' bg-background-dark '
-    : 'bg-transparent'} overflow-hidden w-full h-9 flex gap-px items-center"
+  class="text-text-secondary relative bg-background-dark overflow-hidden w-full h-9 flex gap-px items-center"
 >
-  {#if enabled}
     <div
       class="flex fixed gap-1.5 z-40 left-0 top-0 h-9 px-1.5 justify-center items-center"
     >
       <button
         onclick={() => onPrevious?.()}
         class="size-5 flex justify-center items-center relative z-20 bg-surface-1 hover:bg-surface-2 rounded-full transition-colors hover:text-text-primary shrink-0"
-        title={$t('settings.tools.perTabCache.nav.previous_tab')}
+        title={$t('tab_navigation.previous_tab')}
       >
         <Icon icon="carbon:caret-left" width="14" height="14" />
       </button>
       <button
         onclick={() => onNext?.()}
         class="size-5 flex justify-center items-center relative z-20 bg-surface-1 hover:bg-surface-2 rounded-full transition-colors hover:text-text-primary shrink-0"
-        title={$t('settings.tools.perTabCache.nav.next_tab')}
+        title={$t('tab_navigation.next_tab')}
       >
         <Icon icon="carbon:caret-right" width="14" height="14" />
       </button>
@@ -252,7 +246,7 @@
             <button
               class="close-btn absolute z-30 right-0.5 top-1/2 -translate-y-3.25 bg-surface-2 p-0.5 rounded-full text-text-secondary hover:text-text-primary opacity-0 transition-all duration-200"
               onclick={(event) => removeTab(event, tab)}
-              title={$t('settings.tools.perTabCache.nav.remove_tab')}
+              title={$t('tab_navigation.remove_tab')}
             >
               <Icon icon="heroicons:x-mark-16-solid" width="14" height="14" />
             </button>
@@ -266,15 +260,8 @@
         </div>
       {/each}
     </div>
-  {:else}
-    <div class="w-full text-center text-[0.75rem] px-2 text-text-secondary">
-      <div class="line-clamp-1 !text-center w-full">{currentTitle}</div>
-    </div>
-  {/if}
   <div
-    class="w-full right-0 left-0 absolute bottom-0 h-px dark:bg-border bg-surface-2/50 {enabled
-      ? ''
-      : 'hidden'}"
+    class="w-full right-0 left-0 absolute bottom-0 h-px dark:bg-border bg-surface-2/50"
   ></div>
 </div>
 

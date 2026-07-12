@@ -1,14 +1,21 @@
 <script>
   // @ts-nocheck
+  import { onMount, tick } from 'svelte'
   import ChatMessage from './ChatMessage.svelte'
   import Icon from '@iconify/svelte'
   import { loadEarlierMessages, chatState } from '@/stores/chatStore.svelte.js'
 
   let { messages = [], streamingMessage = null, onRetry = null, conversation = null, onFollowUp = null } = $props()
 
-  let scrollContainer = $state()
   let isNearBottom = $state(true)
   let isLoadingEarlier = $state(false)
+
+  // Scroll is owned by the document/body (not a local overflow container), so
+  // we read/write the document scroller and listen on `window`.
+  function getScroller() {
+    if (typeof document === 'undefined') return null
+    return document.scrollingElement || document.documentElement
+  }
 
   function retryTargetFor(index) {
     const message = allMessages[index]
@@ -24,36 +31,49 @@
   )
 
   function handleScroll() {
-    if (!scrollContainer) return
-    const distanceFromBottom =
-      scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight
+    const el = getScroller()
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
     isNearBottom = distanceFromBottom < 120
   }
 
   async function handleLoadEarlier() {
     if (isLoadingEarlier) return
     isLoadingEarlier = true
+    const el = getScroller()
+    const prevHeight = el ? el.scrollHeight : 0
+    const prevTop = el ? el.scrollTop : 0
     try {
       await loadEarlierMessages()
+      await tick()
+      // Preserve viewport position after prepending earlier messages.
+      if (el) el.scrollTop = prevTop + (el.scrollHeight - prevHeight)
     } finally {
       isLoadingEarlier = false
     }
   }
 
+  onMount(() => {
+    handleScroll() // initialize isNearBottom
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  })
+
   $effect(() => {
     // Track dependency so this effect reruns whenever content grows.
     const _length = allMessages.length
     const _lastContent = allMessages.at(-1)?.content
-    if (scrollContainer && isNearBottom) {
-      scrollContainer.scrollTop = scrollContainer.scrollHeight
+    if (isNearBottom) {
+      const el = getScroller()
+      // Assign scrollTop directly (instant) so streaming doesn't animate
+      // against `html { scroll-behavior: smooth }`.
+      if (el) el.scrollTop = el.scrollHeight
     }
   })
 </script>
 
 <div
-  bind:this={scrollContainer}
-  onscroll={handleScroll}
-  class="flex h-full w-full flex-col gap-5 overflow-y-auto px-4 py-4"
+  class="flex w-full flex-col gap-5 px-4 py-4"
 >
   {#if chatState.hasEarlierMessages}
     <div class="flex justify-center py-2">

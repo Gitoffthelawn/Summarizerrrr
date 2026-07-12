@@ -7,7 +7,6 @@
  * Streaming continues writing to original tab's state (no data loss).
  */
 
-import { settings } from '@/stores/settingsStore.svelte.js'
 import {
   createDefaultSummaryState,
   createDefaultDeepDiveState
@@ -54,17 +53,9 @@ export function getCurrentTabId() {
 /**
  * Sets current tab ID and returns the state for that tab
  * @param {number} tabId - New current tab ID
- * @returns {Object|null} Tab state or null if per-tab cache is disabled
+ * @returns {Object|null} Tab state, or null when no tab ID is provided
  */
 export function setCurrentTabId(tabId) {
-  // Check if per-tab cache is enabled
-  const perTabCacheEnabled = settings.tools?.perTabCache?.enabled ?? true
-  
-  if (!perTabCacheEnabled) {
-    console.log('[tabCacheService] Per-tab cache disabled')
-    return null
-  }
-  
   const previousTabId = currentTabId
   
   // Note: Scroll is saved by handleTabSwitch() in messageHandler.js
@@ -351,25 +342,10 @@ export function checkAndResetTabState(tabId, newUrl) {
   // URL changed
   console.log(`[tabCacheService] URL changed checking reset for tab ${tabId}: ${currentUrl} -> ${newUrl}`)
   
-  // Check setting
-  const autoReset = settings.tools?.perTabCache?.autoResetOnNavigation ?? false
-  
-  if (autoReset) {
-    console.log(`[tabCacheService] Auto-resetting state for tab ${tabId}`)
-    
-    // Reset states
-    tabState.summaryState = createDefaultSummaryState()
-    tabState.deepDiveState = createDefaultDeepDiveState()
-    tabState.scrollY = 0
-    
-    // Update URL
-    tabState.currentUrl = newUrl
-    
-    return true
-  }
-  
-  // If auto-reset disabled, just update URL tracking (or maybe keep old one? updating seems safer to avoid permanent mismatch)
-  // Updating URL allows next navigation to be detected correctly
+  console.log(`[tabCacheService] Resetting summary state for navigated tab ${tabId}`)
+  tabState.summaryState = createDefaultSummaryState()
+  tabState.deepDiveState = createDefaultDeepDiveState()
+  tabState.scrollY = 0
   tabState.currentUrl = newUrl
-  return false
+  return true
 }

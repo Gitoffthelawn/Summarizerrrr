@@ -1,28 +1,30 @@
 import { BUILT_IN_SKILLS } from './builtInSkills.js'
 import { generateUUID } from '@/lib/utils/utils.js'
 
-export function normalizeSkillCommand(value) {
-  return String(value || '')
-    .trim()
-    .replace(/^\/+/, '')
-    .toLocaleLowerCase()
-    .replace(/\s+/g, '-')
-}
-
-function copySkill(skill) {
-  return { ...skill, command: normalizeSkillCommand(skill.command) }
+function toStoredSkill(skill = {}) {
+  return {
+    id: skill.id,
+    name: String(skill.name || '').trim(),
+    instruction: String(skill.instruction || '').trim(),
+    pinned: Boolean(skill.pinned),
+  }
 }
 
 export function getAvailableSkills(userSkills = []) {
   const overrides = new Map(
     (Array.isArray(userSkills) ? userSkills : [])
       .filter((skill) => skill?.id)
-      .map((skill) => [skill.id, copySkill(skill)]),
+      .map((skill) => [skill.id, toStoredSkill(skill)]),
   )
-  const builtIns = BUILT_IN_SKILLS.map((skill) => overrides.get(skill.id) || copySkill(skill))
-  const custom = [...overrides.values()].filter((skill) => !BUILT_IN_SKILLS.some((builtIn) => builtIn.id === skill.id))
+  const builtIns = BUILT_IN_SKILLS.map((skill) => ({
+    ...skill,
+    ...overrides.get(skill.id),
+    builtIn: true,
+  }))
+  const custom = [...overrides.values()]
+    .filter((skill) => !BUILT_IN_SKILLS.some((builtIn) => builtIn.id === skill.id))
+    .map((skill) => ({ ...skill, version: 1, builtIn: false }))
   return [...builtIns, ...custom]
-    .filter((skill) => skill.enabled !== false)
     .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || a.name.localeCompare(b.name))
 }
 
@@ -33,51 +35,27 @@ export function toSkillInvocation(skill) {
     skillVersion: skill.version || 1,
     instructionSnapshot: String(skill.instruction || ''),
     name: skill.name,
-    command: normalizeSkillCommand(skill.command),
   }
 }
 
-/** Parse a slash command only when it is the first token of the composer. */
-export function parseLeadingSkillCommand(text, skills) {
-  const input = String(text || '')
-  const match = input.match(/^\/([^\s/]+)(?=\s|$)/)
-  if (!match) return { skill: null, text: input }
-  const command = normalizeSkillCommand(match[1])
-  const skill = (skills || []).find((candidate) => normalizeSkillCommand(candidate.command) === command)
-  if (!skill) return { skill: null, text: input }
-  return { skill, text: input.slice(match[0].length).replace(/^\s+/, '') }
-}
-
-export function validateSkillDraft(draft, skills = []) {
+export function validateSkillDraft(draft) {
   const name = String(draft?.name || '').trim()
   const instruction = String(draft?.instruction || '').trim()
-  const command = normalizeSkillCommand(draft?.command)
   const errors = []
   if (!name) errors.push('A skill name is required.')
   if (!instruction) errors.push('An instruction is required.')
-  if (!command) errors.push('A slash command is required.')
-
-  const duplicate = skills.find(
-    (skill) =>
-      skill.id !== draft?.id && normalizeSkillCommand(skill.command) === command,
-  )
-  if (duplicate) errors.push(`/${command} is already used by ${duplicate.name}.`)
-  return { valid: errors.length === 0, errors, value: { ...draft, name, instruction, command } }
+  return {
+    valid: errors.length === 0,
+    errors,
+    value: { ...draft, name, instruction, pinned: Boolean(draft?.pinned) },
+  }
 }
 
 export function createUserSkill(draft = {}) {
-  return {
+  return toStoredSkill({
+    ...draft,
     id: draft.id || `user-${generateUUID()}`,
-    version: Number(draft.version) || 1,
-    name: String(draft.name || '').trim(),
-    description: String(draft.description || '').trim(),
-    command: normalizeSkillCommand(draft.command),
-    instruction: String(draft.instruction || '').trim(),
-    starterPrompt: String(draft.starterPrompt || ''),
-    pinned: Boolean(draft.pinned),
-    builtIn: false,
-    enabled: draft.enabled !== false,
-  }
+  })
 }
 
 export function createPersonaSnapshot(chatGlobalPersona, fallback = {}) {
@@ -121,14 +99,11 @@ export function createSkillService({
     },
 
     async saveSkill(draft, currentSettings = getSettings()) {
-      const allSkills = this.listSkills(currentSettings)
-      const validation = validateSkillDraft(draft, allSkills)
+      const validation = validateSkillDraft(draft)
       if (!validation.valid) return validation
 
-      const builtIn = BUILT_IN_SKILLS.some((skill) => skill.id === draft.id)
-      const savedSkill = builtIn
-        ? { ...validation.value, builtIn: true, enabled: validation.value.enabled !== false }
-        : createUserSkill(validation.value)
+      const builtIn = BUILT_IN_SKILLS.find((skill) => skill.id === draft.id)
+      const savedSkill = createUserSkill(validation.value)
       const existing = Array.isArray(currentSettings?.chatUserSkills)
         ? currentSettings.chatUserSkills
         : []
@@ -137,7 +112,13 @@ export function createSkillService({
       if (index >= 0) next[index] = savedSkill
       else next.push(savedSkill)
       await this.saveUserSkills(next)
-      return { valid: true, errors: [], value: savedSkill }
+      return {
+        valid: true,
+        errors: [],
+        value: builtIn
+          ? { ...builtIn, ...savedSkill, builtIn: true }
+          : { ...savedSkill, version: 1, builtIn: false },
+      }
     },
 
     async deleteSkill(id, currentSettings = getSettings()) {
@@ -156,10 +137,6 @@ export function createSkillService({
 
     select(skill) {
       return toSkillInvocation(skill)
-    },
-
-    parseComposerCommand(text, currentSettings = getSettings()) {
-      return parseLeadingSkillCommand(text, this.listSkills(currentSettings))
     },
   }
 }

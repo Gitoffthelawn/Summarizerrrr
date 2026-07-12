@@ -72,7 +72,9 @@
 
   // Chat harness (Phase 5): chat is the default side-panel surface
   import ChatShell from '@/components/chat/ChatShell.svelte'
+  import ChatHeader from '@/components/chat/ChatHeader.svelte'
   import ChatTabTitleBar from '@/components/chat/ChatTabTitleBar.svelte'
+  import { openConversation } from '@/stores/chatStore.svelte.js'
 
   // Track if settings are loaded
   let settingsLoaded = $state(false)
@@ -502,32 +504,21 @@
 {#if showLegacySummary}
 <div
   class="main-container flex min-w-[22.5rem] bg-surface-1 w-full flex-col"
-  data-per-tab={settings.tools?.perTabCache?.enabled ? 'true' : undefined}
+  data-per-tab="true"
 >
   <div
-    class="grid min-h-screen {settings.tools?.perTabCache?.enabled
-      ? 'grid-rows-[36px_32px_10px_192px_10px_1fr]'
-      : 'grid-rows-[32px_10px_192px_10px_1fr]'}"
+    class="grid min-h-screen grid-rows-[36px_32px_10px_192px_10px_1fr]"
   >
     <div
-      class="flex justify-center items-center w-screen h-full {settings.tools
-        ?.perTabCache?.enabled
-        ? 'sticky top-0 z-40 bg-surface-1'
-        : ''}"
+      class="flex sticky top-0 z-40 justify-center items-center w-screen h-full bg-surface-1"
     >
       <TabTitleBar {cachedTabsCount} />
       <div
-        class=" absolute w-screen h-3 -bottom-3 bg-linear-to-b from-surface-1 to-surface-1/0 {settings
-          .tools?.perTabCache?.enabled
-          ? ''
-          : 'hidden'}"
+        class="absolute w-screen h-3 -bottom-3 bg-linear-to-b from-surface-1 to-surface-1/0"
       ></div>
     </div>
     <div
-      class="w-screen text-center text-[0.7rem] flex justify-center items-center px-2 text-text-secondary {settings
-        .tools?.perTabCache?.enabled
-        ? ''
-        : 'hidden'}"
+      class="w-screen text-center text-[0.7rem] flex justify-center items-center px-2 text-text-secondary"
     >
       <div class="line-clamp-1 !text-center w-full">
         {$tabTitle}
@@ -684,45 +675,43 @@
 {/if}
 {:else}
 <div
-  class="flex h-screen min-w-[22.5rem] w-full flex-col bg-surface-1"
-  data-per-tab={settings.tools?.perTabCache?.enabled ? 'true' : undefined}
+  class="flex min-h-screen min-w-[22.5rem] w-full flex-col bg-surface-1"
+  data-per-tab="true"
 >
-  <div
-    class="relative flex h-9 shrink-0 items-center justify-center bg-surface-1"
-  >
-    <ChatTabTitleBar />
+  <div class="sticky top-0 z-40 bg-surface-1">
     <div
-      class="absolute -bottom-3 h-3 w-screen bg-linear-to-b from-surface-1 to-surface-1/0 {settings
-        .tools?.perTabCache?.enabled
-        ? ''
-        : 'hidden'}"
-    ></div>
-  </div>
-  {#if settings.tools?.perTabCache?.enabled}
-    <div
-      class="flex h-8 w-screen shrink-0 items-center justify-center px-2 text-center text-[0.7rem] text-text-secondary"
+      class="relative flex h-9 shrink-0 items-center justify-center bg-surface-1"
     >
-      <div class="line-clamp-1 w-full !text-center">{$tabTitle}</div>
+      <ChatTabTitleBar />
+      <div
+        class="absolute -bottom-3 h-3 w-screen bg-linear-to-b from-surface-1 to-surface-1/0"
+      ></div>
     </div>
-  {/if}
-  <div class="flex items-center justify-between px-2 py-1 border-b border-border">
-    <BitsTooltip.Provider>
-      <Tooltip content={$t('archive.open_archive')} side="right" align="start">
-        {#snippet children({ builder })}
-          <button
-            onclick={() => {
-              browser.tabs.create({ url: 'archive.html' })
-            }}
-            class="p-1 setting-animation transition-colors hover:bg-surface-2 rounded-full hover:text-text-primary text-text-secondary"
-            {...builder}
-          >
-            <Icon icon="solar:history-linear" width="22" height="22" />
-          </button>
-        {/snippet}
-      </Tooltip>
-    </BitsTooltip.Provider>
-    <div class="size-6 text-text-secondary">
-      <SettingButton />
+    <ChatHeader
+      onOpenConversation={openConversation}
+      onShowLegacySummary={() => (showLegacySummary = true)}
+    />
+    <div
+      class="flex items-center justify-between px-2 py-1 border-b border-border"
+    >
+      <BitsTooltip.Provider>
+        <Tooltip content={$t('archive.open_archive')} side="right" align="start">
+          {#snippet children({ builder })}
+            <button
+              onclick={() => {
+                browser.tabs.create({ url: 'archive.html' })
+              }}
+              class="p-1 setting-animation transition-colors hover:bg-surface-2 rounded-full hover:text-text-primary text-text-secondary"
+              {...builder}
+            >
+              <Icon icon="solar:history-linear" width="22" height="22" />
+            </button>
+          {/snippet}
+        </Tooltip>
+      </BitsTooltip.Provider>
+      <div class="size-6 text-text-secondary">
+        <SettingButton />
+      </div>
     </div>
   </div>
 
@@ -731,8 +720,8 @@
       <ApiKeySetupPrompt />
     </div>
   {:else}
-    <div class="min-h-0 flex-1">
-      <ChatShell onShowLegacySummary={() => (showLegacySummary = true)} />
+    <div class="flex flex-1 flex-col">
+      <ChatShell />
     </div>
   {/if}
 </div>

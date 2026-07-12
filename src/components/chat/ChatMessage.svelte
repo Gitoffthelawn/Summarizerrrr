@@ -2,6 +2,8 @@
   // @ts-nocheck
   import Icon from '@iconify/svelte'
   import StreamingMarkdownV2 from '@/components/displays/ui/StreamingMarkdownV2.svelte'
+  import ChatUserMarkdown from './ChatUserMarkdown.svelte'
+  import ChatMessageEditor from './ChatMessageEditor.svelte'
   import { settings } from '@/stores/settingsStore.svelte.js'
   import {
     switchBranch,
@@ -115,35 +117,21 @@
 >
   {#if isUser}
     {#if isEditing}
-      <div class="flex w-full max-w-[85%] flex-col gap-2">
-        <textarea
-          class="w-full resize-none rounded-2xl border border-border bg-surface-2 px-3.5 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
-          rows="3"
-          bind:value={editText}
-          onkeydown={handleEditKeydown}
-        ></textarea>
-        <div class="flex justify-end gap-2">
-          <button
-            type="button"
-            class="rounded-md px-3 py-1 text-xs text-text-secondary hover:bg-blackwhite-5 transition-colors"
-            onclick={cancelEditing}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="rounded-md bg-accent px-3 py-1 text-xs text-white hover:bg-accent/80 transition-colors"
-            onclick={submitEdit}
-          >
-            Save & Submit
-          </button>
-        </div>
+      <div class="w-full max-w-[85%]">
+        <ChatMessageEditor
+          value={editText}
+          onsave={(text) => {
+            editChatMessage(message.id, text)
+            isEditing = false
+          }}
+          oncancel={cancelEditing}
+        />
       </div>
     {:else}
       <div
-        class="max-w-[85%] rounded-2xl rounded-br-md border border-border bg-surface-2 px-3.5 py-2 text-sm whitespace-pre-wrap wrap-anywhere text-text-primary"
+        class="max-w-[85%] rounded-2xl rounded-br-md border border-border bg-surface-2 px-3.5 py-2 text-sm wrap-anywhere text-text-primary"
       >
-        {message.content}
+        <ChatUserMarkdown source={message.content} />
       </div>
     {/if}
     {#if !isStreaming && !isEditing}

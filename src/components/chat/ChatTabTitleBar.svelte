@@ -1,8 +1,6 @@
 <script>
   // @ts-nocheck
   import { onMount } from 'svelte'
-  import { tabTitle } from '@/stores/tabTitleStore.svelte.js'
-  import { settings } from '@/stores/settingsStore.svelte.js'
   import {
     chatState,
     chatTabsState,
@@ -10,7 +8,6 @@
     handleChatBrowserTabRemoved,
     handleChatTabNavigation,
     removeChatTabSession,
-    setChatTabFeatureEnabled,
     syncChatForActiveTab,
   } from '@/stores/chatStore.svelte.js'
   import {
@@ -23,10 +20,6 @@
   let loadSequence = 0
   let lastBrowserTabs = []
 
-  let enabled = $derived(settings.tools?.perTabCache?.enabled ?? true)
-  let autoScrollBehavior = $derived(
-    settings.tools?.perTabCache?.autoScrollBehavior ?? 'smooth',
-  )
   let activeTabId = $derived(chatTabsState.activeBrowserTabId)
 
   $effect(() => {
@@ -40,17 +33,8 @@
       chatState.isSending,
       chatState.streamingMessage,
       chatState.error,
-      enabled,
     ]
     recomputeTabs()
-  })
-
-  $effect(() => {
-    const featureEnabled = enabled
-    const browserTabId = chatTabsState.activeBrowserTabId
-    setChatTabFeatureEnabled(featureEnabled, browserTabId).catch((error) =>
-      console.error('[ChatTabTitleBar] Failed to change tab mode:', error),
-    )
   })
 
   onMount(() => {
@@ -151,9 +135,6 @@
 <SidepanelTabBar
   {tabs}
   {activeTabId}
-  currentTitle={$tabTitle}
-  {enabled}
-  {autoScrollBehavior}
   onSelectTab={selectTab}
   onRemoveTab={removeTab}
   onPrevious={() => navigateByOffset(-1)}

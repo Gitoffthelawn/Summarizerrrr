@@ -8,7 +8,6 @@ import {
   updateActiveYouTubeTab,
 } from '../stores/summaryStore.svelte.js'
 import { deepDiveState, resetDeepDive } from '../stores/deepDiveStore.svelte.js'
-import { settings } from '../stores/settingsStore.svelte.js'
 import { setTabTitle } from '../stores/tabTitleStore.svelte.js'
 import {
   getOrCreateTabState,
@@ -72,13 +71,6 @@ function syncToTabState(tabState) {
  * @param {number} newTabId - The new tab ID being switched to
  */
 function handleTabSwitch(newTabId) {
-  const perTabCacheEnabled = settings.tools?.perTabCache?.enabled ?? true
-  
-  if (!perTabCacheEnabled) {
-    console.log('[messageHandler.js] Per-tab cache disabled')
-    return
-  }
-  
   const previousTabId = getCurrentTabId()
   
   // Same tab, no need to switch

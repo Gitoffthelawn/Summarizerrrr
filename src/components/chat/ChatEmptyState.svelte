@@ -31,7 +31,7 @@
 </script>
 
 <div
-  class="flex h-full w-full flex-col items-center justify-center gap-7 px-6"
+  class="flex min-h-[60vh] w-full flex-1 flex-col items-center justify-center gap-7 px-6"
 >
   <div class="flex flex-col items-center gap-3 text-center">
     <div

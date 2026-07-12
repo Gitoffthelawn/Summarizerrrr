@@ -93,13 +93,9 @@
  * @property {string} id
  * @property {number} version
  * @property {string} name
- * @property {string} description
- * @property {string} command
  * @property {string} instruction
- * @property {string} starterPrompt
  * @property {boolean} pinned
  * @property {boolean} builtIn
- * @property {boolean} enabled
  */
 
 export {}

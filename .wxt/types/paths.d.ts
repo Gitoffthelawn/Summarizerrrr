@@ -45,6 +45,7 @@ declare module "wxt/browser" {
     | "/pearl.webp"
     | "/popop.html"
     | "/prompt.html"
+    | "/semantic-extractor.js"
     | "/settings.html"
     | "/sidepanel.html"
     | "/wxt.svg"

@@ -12,8 +12,8 @@ import { MAX_TAB_ATTACHMENTS, tabMentionService } from '@/services/chat/tabMenti
 import {
   abortChatTabSession,
   chatSessionHasActivity,
-  shouldResetChatOnNavigation,
   toChatTabRuntimeDescriptor,
+  updateChatSessionUrl,
 } from '@/services/chat/chatTabPolicy.js'
 
 /**
@@ -57,7 +57,6 @@ export const chatTabsState = $state({
 
 const tabSessions = new Map() // tabId -> plain session snapshot
 let activeTabId = null
-let perTabFeatureEnabled = settings.tools?.perTabCache?.enabled ?? true
 
 function markChatTabsChanged() {
   chatTabsState.activeSessionTabId = activeTabId
@@ -124,24 +123,12 @@ export function canSendChat() {
   return Boolean(chatState.composerText.trim() || chatState.selectedSkill) && !chatState.isSending
 }
 
-export function selectChatSkill(skill, { seedStarterPrompt = true } = {}) {
+export function selectChatSkill(skill) {
   const invocation = skillService.select(skill)
   if (!invocation) return null
   chatState.selectedSkill = invocation
-  if (seedStarterPrompt && !chatState.composerText.trim() && skill.starterPrompt) {
-    chatState.composerText = skill.starterPrompt
-  }
   markChatTabsChanged()
   return invocation
-}
-
-export function consumeLeadingSkillCommand(text = chatState.composerText) {
-  const parsed = skillService.parseComposerCommand(text, settings)
-  if (!parsed.skill) return false
-  chatState.selectedSkill = skillService.select(parsed.skill)
-  chatState.composerText = parsed.text
-  markChatTabsChanged()
-  return true
 }
 
 export async function addTabAttachment(tab) {
@@ -177,7 +164,7 @@ async function reloadActivePath(tabId, result) {
 
 export async function startConversationForActiveTab() {
   const { conversation, tab } = await chatService.startConversationForActiveTab({ settings })
-  if (activeTabId == null || !perTabFeatureEnabled) activeTabId = tab.id
+  if (activeTabId == null) activeTabId = tab.id
   chatTabsState.activeBrowserTabId = tab.id
   writeSession(tab.id, {
     activeConversationId: conversation.id,
@@ -233,7 +220,7 @@ export function closeConversation() {
   resetView()
 }
 
-export function removeChatTabSession(tabId, { preserveActiveView = false } = {}) {
+export function removeChatTabSession(tabId, { detachActiveTab = false } = {}) {
   if (tabId == null) return false
 
   const isActiveSession = tabId === activeTabId
@@ -242,57 +229,25 @@ export function removeChatTabSession(tabId, { preserveActiveView = false } = {})
   tabSessions.delete(tabId)
   chatSessionService.clearConversationId(tabId)
 
-  if (isActiveSession && !preserveActiveView) resetView()
-  else if (isActiveSession) activeTabId = null
+  if (isActiveSession) {
+    resetView()
+    if (detachActiveTab) activeTabId = null
+  }
 
   markChatTabsChanged()
   return Boolean(session)
 }
 
 export function handleChatBrowserTabRemoved(tabId) {
-  const preserveActiveView = !perTabFeatureEnabled && tabId === activeTabId
-  return removeChatTabSession(tabId, { preserveActiveView })
+  return removeChatTabSession(tabId, { detachActiveTab: true })
 }
 
 export function handleChatTabNavigation(tabId, nextUrl) {
-  if (!perTabFeatureEnabled || tabId == null || !nextUrl) return false
-
+  if (tabId == null || !nextUrl) return false
   const session = tabId === activeTabId ? chatState : getSession(tabId)
-  const previousUrl = session.currentUrl
-  const shouldReset = shouldResetChatOnNavigation({
-    enabled: perTabFeatureEnabled,
-    autoResetOnNavigation:
-      settings.tools?.perTabCache?.autoResetOnNavigation ?? false,
-    previousUrl,
-    nextUrl,
-  })
-
-  if (shouldReset) {
-    removeChatTabSession(tabId)
-    const nextSession = tabId === activeTabId ? chatState : getSession(tabId)
-    nextSession.currentUrl = nextUrl
-    markChatTabsChanged()
-    return true
-  }
-
-  session.currentUrl = nextUrl
+  updateChatSessionUrl(session, nextUrl)
   markChatTabsChanged()
   return false
-}
-
-export async function setChatTabFeatureEnabled(enabled, browserTabId = null) {
-  const nextEnabled = Boolean(enabled)
-  if (browserTabId != null) chatTabsState.activeBrowserTabId = browserTabId
-  if (nextEnabled === perTabFeatureEnabled) return chatState.conversation
-
-  if (activeTabId != null) stashViewInto(getSession(activeTabId))
-  perTabFeatureEnabled = nextEnabled
-  markChatTabsChanged()
-
-  if (nextEnabled && browserTabId != null) {
-    return syncChatForActiveTab(browserTabId)
-  }
-  return chatState.conversation
 }
 
 /**
@@ -302,13 +257,6 @@ export async function setChatTabFeatureEnabled(enabled, browserTabId = null) {
 export async function syncChatForActiveTab(tabId, { url = null } = {}) {
   if (tabId == null) return chatState.conversation
   chatTabsState.activeBrowserTabId = tabId
-
-  if (!perTabFeatureEnabled) {
-    if (activeTabId == null) activeTabId = tabId
-    if (url && !chatState.currentUrl) chatState.currentUrl = url
-    markChatTabsChanged()
-    return chatState.conversation
-  }
 
   if (tabId === activeTabId) {
     if (url) handleChatTabNavigation(tabId, url)

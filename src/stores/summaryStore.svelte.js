@@ -220,7 +220,6 @@ export function updateActiveCourseTab(tabName) {
  */
 export async function fetchAndSummarize() {
   const targetTabId = getCurrentTabId()
-  const perTabCacheEnabled = settings.tools?.perTabCache?.enabled ?? true
   let logData = null // Capture data for history logging
 
   /**
@@ -229,16 +228,15 @@ export async function fetchAndSummarize() {
    */
   const updateState = (updates) => {
     // 1. Update the tab-specific state in cache
-    if (perTabCacheEnabled && targetTabId) {
+    if (targetTabId) {
       const tabState = getOrCreateTabState(targetTabId)
       if (tabState) {
         Object.assign(tabState.summaryState, updates)
       }
     }
 
-    // 2. Update the global state IF we are looking at the target tab
-    //    OR if per-tab cache is disabled
-    if (!perTabCacheEnabled || targetTabId === getCurrentTabId()) {
+    // 2. Update the global state only while looking at the target tab.
+    if (!targetTabId || targetTabId === getCurrentTabId()) {
       Object.assign(summaryState, updates)
     }
 
@@ -251,7 +249,7 @@ export async function fetchAndSummarize() {
    */
   const resetLocalState = () => {
     // Abort any ongoing streaming operation if it matches global state
-    if ((!perTabCacheEnabled || targetTabId === getCurrentTabId()) && summaryState.abortController) {
+    if ((!targetTabId || targetTabId === getCurrentTabId()) && summaryState.abortController) {
       summaryState.abortController.abort()
       summaryState.abortController = null
     }
@@ -292,8 +290,8 @@ export async function fetchAndSummarize() {
     updateState(resetValues)
     
     // Reset DeepDive (global only if active)
-    if (!perTabCacheEnabled || targetTabId === getCurrentTabId()) {
-      resetDeepDive()
+    if (!targetTabId || targetTabId === getCurrentTabId()) {
+      resetDeepDive(targetTabId)
     }
   }
 
@@ -316,12 +314,9 @@ export async function fetchAndSummarize() {
     selectedProviderId = 'gemini' // Force Gemini in basic mode
   }
 
-  // Check if we should use streaming mode
-  // FORCE DISABLE STREAMING if per-tab cache is enabled
-  const shouldUseStreaming =
-    !perTabCacheEnabled &&
-    userSettings.enableStreaming &&
-    providerSupportsStreaming(selectedProviderId)
+  // The legacy summary path remains blocking so background-tab results can be
+  // committed atomically to their owning per-tab state.
+  const shouldUseStreaming = false
 
   if (shouldUseStreaming) {
     try {

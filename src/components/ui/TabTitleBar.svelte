@@ -2,7 +2,6 @@
   // @ts-nocheck
   import { onMount } from 'svelte'
   import { tabTitle } from '@/stores/tabTitleStore.svelte.js'
-  import { settings } from '@/stores/settingsStore.svelte.js'
   import {
     summaryState,
     globalStoreUpdate,
@@ -21,11 +20,6 @@
   let cachedTabs = $state([])
   let currentTabId = $state(null)
 
-  let enabled = $derived(settings.tools?.perTabCache?.enabled ?? true)
-  let autoScrollBehavior = $derived(
-    settings.tools?.perTabCache?.autoScrollBehavior ?? 'smooth',
-  )
-
   $effect(() => {
     const _trigger = [
       summaryState.summary,
@@ -39,7 +33,7 @@
       summaryState.courseSummaryError,
       globalStoreUpdate.version,
     ]
-    if (enabled) loadTabsInfo()
+    loadTabsInfo()
   })
 
   onMount(() => {
@@ -123,9 +117,6 @@
 <SidepanelTabBar
   tabs={displayTabs}
   activeTabId={currentTabId}
-  currentTitle={$tabTitle}
-  {enabled}
-  {autoScrollBehavior}
   onSelectTab={selectTab}
   onRemoveTab={removeTab}
   onPrevious={() => navigateByOffset(-1)}

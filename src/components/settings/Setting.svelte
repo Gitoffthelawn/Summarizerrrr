@@ -5,7 +5,6 @@
   import Icon, { loadIcons } from '@iconify/svelte'
   import { t } from 'svelte-i18n'
   import DeepDiveToolSettings from './tools/DeepDiveToolSettings.svelte'
-  import PerTabCacheToolSettings from './tools/PerTabCacheToolSettings.svelte'
   import {
     loadSettings,
     settings,
@@ -61,12 +60,6 @@
       label: 'Deep Dive',
       iconSolid: 'heroicons:light-bulb-solid',
       iconOutline: 'heroicons:light-bulb',
-    },
-    {
-      id: 'per-tab-cache',
-      label: 'Tab on Sidepanel',
-      iconSolid: 'heroicons:document-duplicate-solid',
-      iconOutline: 'heroicons:document-duplicate',
     },
     {
       id: 'data-sync',
@@ -264,8 +257,6 @@
         <FABSettings />
       {:else if activeTab === 'deep-dive'}
         <div class="px-5"><DeepDiveToolSettings /></div>
-      {:else if activeTab === 'per-tab-cache'}
-        <div class="px-5"><PerTabCacheToolSettings /></div>
       {:else if activeTab === 'data-sync'}
         <DataSyncSettings />
       {:else if activeTab === 'whats-new'}

@@ -17,6 +17,11 @@ export function chatSessionHasActivity(session) {
 export function toChatTabRuntimeDescriptor(id, session) {
   return {
     id,
+    hasConversation: Boolean(
+      session?.conversation ||
+        session?.activeConversationId ||
+        session?.messages?.length,
+    ),
     isLoading: Boolean(session?.isSending || session?.streamingMessage),
     hasError: Boolean(session?.error),
     removable: chatSessionHasActivity(session),
@@ -29,23 +34,47 @@ export function abortChatTabSession(session) {
   return true
 }
 
+export function updateChatSessionUrl(session, nextUrl) {
+  if (!session || !nextUrl) return false
+  session.currentUrl = nextUrl
+  return true
+}
+
 export function mergeChatTabsWithBrowserTabs({
   runtimeTabs,
   browserTabs,
   activeBrowserTabId,
 }) {
-  const runtimeById = new Map(runtimeTabs.map((tab) => [tab.id, tab]))
+  const browserById = new Map(browserTabs.map((tab) => [tab.id, tab]))
+  const browserIndexById = new Map(
+    browserTabs.map((tab, index) => [tab.id, index]),
+  )
+  const establishedTabs = runtimeTabs
+    .filter((tab) => tab.hasConversation && browserById.has(tab.id))
+    .sort(
+      (left, right) =>
+        browserIndexById.get(left.id) - browserIndexById.get(right.id),
+    )
   const result = []
-
-  for (const browserTab of browserTabs) {
-    const runtime = runtimeById.get(browserTab.id)
-    if (!runtime && browserTab.id !== activeBrowserTabId) continue
+  for (const runtime of establishedTabs) {
+    const browserTab = browserById.get(runtime.id)
     result.push({
-      id: browserTab.id,
+      id: runtime.id,
       title: browserTab.title || 'Untitled',
-      isLoading: runtime?.isLoading ?? false,
-      hasError: runtime?.hasError ?? false,
-      removable: runtime?.removable ?? false,
+      isLoading: runtime.isLoading,
+      hasError: runtime.hasError,
+      removable: runtime.removable,
+    })
+  }
+
+  if (result.length === 0 && browserById.has(activeBrowserTabId)) {
+    const activeBrowserTab = browserById.get(activeBrowserTabId)
+    result.push({
+      id: activeBrowserTabId,
+      title: activeBrowserTab.title || 'Untitled',
+      isLoading: false,
+      hasError: false,
+      removable: false,
     })
   }
 
@@ -58,19 +87,4 @@ export function getAdjacentChatTabId(tabs, activeTabId, offset) {
   const baseIndex = currentIndex < 0 ? 0 : currentIndex
   const nextIndex = (baseIndex + offset + tabs.length) % tabs.length
   return tabs[nextIndex]?.id ?? null
-}
-
-export function shouldResetChatOnNavigation({
-  enabled,
-  autoResetOnNavigation,
-  previousUrl,
-  nextUrl,
-}) {
-  return Boolean(
-    enabled &&
-      autoResetOnNavigation &&
-      previousUrl &&
-      nextUrl &&
-      previousUrl !== nextUrl,
-  )
 }

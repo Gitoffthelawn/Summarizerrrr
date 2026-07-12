@@ -46,18 +46,15 @@ export function invalidateConversationDeepDive(conversationId) {
  */
 function updateDeepDive(updates, targetTabId = null) {
   const tabId = targetTabId || getCurrentTabId()
-  const perTabCacheEnabled = settings.tools?.perTabCache?.enabled ?? true
 
-  // 1. Update tab cache
-  if (perTabCacheEnabled && tabId) {
+  if (tabId) {
     const tabState = getOrCreateTabState(tabId)
     if (tabState) {
       Object.assign(tabState.deepDiveState, updates)
     }
   }
 
-  // 2. Update global state if active
-  if (!perTabCacheEnabled || tabId === getCurrentTabId()) {
+  if (!tabId || tabId === getCurrentTabId()) {
     Object.assign(deepDiveState, updates)
   }
 }
@@ -228,11 +225,9 @@ export function addToQuestionHistory(questions, targetTabId = null) {
   // We need to fetch the history from the correct state source.
   
   const tabId = targetTabId || getCurrentTabId();
-  const perTabCacheEnabled = settings.tools?.perTabCache?.enabled ?? true;
-  
   let currentHistory = [];
   
-  if (perTabCacheEnabled && tabId) {
+  if (tabId) {
       const tabState = getOrCreateTabState(tabId);
       // If we are targeting a background tab, read from cache
       if (tabState) {

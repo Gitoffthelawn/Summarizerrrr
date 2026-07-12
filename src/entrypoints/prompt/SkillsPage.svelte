@@ -24,9 +24,6 @@
     !!baseline &&
       !!draft &&
       (draft.name !== baseline.name ||
-        draft.command !== baseline.command ||
-        draft.description !== baseline.description ||
-        draft.starterPrompt !== baseline.starterPrompt ||
         draft.instruction !== baseline.instruction ||
         draft.pinned !== baseline.pinned),
   )
@@ -75,10 +72,7 @@
     selectedId = null
     const blank = createUserSkill({
       name: '',
-      command: '',
-      description: '',
       instruction: '',
-      starterPrompt: '',
     })
     draft = { ...blank }
     baseline = { ...blank }
@@ -175,58 +169,13 @@
         </p>
       {/each}
 
-      <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-        <div class="flex flex-col pt-6 gap-2 relative">
-          <label
-            for="skill-name"
-            class="text-text-secondary bg-blackwhite/5 rounded-t-lg top-0 px-2 pt-1 pb-5 absolute w-fit"
-            >Name</label
-          >
-          <input id="skill-name" class={fieldClass} bind:value={draft.name} />
-        </div>
-        <div class="flex flex-col pt-6 gap-2 relative">
-          <label
-            for="skill-command"
-            class="text-text-secondary bg-blackwhite/5 rounded-t-lg top-0 px-2 pt-1 pb-5 absolute w-fit"
-            >Slash command</label
-          >
-          <div class="text-text-secondary absolute top-0 right-0">/{draft.command || '…'}</div>
-          <input
-            id="skill-command"
-            class={fieldClass}
-            bind:value={draft.command}
-            placeholder="summarize"
-          />
-        </div>
-      </div>
-
       <div class="flex flex-col pt-6 gap-2 relative">
         <label
-          for="skill-description"
+          for="skill-name"
           class="text-text-secondary bg-blackwhite/5 rounded-t-lg top-0 px-2 pt-1 pb-5 absolute w-fit"
-          >Description</label
+          >Name</label
         >
-        <input
-          id="skill-description"
-          class={fieldClass}
-          bind:value={draft.description}
-        />
-      </div>
-
-      <div class="flex flex-col pt-6 gap-2 relative">
-        <label
-          for="skill-starter"
-          class="text-text-secondary bg-blackwhite/5 rounded-t-lg top-0 px-2 pt-1 pb-5 absolute w-fit"
-          >Starter prompt</label
-        >
-        <div class="text-text-secondary absolute top-0 right-0">
-          Seeds the composer when picked
-        </div>
-        <input
-          id="skill-starter"
-          class={fieldClass}
-          bind:value={draft.starterPrompt}
-        />
+        <input id="skill-name" class={fieldClass} bind:value={draft.name} />
       </div>
 
       <div class="flex flex-col h-full pt-6 gap-2 min-h-48 relative">

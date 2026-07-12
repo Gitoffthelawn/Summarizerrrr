@@ -1,7 +1,7 @@
 <script>
   // @ts-nocheck
-  import Icon from '@iconify/svelte'
   import ConversationMenu from './ConversationMenu.svelte'
+  import { tabTitle } from '@/stores/tabTitleStore.svelte.js'
   import {
     chatState,
     renameConversation,
@@ -54,43 +54,32 @@
 </script>
 
 <div
-  class="flex w-full items-center justify-between gap-2 border-b border-border px-3 py-2"
+  class="relative flex h-8 w-full shrink-0 items-center justify-center px-2"
 >
-  <div class="flex min-w-0 flex-1 items-center gap-2">
-    <Icon
-      icon="octicon:sparkle-fill-16"
-      width="15"
-      height="15"
-      class="shrink-0 text-primary"
+  {#if isRenaming}
+    <input
+      bind:this={titleInputEl}
+      bind:value={draftTitle}
+      onkeydown={handleTitleKeydown}
+      onblur={commitRename}
+      class="w-full max-w-[70%] truncate bg-transparent text-center text-[0.7rem] text-text-primary outline-none border-b border-primary/40"
+      aria-label="Conversation title"
     />
-    {#if isRenaming}
-      <input
-        bind:this={titleInputEl}
-        bind:value={draftTitle}
-        onkeydown={handleTitleKeydown}
-        onblur={commitRename}
-        class="w-full truncate bg-transparent text-sm font-medium text-text-primary outline-none border-b border-primary/40"
-        aria-label="Conversation title"
-      />
-    {:else}
-      <button
-        type="button"
-        class="truncate text-left text-sm font-medium text-text-primary hover:text-primary"
-        onclick={startRename}
-        title={chatState.conversation?.title || 'New chat'}
-      >
-        {chatState.conversation?.title || 'New chat'}
-      </button>
-    {/if}
-  </div>
+  {:else}
+    <div class="line-clamp-1 w-full text-center text-[0.7rem] text-text-secondary">
+      {$tabTitle}
+    </div>
+  {/if}
 
-  <ConversationMenu
-    activeConversationId={chatState.activeConversationId}
-    onNewChat={handleNewChat}
-    onRename={startRename}
-    onArchive={handleArchive}
-    {onOpenConversation}
-    {onShowLegacySummary}
-    onEditSystemPrompt={openChatSettings}
-  />
+  <div class="absolute right-0.5 top-1/2 -translate-y-1/2">
+    <ConversationMenu
+      activeConversationId={chatState.activeConversationId}
+      onNewChat={handleNewChat}
+      onRename={startRename}
+      onArchive={handleArchive}
+      {onOpenConversation}
+      {onShowLegacySummary}
+      onEditSystemPrompt={openChatSettings}
+    />
+  </div>
 </div>

@@ -307,38 +307,13 @@
         "previous_questions": "Vorherige Fragen",
         "next_questions": "Nächste Fragen",
         "ask_own_question_in_chat": "Stellen Sie Ihre eigene Frage im Chat"
-      },
-      "perTabCache": {
-        "title": "Tab im Seitenbereich",
-        "description": "Separaten Seitenleistenstatus für jeden Browser-Tab beibehalten.",
-        "enabled": "Aktiviert",
-        "disabled": "Deaktiviert",
-        "clear_on_navigation": {
-          "title": "Bei Navigation löschen",
-          "description": "Was mit dem gecachten Seitenleistenstatus passiert, wenn sich die Seiten-URL ändert.",
-          "keep_summary": "Status behalten",
-          "keep_summary_desc": "Seitenleistenstatus bleibt bei URL-Änderung erhalten",
-          "auto_clear": "Automatisch löschen",
-          "auto_clear_desc": "Seitenleistenstatus bei URL-Änderung löschen"
-        },
-        "auto_scroll": {
-          "title": "Automatisch zum aktiven Tab scrollen",
-          "description": "Automatisch scrollen, um den aktiven Tab-Button sichtbar zu machen.",
-          "off": "Aus",
-          "off_desc": "Nicht automatisch scrollen",
-          "jump": "Springen",
-          "jump_desc": "Sofortiges Scrollen",
-          "smooth": "Sanft",
-          "smooth_desc": "Animiertes Scrollen"
-        },
-        "nav": {
-          "previous_tab": "Vorheriger Tab",
-          "next_tab": "Nächster Tab",
-          "remove_tab": "Entfernen (Mittelklick)"
-        },
-        "blocking_note": "Hinweis: Der Antwortmodus wird für beste Leistung auf Blocking gesetzt."
       }
     }
+  },
+  "tab_navigation": {
+    "previous_tab": "Vorheriger Tab",
+    "next_tab": "Nächster Tab",
+    "remove_tab": "Entfernen (Mittelklick)"
   },
   "prompts": {
     "title": "Prompts",

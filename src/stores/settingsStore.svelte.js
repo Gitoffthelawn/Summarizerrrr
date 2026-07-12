@@ -150,11 +150,6 @@ const DEFAULT_SETTINGS = {
     cloudSync: {
       enabled: true, // Default enabled for backward compatibility
     },
-    perTabCache: {
-      enabled: true, // Keep separate summary state for each tab
-      autoResetOnNavigation: true, // Reset cache when navigating to new URL in same tab
-      autoScrollBehavior: 'smooth', // 'off' | 'jump' | 'smooth'
-    },
   },
 
   // Metadata
@@ -405,12 +400,16 @@ export async function loadSettings() {
           })
         }
 
+        // Tab behavior is now fixed by surface: Summary resets on navigation,
+        // while Chat keeps its per-tab conversation. Drop the legacy toggle.
+        delete cleanStoredSettings.tools.perTabCache
+
         // ✅ MIGRATION: Upgrade Deep Dive model to gemma-4-26b-a4b-it
         migrateDeepDiveModel(cleanStoredSettings)
 
-        // Phase 6A keeps legacy prompt settings intact while exposing enabled
-        // or customized pairs as chat skills. The migration version makes the
-        // operation idempotent across every settings initialization.
+        // Keep legacy prompt settings intact while exposing customized pairs
+        // as compact chat skills. The migration also removes deprecated skill
+        // fields and is idempotent across every settings initialization.
         const { migrateLegacyPromptsToSkills } = await import(
           '@/lib/chat/skills/skillMigration.js'
         )

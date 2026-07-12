@@ -6,13 +6,14 @@
   import SkillPicker from './SkillPicker.svelte'
   import TabMentionMenu from './TabMentionMenu.svelte'
   import ChatComposerInput from './ChatComposerInput.svelte'
+  import ChatRichTextInput from './ChatRichTextInput.svelte'
   import {
     chatState,
+    chatTabsState,
     canSendChat,
     sendChatMessage,
     stopGeneration,
     selectChatSkill,
-    consumeLeadingSkillCommand,
     addTabAttachment,
     removeTabAttachment,
   } from '@/stores/chatStore.svelte.js'
@@ -21,10 +22,19 @@
 
   let { autofocus = false } = $props()
 
-  let textareaEl = $state()
+  let richTextRef = $state(null)
+  let textareaEl = $state(null)
+  let mentionMenuRef = $state(null)
+  let skillMenuRef = $state(null)
+  let editorError = $state(false)
+
   let skills = $state([])
   let mentionOpen = $state(false)
   let mentionQuery = $state('')
+  let mentionRange = $state(null)
+  let skillOpen = $state(false)
+  let skillQuery = $state('')
+  let skillRange = $state(null)
   let composerError = $state('')
 
   $effect(() => {
@@ -33,14 +43,30 @@
   })
 
   export function focus() {
-    textareaEl?.focus()
+    if (!editorError && richTextRef) {
+      richTextRef.focus()
+    } else {
+      textareaEl?.focus()
+    }
   }
 
   function handleKeydown(event) {
+    if (skillOpen && skillMenuRef?.handleKeyDown(event)) return
+    if (mentionOpen && mentionMenuRef?.handleKeyDown(event)) return
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       handleSend()
     }
+  }
+
+  function handleRichTextKeyDown(event) {
+    if (skillOpen && skillMenuRef) {
+      return skillMenuRef.handleKeyDown(event)
+    }
+    if (mentionOpen && mentionMenuRef) {
+      return mentionMenuRef.handleKeyDown(event)
+    }
+    return false
   }
 
   function handleSend() {
@@ -56,30 +82,74 @@
     chatState.selectedSkill = null
   }
 
+  function handleComposerChange(markdown) {
+    chatState.composerText = markdown
+  }
+
   function handleComposerInput(event) {
     chatState.composerText = event.currentTarget.value
-    consumeLeadingSkillCommand(chatState.composerText)
     const match = chatState.composerText.match(/(?:^|\s)@([^\s@]*)$/)
     mentionOpen = Boolean(match)
     mentionQuery = match?.[1] || ''
+    const skillMatch = chatState.composerText.match(/(?:^|\s)\/([^\s/]*)$/)
+    skillOpen = Boolean(skillMatch)
+    skillQuery = skillMatch?.[1] || ''
+    if (mentionOpen) skillOpen = false
+    if (skillOpen) mentionOpen = false
+  }
+
+  function handleMentionChange({ open, query, range }) {
+    mentionOpen = open
+    mentionQuery = query
+    mentionRange = range
+  }
+
+  function handleSkillChange({ open, query, range }) {
+    skillOpen = open
+    skillQuery = query
+    skillRange = range
+  }
+
+  function handleInitError(err) {
+    console.warn('[ChatComposer] Fallback to textarea due to editor init error:', err)
+    editorError = true
   }
 
   async function handleTabSelect(tab) {
     try {
       await addTabAttachment(tab)
-      chatState.composerText = chatState.composerText.replace(/(?:^|\s)@[^\s@]*$/, (value) => value.startsWith(' ') ? ' ' : '')
+      if (!editorError && richTextRef) {
+        richTextRef.deleteRange(mentionRange)
+        richTextRef.focus()
+      } else {
+        chatState.composerText = chatState.composerText.replace(/(?:^|\s)@[^\s@]*$/, (value) => value.startsWith(' ') ? ' ' : '')
+        textareaEl?.focus()
+      }
       composerError = ''
-      textareaEl?.focus()
-    } catch (error) { composerError = error.message }
+    } catch (error) {
+      composerError = error.message
+    }
   }
 
   function handleSkillSelect(skill) {
     selectChatSkill(skill)
-    textareaEl?.focus()
+    if (!editorError && richTextRef) {
+      richTextRef.deleteRange(skillRange)
+      richTextRef.focus()
+    } else {
+      chatState.composerText = chatState.composerText.replace(
+        /(?:^|\s)\/[^\s/]*$/,
+        (value) => value.startsWith(' ') ? ' ' : '',
+      )
+      textareaEl?.focus()
+    }
   }
 
   $effect(() => {
-    if (autofocus) textareaEl?.focus()
+    if (autofocus) {
+      if (!editorError && richTextRef) richTextRef.focus()
+      else textareaEl?.focus()
+    }
   })
 </script>
 
@@ -94,20 +164,34 @@
   {/if}
 
   <div class="relative">
-  <TabMentionMenu open={mentionOpen} query={mentionQuery} onSelect={handleTabSelect} onClose={() => (mentionOpen = false)} />
+  <TabMentionMenu bind:this={mentionMenuRef} open={mentionOpen} query={mentionQuery} onSelect={handleTabSelect} onClose={() => (mentionOpen = false)} />
+  <SkillPicker bind:this={skillMenuRef} open={skillOpen} query={skillQuery} {skills} onSelect={handleSkillSelect} onClose={() => (skillOpen = false)} />
   <div class="relative">
-    <ChatComposerInput
-      bind:this={textareaEl}
-      value={chatState.composerText}
-      oninput={handleComposerInput}
-      onkeydown={handleKeydown}
-      disabled={chatState.isSending}
-      placeholder="Ask about this page..."
-    />
-
-    <div class="absolute bottom-1.5 left-1.5 z-20">
-      <SkillPicker {skills} onSelect={handleSkillSelect} />
-    </div>
+    {#if !editorError}
+      {#key chatTabsState.activeSessionTabId}
+        <ChatRichTextInput
+          bind:this={richTextRef}
+          value={chatState.composerText}
+          onchange={handleComposerChange}
+          onkeydown={handleRichTextKeyDown}
+          onmentionchange={handleMentionChange}
+          onskillchange={handleSkillChange}
+          oniniterror={handleInitError}
+          onsubmit={handleSend}
+          disabled={chatState.isSending}
+          placeholder="Ask about this page..."
+        />
+      {/key}
+    {:else}
+      <ChatComposerInput
+        bind:this={textareaEl}
+        value={chatState.composerText}
+        oninput={handleComposerInput}
+        onkeydown={handleKeydown}
+        disabled={chatState.isSending}
+        placeholder="Ask about this page..."
+      />
+    {/if}
 
     <button
       type="button"

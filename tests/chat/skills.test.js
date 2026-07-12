@@ -4,7 +4,6 @@ import {
   createPersonaSnapshot,
   createSkillService,
   getAvailableSkills,
-  parseLeadingSkillCommand,
   toSkillInvocation,
 } from '@/lib/chat/skills/skillService.js'
 import {
@@ -14,28 +13,16 @@ import {
 import { buildContextPipeline } from '@/lib/chat/contextPipeline/index.js'
 
 describe('chat skills', () => {
-  it('includes skill equivalents for every existing action button', () => {
-    const commands = new Set(BUILT_IN_SKILLS.map((skill) => skill.command))
-    expect([...commands]).toEqual(
-      expect.arrayContaining(['analyze', 'explain', 'debate', 'comments', 'chapters', 'concepts']),
-    )
-  })
-
-  it('parses a known leading slash command and leaves unknown commands untouched', () => {
+  it('exposes built-in skills without deprecated command or prompt metadata', () => {
     const skills = getAvailableSkills([])
 
-    expect(parseLeadingSkillCommand('/summarize Explain the article', skills)).toMatchObject({
-      skill: { id: 'summarize' },
-      text: 'Explain the article',
-    })
-    expect(parseLeadingSkillCommand('Please /summarize this', skills)).toEqual({
-      skill: null,
-      text: 'Please /summarize this',
-    })
-    expect(parseLeadingSkillCommand('/not-a-skill leave this alone', skills)).toEqual({
-      skill: null,
-      text: '/not-a-skill leave this alone',
-    })
+    expect(skills.map((skill) => skill.id)).toEqual(
+      expect.arrayContaining(['analyze', 'explain', 'debate', 'comment-analysis', 'chapter-summary', 'course-concepts']),
+    )
+    expect(skills[0]).not.toHaveProperty('command')
+    expect(skills[0]).not.toHaveProperty('description')
+    expect(skills[0]).not.toHaveProperty('starterPrompt')
+    expect(skills[0]).not.toHaveProperty('enabled')
   })
 
   it('keeps an old turn snapshot stable when the source skill is later edited', () => {
@@ -47,7 +34,7 @@ describe('chat skills', () => {
     expect(oldTurn.instructionSnapshot).toContain('LEGACY_SYSTEM_INSTRUCTION')
   })
 
-  it('migrates enabled and customized legacy prompt pairs once without overwriting them', () => {
+  it('migrates customized legacy prompt pairs into one-shot instructions once', () => {
     const original = {
       youtubePromptSelection: true,
       youtubeCustomSystemInstructionContent: 'Use a careful YouTube voice.',
@@ -67,11 +54,48 @@ describe('chat skills', () => {
     ])
     expect(first.settings.chatUserSkills[0]).toMatchObject({
       instruction: expect.stringContaining('Use a careful YouTube voice.'),
-      starterPrompt: 'Summarize __CONTENT__ in five bullets.',
+    })
+    expect(first.settings.chatUserSkills[0].instruction).toContain('Summarize __CONTENT__ in five bullets.')
+    expect(first.settings.chatUserSkills[0]).toEqual({
+      id: 'migrated-youtube-summary',
+      name: 'YouTube Summary (legacy custom prompt)',
+      instruction: expect.any(String),
+      pinned: false,
     })
     expect(first.settings.youtubeCustomPromptContent).toBe(original.youtubeCustomPromptContent)
     expect(second.migrated).toBe(false)
     expect(second.settings.chatUserSkills).toHaveLength(2)
+  })
+
+  it('compacts previously stored skills while preserving pin state', () => {
+    const original = {
+      chatSkillMigrationVersion: 1,
+      chatUserSkills: [{
+        id: 'user-study',
+        version: 4,
+        name: ' Study notes ',
+        description: 'Old description',
+        command: 'study',
+        instruction: ' Create notes. ',
+        starterPrompt: 'Start studying.',
+        pinned: true,
+        builtIn: false,
+        enabled: false,
+        migratedFrom: 'study',
+      }],
+    }
+
+    const first = migrateLegacyPromptsToSkills(original)
+    const second = migrateLegacyPromptsToSkills(first.settings)
+
+    expect(first.settings.chatUserSkills).toEqual([{
+      id: 'user-study',
+      name: 'Study notes',
+      instruction: 'Create notes.',
+      pinned: true,
+    }])
+    expect(second.migrated).toBe(false)
+    expect(second.settings).toBe(first.settings)
   })
 
   it('keeps the conversation persona in the higher-precedence system channel', async () => {
@@ -104,7 +128,7 @@ describe('chat skills', () => {
     expect(result.messages.at(-1).content).toContain('Answer only in French.')
   })
 
-  it('persists user skills, rejects duplicate commands, and resets built-in overrides', async () => {
+  it('persists compact user skills, allows duplicate names, and resets built-in overrides', async () => {
     const state = { chatUserSkills: [] }
     const service = createSkillService({
       getSettings: () => state,
@@ -114,16 +138,18 @@ describe('chat skills', () => {
     const created = await service.saveSkill({
       id: 'user-study',
       name: 'Study notes',
-      command: '/study',
-      description: 'Create notes',
       instruction: 'Create concise study notes.',
-      starterPrompt: 'Make study notes.',
+      pinned: true,
     }, state)
     const duplicate = await service.saveSkill({
       id: 'user-other',
-      name: 'Other',
-      command: 'study',
+      name: 'Study notes',
       instruction: 'Different instruction.',
+    }, state)
+    const invalid = await service.saveSkill({
+      id: 'user-invalid',
+      name: '   ',
+      instruction: '',
     }, state)
     const override = await service.saveSkill({
       ...BUILT_IN_SKILLS[0],
@@ -131,8 +157,18 @@ describe('chat skills', () => {
     }, state)
 
     expect(created.valid).toBe(true)
-    expect(service.listSkills(state).find((skill) => skill.id === 'user-study')).toMatchObject({ command: 'study' })
-    expect(duplicate).toMatchObject({ valid: false, errors: [expect.stringContaining('/study')] })
+    expect(state.chatUserSkills.find((skill) => skill.id === 'user-study')).toEqual({
+      id: 'user-study',
+      name: 'Study notes',
+      instruction: 'Create concise study notes.',
+      pinned: true,
+    })
+    expect(duplicate.valid).toBe(true)
+    expect(invalid).toEqual({
+      valid: false,
+      errors: ['A skill name is required.', 'An instruction is required.'],
+      value: expect.any(Object),
+    })
     expect(override.valid).toBe(true)
     expect(service.listSkills(state).find((skill) => skill.id === 'summarize').instruction).toBe('Use a custom summary format.')
 

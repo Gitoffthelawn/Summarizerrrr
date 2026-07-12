@@ -72,12 +72,31 @@ async function sendMessageWithRetry(
 }
 
 /**
- * Lấy nội dung trang web bằng Accessibility Tree script.
- * Cách này sạch hơn và cấu trúc tốt hơn innerText.
+ * Lấy nội dung trang web bằng semantic extraction. Defuddle (cùng engine với
+ * Obsidian Web Clipper) là nguồn chính; Accessibility Tree và DOM đầy đủ chỉ
+ * là fallback để không làm mất nội dung trên các trang cấu trúc bất thường.
  * @param {number} tabId
  * @returns {Promise<string>}
  */
-async function getAccessibilityTreeWebpageContent(tabId) {
+async function getSemanticWebpageContent(tabId) {
+  try {
+    await browser.scripting.executeScript({
+      target: { tabId },
+      files: ['semantic-extractor.js'],
+    })
+    const semanticResults = await browser.scripting.executeScript({
+      target: { tabId },
+      func: () => globalThis.__SUMMARIZERRRR_EXTRACT_SEMANTIC_CONTENT__?.(),
+    })
+    const semanticText = semanticResults[0]?.result?.content || ''
+    if (semanticText.length >= 50) return semanticText
+    console.warn(
+      '[contentService] Defuddle returned insufficient content; trying lightweight semantic fallback'
+    )
+  } catch (error) {
+    console.warn('[contentService] Defuddle extraction failed:', error)
+  }
+
   try {
     // Inject accessibility tree script
     // File này nằm trong public/, WXT sẽ copy nó vào root của extension output
@@ -86,33 +105,38 @@ async function getAccessibilityTreeWebpageContent(tabId) {
       files: ['accessibility-tree.js'],
     })
 
-    // Execute and get content
+    // Keep the lightweight extractor as a dependency-free fallback.
     const results = await browser.scripting.executeScript({
       target: { tabId },
-      func: () => window.__getPageContent(),
+      func: () =>
+        typeof window.__getPageContent === 'function'
+          ? window.__getPageContent()
+          : '',
     })
 
-    const text = results[0]?.result || ''
-    if (text && text.length >= 50) {
-      return text
-    }
+    const accessibilityText = results[0]?.result || ''
+    if (accessibilityText.length >= 50) return accessibilityText
 
-    // Fallback nếu accessibility tree không lấy được gì (hiếm khi xảy ra)
     console.warn(
-      '[contentService] Accessibility Tree returned insufficient content, falling back to innerText'
+      '[contentService] Semantic extractors returned insufficient content; falling back to full DOM text'
     )
     const fallbackResult = await browser.scripting.executeScript({
       target: { tabId },
-      func: () => document.body?.innerText?.trim() || '',
+      func: () =>
+        document.body?.innerText?.trim() ||
+        document.body?.textContent?.trim() ||
+        '',
     })
-
-    return fallbackResult[0]?.result || ''
+    return fallbackResult[0]?.result || accessibilityText
   } catch (error) {
-    console.error('[contentService] Accessibility Tree extraction error:', error)
-    // Fallback cuối cùng nếu injection fail
+    console.error('[contentService] Semantic fallback extraction error:', error)
+    // Fallback cuối cùng nếu cả hai script injection đều fail.
     const fallbackResult = await browser.scripting.executeScript({
       target: { tabId },
-      func: () => document.body?.innerText?.trim() || '',
+      func: () =>
+        document.body?.innerText?.trim() ||
+        document.body?.textContent?.trim() ||
+        '',
     })
     return fallbackResult[0]?.result || ''
   }
@@ -130,12 +154,13 @@ export async function getPageContent(
   contentType = 'webpageText',
   preferredLang = 'en'
 ) {
+  const options = typeof contentType === 'object'
+    ? contentType
+    : { contentType, preferredLang }
+  const requestedContentType = options.contentType || 'webpageText'
+  const requestedLanguage = options.preferredLang || 'en'
+
   try {
-    const options = typeof contentType === 'object'
-      ? contentType
-      : { contentType, preferredLang }
-    const requestedContentType = options.contentType || 'webpageText'
-    const requestedLanguage = options.preferredLang || 'en'
     // Explicit target capture must never silently fall back to the active tab.
     const tab = options.tabId
       ? await browser.tabs.get(options.tabId)
@@ -155,7 +180,7 @@ export async function getPageContent(
     )
 
     if (requestedContentType === 'webpageText') {
-      const pageText = await getAccessibilityTreeWebpageContent(tab.id)
+      const pageText = await getSemanticWebpageContent(tab.id)
 
       if (pageText && pageText.length >= 50) {
         return { type: actualPageType, content: pageText }
