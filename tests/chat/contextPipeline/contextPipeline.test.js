@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   buildContextPipeline,
   budgetContext,
@@ -7,6 +7,8 @@ import {
   getProviderCapabilities,
   registerModelCapability,
   clearDiscoveredCapabilities,
+  setOpenrouterCatalog,
+  clearOpenrouterCatalog,
 } from '@/lib/chat/providerCapabilities.js'
 import { injectionLikeSource, longYoutubeTranscript, normalArticle } from './fixtures.js'
 
@@ -227,5 +229,56 @@ describe('Context Pipeline', () => {
     expect(budget.droppedSourceIds).toEqual(['dropped-tab-source'])
     expect(budget.conversationSources[0].truncated).toBe(true)
     expect(budget.warnings.join('\n')).toContain('Truncated active source large-active-source')
+  })
+})
+
+describe('OpenRouter catalog resolver layer', () => {
+  const catalog = {
+    'openai:gpt-4o': 128000,
+    'deepseek:deepseek-chat': 64000,
+    'google:gemini-2-5-flash': 1000000,
+    'anthropic:claude-4-sonnet': 200000,
+  }
+
+  afterEach(() => {
+    clearOpenrouterCatalog()
+    clearDiscoveredCapabilities()
+  })
+
+  it('resolves a cloud model via the catalog when no static entry matches', () => {
+    setOpenrouterCatalog(catalog)
+    // 'chatgpt' maps to vendor 'openai'; 'gpt-4o' normalizes to 'gpt-4o'.
+    expect(getProviderCapabilities('chatgpt', 'gpt-4o')).toMatchObject({
+      contextWindowTokens: 128000,
+      source: 'openrouter-catalog',
+    })
+  })
+
+  it('curated static-table entry wins over the catalog', () => {
+    setOpenrouterCatalog(catalog)
+    // 'deepseek-chat' matches the static pattern /^deepseek-/ → 64K, source: 'known-model'.
+    expect(getProviderCapabilities('deepseek', 'deepseek-chat')).toMatchObject({
+      contextWindowTokens: 64_000,
+      source: 'known-model',
+    })
+  })
+
+  it('excludes local providers from the catalog (ollama never uses it)', () => {
+    setOpenrouterCatalog(catalog)
+    // 'ollama' is not in PROVIDER_VENDOR_MAP, so the catalog is never consulted.
+    const result = getProviderCapabilities('ollama', 'gpt-4o')
+    expect(result.source).not.toBe('openrouter-catalog')
+    expect(result).toMatchObject({
+      contextWindowTokens: 128_000,
+      source: 'default-fallback',
+    })
+  })
+
+  it('falls through to default when the catalog has no entry for the model', () => {
+    setOpenrouterCatalog(catalog)
+    expect(getProviderCapabilities('chatgpt', 'totally-unknown-model')).toMatchObject({
+      contextWindowTokens: 128_000,
+      source: 'default-fallback',
+    })
   })
 })

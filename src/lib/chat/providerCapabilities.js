@@ -4,9 +4,12 @@
  *   1. Runtime registry — real limits discovered from a provider's models API.
  *   2. Static table below — providers whose API does NOT expose context length
  *      (OpenAI, DeepSeek, Anthropic) or well-known families.
- *   3. Default fallback — most modern chat models are ≥128K, so an unknown
+ *   3. OpenRouter catalog cross-reference — vendor-scoped, fail-safe lookup
+ *      from the OpenRouter /models catalog (cloud providers only).
+ *   4. Default fallback — most modern chat models are ≥128K, so an unknown
  *      model is assumed to be 128K rather than the old ultra-conservative 16K.
  */
+import { lookupCatalogWindow } from './openrouterCatalog.js'
 export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000
 export const DEFAULT_OUTPUT_TOKENS = 4_000
 
@@ -41,6 +44,29 @@ export function registerModelCapability(providerId, modelId, caps = {}) {
 /** Test/reset hook: forget all discovered capabilities. */
 export function clearDiscoveredCapabilities() {
   discoveredCapabilities.clear()
+}
+
+/**
+ * OpenRouter catalog cross-reference — a plain object keyed
+ * `"<vendor>:<normalizedSlug>"` → `contextWindowTokens`, or `null` when not
+ * hydrated yet.  Set by Phase 3's hydration / fetch helpers.
+ * @type {Record<string, number> | null}
+ */
+let openrouterCatalog = null
+
+/**
+ * Store the OpenRouter catalog so the resolver can use it as layer 3.
+ * @param {Record<string, number>} catalogObject
+ */
+export function setOpenrouterCatalog(catalogObject) {
+  if (catalogObject && typeof catalogObject === 'object') {
+    openrouterCatalog = catalogObject
+  }
+}
+
+/** Test/reset hook: clear the OpenRouter catalog. */
+export function clearOpenrouterCatalog() {
+  openrouterCatalog = null
 }
 
 const KNOWN_MODEL_CAPABILITIES = [
@@ -115,7 +141,21 @@ export function getProviderCapabilities(providerId, modelId) {
     }
   }
 
-  // 3. Modern default (most current chat models are ≥128K).
+  // 3. OpenRouter catalog cross-reference (cloud providers only, fail-safe).
+  if (openrouterCatalog && typeof modelId === 'string') {
+    const catalogWindow = lookupCatalogWindow(openrouterCatalog, providerId, modelId)
+    if (catalogWindow) {
+      return {
+        providerId,
+        modelId,
+        contextWindowTokens: catalogWindow,
+        defaultOutputTokens: DEFAULT_OUTPUT_TOKENS,
+        source: 'openrouter-catalog',
+      }
+    }
+  }
+
+  // 4. Modern default (most current chat models are ≥128K).
   return {
     providerId,
     modelId: modelId || null,

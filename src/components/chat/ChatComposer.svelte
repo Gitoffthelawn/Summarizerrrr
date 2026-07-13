@@ -218,6 +218,8 @@
           label={attachment.title || attachment.hostname || 'Attached tab'}
           icon={display.icon}
           kindLabel={display.kindLabel}
+          estimatedTokens={attachment.estimatedTokens}
+          estimating={attachment.estimating}
           onRemove={() => removeTabAttachment(attachment.tabId, attachment.sourceKind)}
         />
       {/each}

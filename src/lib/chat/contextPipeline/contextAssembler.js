@@ -61,6 +61,7 @@ export function assembleContext({
     system,
     messages,
     estimatedInputTokens: diagnostics?.estimatedInputTokens || 0,
+    inputBudgetTokens: diagnostics?.inputBudgetTokens || 0,
     includedSourceIds: diagnostics?.includedSourceIds || [],
     droppedSourceIds: diagnostics?.droppedSourceIds || [],
     trimmedTurnCount: diagnostics?.trimmedTurnCount || 0,

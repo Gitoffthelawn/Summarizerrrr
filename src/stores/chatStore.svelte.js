@@ -1,5 +1,7 @@
 import { chatService } from '@/services/chat/chatService.js'
 import { chatSessionService } from '@/services/chat/chatSessionService.js'
+import { chatSourceService } from '@/services/chat/chatSourceService.js'
+import { estimateTokens } from '@/lib/chat/contextPipeline/contextBudgeter.js'
 import { conversationRepository } from '@/lib/db/conversationRepository.js'
 import { settings } from './settingsStore.svelte.js'
 import { handleError } from '@/lib/error/simpleErrorHandler.js'
@@ -40,6 +42,7 @@ function createChatSessionState() {
     streamingMessage: null,
     error: null,
     contextWarnings: [],
+    contextUsage: null,
     abortController: null,
     currentUrl: null,
     /** True when there are earlier messages not yet loaded into the visible window. */
@@ -144,10 +147,40 @@ export async function addTabAttachment(tab) {
     (item) => item.tabId === attachment.tabId && (item.sourceKind || undefined) === (attachment.sourceKind || undefined)
   )
   if (!isDuplicate) {
-    chatState.pendingAttachments = [...chatState.pendingAttachments, attachment]
+    // Show the chip immediately with a loading state, then estimate its token
+    // cost in the background (extraction is real, so transcript/comments are
+    // measured — not the visible page text).
+    chatState.pendingAttachments = [...chatState.pendingAttachments, { ...attachment, estimatedTokens: null, estimating: true }]
     markChatTabsChanged()
+    estimateAttachmentTokens(attachment)
   }
   return attachment
+}
+
+/** Reactively patch a single pending attachment matched by (tabId, sourceKind). */
+function patchPendingAttachment(tabId, sourceKind, patch) {
+  chatState.pendingAttachments = chatState.pendingAttachments.map((item) =>
+    item.tabId === tabId && (item.sourceKind || undefined) === (sourceKind || undefined)
+      ? { ...item, ...patch }
+      : item
+  )
+}
+
+/**
+ * Extract the attachment's real content (transcript for video, formatted
+ * comments for youtubeComments, page text otherwise — same path used at send)
+ * and record an estimated token count on the chip. Warms the source cache so
+ * the eventual send does not re-extract. Fails silently: a chip without an
+ * estimate is fine.
+ */
+async function estimateAttachmentTokens(attachment) {
+  try {
+    const { source } = await chatSourceService.captureTabSource(attachment, attachment.sourceKind)
+    const tokens = estimateTokens(source?.rawContent || '')
+    patchPendingAttachment(attachment.tabId, attachment.sourceKind, { estimatedTokens: tokens, estimating: false })
+  } catch {
+    patchPendingAttachment(attachment.tabId, attachment.sourceKind, { estimatedTokens: null, estimating: false })
+  }
 }
 
 export function removeTabAttachment(tabId, sourceKind) {
@@ -378,6 +411,9 @@ export async function sendChatMessage(content = chatState.composerText) {
       onWarnings: (warnings) => {
         writeSession(targetTabId, { contextWarnings: warnings })
       },
+      onDiagnostics: (usage) => {
+        writeSession(targetTabId, { contextUsage: usage })
+      },
     })
     await reloadActivePath(targetTabId, result)
     return result
@@ -433,6 +469,9 @@ export async function retryChatMessage(userMessageId) {
       },
       onWarnings: (warnings) => {
         writeSession(targetTabId, { contextWarnings: warnings })
+      },
+      onDiagnostics: (usage) => {
+        writeSession(targetTabId, { contextUsage: usage })
       },
     })
     await reloadActivePath(targetTabId, result)
@@ -514,6 +553,9 @@ export async function regenerateChatMessage(assistantMessageId) {
       onWarnings: (warnings) => {
         writeSession(targetTabId, { contextWarnings: warnings })
       },
+      onDiagnostics: (usage) => {
+        writeSession(targetTabId, { contextUsage: usage })
+      },
     })
     await reloadActivePath(targetTabId, result)
     return result
@@ -558,6 +600,9 @@ export async function editChatMessage(messageId, content) {
       },
       onWarnings: (warnings) => {
         writeSession(targetTabId, { contextWarnings: warnings })
+      },
+      onDiagnostics: (usage) => {
+        writeSession(targetTabId, { contextUsage: usage })
       },
     })
     await reloadActivePath(targetTabId, result)
@@ -604,6 +649,9 @@ export async function continueChatMessage(assistantMessageId) {
       },
       onWarnings: (warnings) => {
         writeSession(targetTabId, { contextWarnings: warnings })
+      },
+      onDiagnostics: (usage) => {
+        writeSession(targetTabId, { contextUsage: usage })
       },
     })
     await reloadActivePath(targetTabId, result)

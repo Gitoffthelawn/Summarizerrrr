@@ -11,6 +11,17 @@ async function* defaultStreamRequest(request) {
   yield* generateContentStreamEnhancedRequest(request)
 }
 
+/**
+ * Real prompt (input) token count reported by the provider on stream completion,
+ * or null when unavailable. Prefers `promptTokens`, falling back to `inputTokens`
+ * — the same shape the per-message usage label reads.
+ */
+function realInputTokens(usage) {
+  if (!usage) return null
+  const n = usage.promptTokens ?? usage.inputTokens
+  return typeof n === 'number' && n > 0 ? n : null
+}
+
 function isAbortError(error, abortController) {
   return Boolean(
     abortController?.signal.aborted ||
@@ -120,6 +131,7 @@ export function createChatService({
     retryOfMessageId = null,
     onChunk,
     onWarnings,
+    onDiagnostics,
   }) {
     const transient = {
       role: 'assistant',
@@ -184,6 +196,16 @@ export function createChatService({
       })) {
         if (event.isComplete) {
           usage = event.usage || null
+          // Report the provider's real input-token count to the context meter.
+          const realUsed = realInputTokens(usage)
+          if (realUsed != null) {
+            onDiagnostics?.({
+              used: realUsed,
+              inputBudget: pipeline.inputBudgetTokens,
+              window: pipeline.capabilities?.contextWindowTokens,
+              source: pipeline.capabilities?.source,
+            })
+          }
           continue
         }
         transient.content = event.fullText
@@ -258,6 +280,7 @@ export function createChatService({
       onUserMessage,
       onChunk,
       onWarnings,
+      onDiagnostics,
     }) {
       if (!String(content || '').trim() && !skillInvocation) {
         throw new Error('Enter a message or choose a skill before sending.')
@@ -288,10 +311,11 @@ export function createChatService({
         abortController,
         onChunk,
         onWarnings,
+        onDiagnostics,
       })
     },
 
-    async retry({ conversation, messages, userMessageId, settings, abortController, onChunk, onWarnings }) {
+    async retry({ conversation, messages, userMessageId, settings, abortController, onChunk, onWarnings, onDiagnostics }) {
       const { history, currentUserMessage } = await repository.getGenerationContextForUser(userMessageId)
       return runGeneration({
         conversation,
@@ -302,10 +326,11 @@ export function createChatService({
         retryOfMessageId: userMessageId,
         onChunk,
         onWarnings,
+        onDiagnostics,
       })
     },
 
-    async regenerate({ conversation, assistantMessageId, settings, abortController, onChunk, onWarnings }) {
+    async regenerate({ conversation, assistantMessageId, settings, abortController, onChunk, onWarnings, onDiagnostics }) {
       const allMessages = await repository.listMessagesByConversation(conversation.id)
       const assistantMessage = allMessages.find((m) => m.id === assistantMessageId)
       if (!assistantMessage) throw new Error('The assistant message was not found.')
@@ -323,6 +348,7 @@ export function createChatService({
         retryOfMessageId: userMessageId,
         onChunk,
         onWarnings,
+        onDiagnostics,
       })
     },
 
@@ -334,7 +360,7 @@ export function createChatService({
       return repository.archiveConversation(id)
     },
 
-    async edit({ conversation, messageId, content, settings, abortController, onChunk, onWarnings }) {
+    async edit({ conversation, messageId, content, settings, abortController, onChunk, onWarnings, onDiagnostics }) {
       const original = await repository.getMessage(messageId)
       if (!original) throw new Error('The message to edit was not found.')
       if (original.role !== 'user') throw new Error('Only user messages can be edited.')
@@ -357,10 +383,11 @@ export function createChatService({
         abortController: abortController || new AbortController(),
         onChunk,
         onWarnings,
+        onDiagnostics,
       })
     },
 
-    async continueResponse({ conversation, assistantMessageId, settings, abortController, onChunk, onWarnings }) {
+    async continueResponse({ conversation, assistantMessageId, settings, abortController, onChunk, onWarnings, onDiagnostics }) {
       const assistantMessage = await repository.getMessage(assistantMessageId)
       if (!assistantMessage) throw new Error('The assistant message was not found.')
       if (assistantMessage.status !== 'aborted' && assistantMessage.status !== 'interrupted') {
@@ -441,6 +468,16 @@ export function createChatService({
         })) {
           if (event.isComplete) {
             usage = event.usage || null
+            // Report the provider's real input-token count to the context meter.
+            const realUsed = realInputTokens(usage)
+            if (realUsed != null) {
+              onDiagnostics?.({
+                used: realUsed,
+                inputBudget: pipeline.inputBudgetTokens,
+                window: pipeline.capabilities?.contextWindowTokens,
+                source: pipeline.capabilities?.source,
+              })
+            }
             continue
           }
           transient.content = event.fullText

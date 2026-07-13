@@ -8,6 +8,7 @@ import {
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { anthropic } from '@ai-sdk/anthropic'
+import { createDeepSeek } from '@ai-sdk/deepseek'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { createOllama } from 'ai-sdk-ollama'
@@ -157,10 +158,13 @@ export function getAISDKModel(providerId, settings) {
       return openrouter(settings.selectedOpenrouterModel || 'openrouter/auto')
 
     case 'deepseek':
-      const deepseek = createOpenAICompatible({
-        name: 'deepseek',
+      // Dedicated DeepSeek provider (not the generic openai-compatible one) so
+      // usage carries `prompt_cache_hit_tokens` → `cachedInputTokens`, letting
+      // the UI show the cached-prompt count. Falls back to the provider's own
+      // default baseURL when the user hasn't set a custom one.
+      const deepseek = createDeepSeek({
         apiKey: settings.deepseekApiKey,
-        baseURL: settings.deepseekBaseUrl || 'https://api.deepseek.com/v1',
+        baseURL: settings.deepseekBaseUrl || undefined,
       })
       return deepseek(settings.selectedDeepseekModel || 'deepseek-chat')
 
@@ -926,10 +930,17 @@ function normalizeUsage(usage) {
   const totalTokens =
     usage.totalTokens ??
     (promptTokens != null && completionTokens != null ? promptTokens + completionTokens : null)
-  // Cross-provider cached-prompt count. AI SDK v5 normalizes this to
-  // `cachedInputTokens`; some providers surface it under other names.
+  // Cross-provider cached-prompt count. The installed core (ai@7) exposes it as
+  // `usage.inputTokenDetails.cacheReadTokens` — every provider that reports a
+  // cache read (OpenAI, DeepSeek, OpenRouter, Anthropic, …) funnels through this
+  // one field, so reading it here surfaces cache for all of them at once. The
+  // remaining names are fallbacks for other/older SDK shapes.
   const cachedInputTokens =
-    usage.cachedInputTokens ?? usage.cachedPromptTokens ?? usage.cacheReadInputTokens ?? null
+    usage.inputTokenDetails?.cacheReadTokens ??
+    usage.cachedInputTokens ??
+    usage.cachedPromptTokens ??
+    usage.cacheReadInputTokens ??
+    null
   if (promptTokens == null && completionTokens == null && totalTokens == null) return null
   return {
     promptTokens,

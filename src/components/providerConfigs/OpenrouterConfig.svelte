@@ -6,6 +6,9 @@
   import Icon from '@iconify/svelte'
   import { t } from 'svelte-i18n'
   import { onMount } from 'svelte'
+  import { buildCatalog } from '@/lib/chat/openrouterCatalog.js'
+  import { setOpenrouterCatalog } from '@/lib/chat/providerCapabilities.js'
+  import { openrouterCatalogStorage } from '@/services/wxtStorageService.js'
 
   let {
     openrouterApiKey = $bindable(),
@@ -38,6 +41,11 @@
 
       if (body.data) {
         openrouterModels = body.data.map((model) => model.id)
+
+        // Opportunistic catalog refresh — reuse the fetch we already made.
+        const entries = buildCatalog(body)
+        setOpenrouterCatalog(entries)
+        openrouterCatalogStorage.setValue({ fetchedAt: Date.now(), entries })
       } else {
         modelLoadError = new Error("Invalid API response: missing 'data' field")
         console.error("Invalid API response: missing 'data' field", body)

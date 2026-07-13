@@ -4,6 +4,7 @@
   import ChatMessageList from './ChatMessageList.svelte'
   import ChatComposer from './ChatComposer.svelte'
   import ChatContextWarning from './ChatContextWarning.svelte'
+  import ChatContextMeter from './ChatContextMeter.svelte'
   import ErrorDisplay from '@/components/displays/ui/ErrorDisplay.svelte'
   import {
     chatState,
@@ -13,6 +14,11 @@
 
   let composerRef = $state()
   let composerBlockHeight = $state(0)
+
+  // Total estimated token cost of @tab chips attached but not yet sent.
+  const pendingEstimate = $derived(
+    chatState.pendingAttachments.reduce((sum, a) => sum + (a.estimatedTokens || 0), 0)
+  )
 
   function focusComposer() {
     composerRef?.focus()
@@ -42,6 +48,7 @@
     class="fixed bottom-0 left-0 z-30 w-full min-w-[22.5rem]"
   >
     <div class="flex flex-col gap-2 px-3">
+      <ChatContextMeter usage={chatState.contextUsage} {pendingEstimate} />
       <ChatContextWarning warnings={chatState.contextWarnings} />
       {#if chatState.error}
         <ErrorDisplay error={chatState.error} />
