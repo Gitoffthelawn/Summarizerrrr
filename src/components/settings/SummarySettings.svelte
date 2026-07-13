@@ -13,6 +13,7 @@
     settings,
     updateSettings,
   } from '../../stores/settingsStore.svelte.js'
+  import { browser } from 'wxt/browser'
 
   function handleUpdateSetting(key, value) {
     updateSettings({ [key]: value })

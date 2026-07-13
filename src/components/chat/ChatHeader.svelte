@@ -8,6 +8,7 @@
     archiveConversation,
     closeConversation,
   } from '@/stores/chatStore.svelte.js'
+  import { browser } from 'wxt/browser'
 
   let { onOpenConversation = null, onShowLegacySummary = null } = $props()
 

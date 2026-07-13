@@ -2,7 +2,7 @@
 <script>
   import 'highlight.js/styles/github-dark.css'
   import hljs from 'highlight.js'
-  import SvelteMarkdown from '@humanspeak/svelte-markdown'
+  import SvelteMarkdown, { defaultSanitizeUrl } from '@humanspeak/svelte-markdown'
   import { processThinkTags } from '@/lib/utils/thinkTagProcessor.js'
   import { processTimestamps } from '@/lib/utils/timestampProcessor.js'
   import { isRTLLanguage } from '@/lib/utils/rtlUtils.js'
@@ -41,6 +41,17 @@
 
   // === Xử lý think tags ===
   let processedMarkdown = $state('')
+
+  function sanitizeMarkdownUrl(url, context) {
+    // Timestamp links are generated locally by processTimestamps() and handled
+    // by TimestampLink. Keep that internal protocol while retaining the
+    // library's default allowlist for every external URL.
+    if (typeof url === 'string' && url.startsWith('timestamp:')) {
+      return url
+    }
+
+    return defaultSanitizeUrl(url, context)
+  }
 
   function processMarkdown() {
     if (sourceMarkdown) {
@@ -174,6 +185,8 @@
       ? processTimestamps(processedMarkdown)
       : processedMarkdown}
     renderers={{ link: TimestampLink, table: TableRenderer }}
+    streaming
+    sanitizeUrl={sanitizeMarkdownUrl}
   />
 </div>
 

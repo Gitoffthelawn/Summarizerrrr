@@ -16,6 +16,7 @@
   import ModelToast from '@/components/feedback/ModelToast.svelte'
   import Noti from '@/components/ui/Noti.svelte'
   import 'webextension-polyfill'
+  import { browser } from 'wxt/browser'
 
   // Import direct variables and functions from refactored stores
   import {
@@ -539,11 +540,11 @@
           >
             {#snippet children({ builder })}
               <button
+                {...builder}
                 onclick={() => {
-                  browser.tabs.create({ url: 'archive.html' })
+                  browser.tabs.create({ url: browser.runtime.getURL('archive.html') })
                 }}
                 class="p-1 setting-animation transition-colors hover:bg-surface-1 rounded-full hover:text-text-primary"
-                {...builder}
               >
                 <Icon icon="solar:history-linear" width="24" height="24" />
               </button>
@@ -698,11 +699,11 @@
         <Tooltip content={$t('archive.open_archive')} side="right" align="start">
           {#snippet children({ builder })}
             <button
+              {...builder}
               onclick={() => {
-                browser.tabs.create({ url: 'archive.html' })
+                browser.tabs.create({ url: browser.runtime.getURL('archive.html') })
               }}
               class="p-1 setting-animation transition-colors hover:bg-surface-2 rounded-full hover:text-text-primary text-text-secondary"
-              {...builder}
             >
               <Icon icon="solar:history-linear" width="22" height="22" />
             </button>

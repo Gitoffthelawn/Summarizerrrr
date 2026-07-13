@@ -3,6 +3,7 @@
   import { fadeOnly } from '@/lib/ui/slideScaleFade.js'
   import { t } from 'svelte-i18n'
   import Cat from './cat.svelte'
+  import { browser } from 'wxt/browser'
   import {
     displayOrder,
     notificationData,
