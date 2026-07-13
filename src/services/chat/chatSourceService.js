@@ -1,6 +1,8 @@
 import { browser } from 'wxt/browser'
 import { getPageContent } from '@/services/contentService.js'
 import { conversationRepository } from '@/lib/db/conversationRepository.js'
+import { fetchYouTubeComments, formatCommentsForAI } from '@/lib/utils/youtubeUtils.js'
+import { resolveAutoSourceKind, contentTypeForKind, SOURCE_KINDS } from './sourceResolution.js'
 
 function normalizeUrl(url) {
   try {
@@ -21,14 +23,24 @@ function stableContentHash(content) {
   return `fnv1a-${(hash >>> 0).toString(16)}`
 }
 
-function sourceTypeFor(pageType) {
-  return pageType === 'youtube' ? 'youtube' : pageType === 'course' ? 'course' : 'webpage'
-}
-
 function condenseContent(content) {
   const limit = 12_000
   if (content.length <= limit) return content
   return `${content.slice(0, limit)}\n\n[Source snapshot condensed; remaining content omitted.]`
+}
+
+/**
+ * Build the cache key used by `sourceIdsByTab`.
+ * Differentiates entries so a transcript and comments for the same tab
+ * never collide.
+ *
+ * @param {number} tabId
+ * @param {string} normalizedUrl
+ * @param {string} sourceKind
+ * @returns {string}
+ */
+function cacheKey(tabId, normalizedUrl, sourceKind) {
+  return `${tabId}|${normalizedUrl}|${sourceKind}`
 }
 
 /**
@@ -39,8 +51,11 @@ function condenseContent(content) {
 export function createChatSourceService({
   browserApi = browser,
   getPageContentFn = getPageContent,
+  fetchCommentsFn = fetchYouTubeComments,
+  formatCommentsFn = formatCommentsForAI,
   repository = conversationRepository,
 } = {}) {
+  /** @type {Map<string, {sourceId: string, normalizedUrl: string}>} */
   const sourceIdsByTab = new Map()
 
   async function getActiveTab() {
@@ -49,78 +64,192 @@ export function createChatSourceService({
     return tab
   }
 
+  /**
+   * Capture page content (transcript, course transcript, or webpage text)
+   * for the given tab and source kind.
+   *
+   * @param {{id: number, url: string, title?: string}} tab
+   * @param {string} sourceKind
+   * @returns {Promise<string>}
+   */
+  async function capturePageContent(tab, sourceKind) {
+    const contentType = contentTypeForKind(sourceKind)
+    const extracted = await getPageContentFn({ tabId: tab.id, url: tab.url, contentType, preferredLang: 'en' })
+    const content = String(extracted?.content || '').trim()
+    if (!content) {
+      throw new Error(
+        sourceKind === SOURCE_KINDS.youtubeTranscript
+          ? 'No transcript is available for this video. The video may not have captions. Try a different video or switch to Web page mode.'
+          : sourceKind === SOURCE_KINDS.courseTranscript
+            ? 'No transcript is available for this course lesson. Navigate to a lesson with captions and try again.'
+            : 'The active tab did not provide readable content. Try refreshing the page or navigating to a different URL.'
+      )
+    }
+    return content
+  }
+
+  /**
+   * Capture YouTube comments for the given tab.
+   *
+   * @param {{id: number, url: string, title?: string}} tab
+   * @param {{commentLimit?: number, replyLimit?: number}} [opts]
+   * @returns {Promise<{content: string, commentLimit: number, replyLimit: number, fetchedCount: number}>}
+   */
+  async function captureComments(tab, { commentLimit = 60, replyLimit = 10 } = {}) {
+    let response
+    try {
+      response = await fetchCommentsFn(tab.id, { maxComments: commentLimit, maxRepliesPerComment: replyLimit })
+    } catch (error) {
+      throw new Error(
+        `Could not fetch comments for this video. ${error?.message || 'The comment bridge may have timed out.'} Try scrolling down to load comments first, then retry.`
+      )
+    }
+
+    const comments = response?.comments
+    if (!comments || comments.length === 0) {
+      throw new Error('No comments are available for this video. Comments may be disabled or the video may be too new. Try a different video.')
+    }
+
+    const metadata = response?.metadata || {}
+    const content = formatCommentsFn(comments, metadata)
+    if (!content || content === 'No comments available.') {
+      throw new Error('The fetched comments could not be processed. Try scrolling through the comments section, then retry.')
+    }
+
+    return { content, commentLimit, replyLimit, fetchedCount: comments.length }
+  }
+
+  /**
+   * Build a source snapshot and persist it, returning the record.
+   *
+   * @param {{id: number, url: string, title?: string}} tab
+   * @param {string} content
+   * @param {string} sourceKind
+   * @param {object} [extraProvenance]
+   */
+  async function persistSnapshot(tab, content, sourceKind, extraProvenance = {}) {
+    const normalizedUrl = normalizeUrl(tab.url)
+    const contentHash = stableContentHash(content)
+    const sourceKey = `${normalizedUrl}:${sourceKind}:${contentHash}`
+
+    const source = await repository.putSourceSnapshot({
+      normalizedUrl,
+      url: tab.url,
+      title: tab.title || normalizedUrl,
+      sourceType: sourceKind,
+      sourceKey,
+      contentHash,
+      rawContent: content,
+      condensedContent: condenseContent(content),
+      condensationVersion: 1,
+      condensationLanguage: 'en',
+      originalLength: content.length,
+      tabIdHint: tab.id,
+      ...extraProvenance,
+    })
+
+    const key = cacheKey(tab.id, normalizedUrl, sourceKind)
+    sourceIdsByTab.set(key, { sourceId: source.id, normalizedUrl })
+    return source
+  }
+
   return {
     getActiveTab,
 
-    async getCachedActiveSource() {
+    /**
+     * @param {string} [sourceKind] Defaults to `resolveAutoSourceKind(tab.url)`.
+     */
+    async getCachedActiveSource(sourceKind) {
       const tab = await getActiveTab()
-      const cached = sourceIdsByTab.get(tab.id)
+      const kind = sourceKind || resolveAutoSourceKind(tab.url)
+      const key = cacheKey(tab.id, normalizeUrl(tab.url), kind)
+      const cached = sourceIdsByTab.get(key)
       if (!cached || cached.normalizedUrl !== normalizeUrl(tab.url)) return null
       const source = await repository.getSourceById(cached.sourceId)
       return source ? { source, tab } : null
     },
 
-    async captureActiveSource() {
-      const cached = await this.getCachedActiveSource()
-      if (cached) return cached
-
+    /**
+     * @param {string} [sourceKind] Defaults to `resolveAutoSourceKind(tab.url)`.
+     *   Pass `'youtubeComments'` only when explicitly requested — it is never
+     *   returned by `resolveAutoSourceKind`.
+     * @param {{commentLimit?: number}} [opts]
+     */
+    async captureActiveSource(sourceKind, opts = {}) {
       const tab = await getActiveTab()
-      const extracted = await getPageContentFn({ tabId: tab.id, url: tab.url, contentType: 'webpageText', preferredLang: 'en' })
-      const content = String(extracted?.content || '').trim()
-      if (!content) throw new Error('The active tab did not provide readable content.')
+      const kind = sourceKind || resolveAutoSourceKind(tab.url)
 
-      const normalizedUrl = normalizeUrl(tab.url)
-      const source = await repository.putSourceSnapshot({
-        normalizedUrl,
-        url: tab.url,
-        title: tab.title || normalizedUrl,
-        sourceType: sourceTypeFor(extracted?.type),
-        contentHash: stableContentHash(content),
-        rawContent: content,
-        condensedContent: condenseContent(content),
-        condensationVersion: 1,
-        condensationLanguage: 'en',
-        originalLength: content.length,
-        tabIdHint: tab.id,
-      })
-
-      sourceIdsByTab.set(tab.id, { sourceId: source.id, normalizedUrl })
-      return { source, tab }
-    },
-
-    async captureTabSource(attachment) {
-      const tab = await browserApi.tabs.get(attachment.tabId)
-      if (!tab?.url) throw new Error(`The selected tab “${attachment.title || attachment.tabId}” was closed.`)
-      if (attachment.url && normalizeUrl(tab.url) !== normalizeUrl(attachment.url)) {
-        throw new Error(`The selected tab “${attachment.title || tab.title}” navigated before capture. Select it again.`)
-      }
-      const cached = sourceIdsByTab.get(tab.id)
+      // Check cache
+      const key = cacheKey(tab.id, normalizeUrl(tab.url), kind)
+      const cached = sourceIdsByTab.get(key)
       if (cached?.normalizedUrl === normalizeUrl(tab.url)) {
         const source = await repository.getSourceById(cached.sourceId)
         if (source) return { source, tab }
       }
-      const extracted = await getPageContentFn({ tabId: tab.id, url: tab.url, contentType: 'webpageText', preferredLang: 'en' })
+
+      // Capture
+      if (kind === SOURCE_KINDS.youtubeComments) {
+        const { content, commentLimit, replyLimit, fetchedCount } = await captureComments(tab, { commentLimit: opts.commentLimit })
+        const source = await persistSnapshot(tab, content, kind, { commentLimit, replyLimit, fetchedCount })
+        return { source, tab }
+      }
+
+      const content = await capturePageContent(tab, kind)
+      const source = await persistSnapshot(tab, content, kind)
+      return { source, tab }
+    },
+
+    /**
+     * @param {object} attachment
+     * @param {string} [sourceKind] Defaults to `resolveAutoSourceKind(tab.url)`.
+     * @param {{commentLimit?: number}} [opts]
+     */
+    async captureTabSource(attachment, sourceKind, opts = {}) {
+      const tab = await browserApi.tabs.get(attachment.tabId)
+      if (!tab?.url) throw new Error(`The selected tab "${attachment.title || attachment.tabId}" was closed.`)
+      if (attachment.url && normalizeUrl(tab.url) !== normalizeUrl(attachment.url)) {
+        throw new Error(`The selected tab "${attachment.title || tab.title}" navigated before capture. Select it again.`)
+      }
+
+      const kind = sourceKind || resolveAutoSourceKind(tab.url)
+
+      // Check cache
+      const key = cacheKey(tab.id, normalizeUrl(tab.url), kind)
+      const cached = sourceIdsByTab.get(key)
+      if (cached?.normalizedUrl === normalizeUrl(tab.url)) {
+        const source = await repository.getSourceById(cached.sourceId)
+        if (source) return { source, tab }
+      }
+
+      // Capture
+      if (kind === SOURCE_KINDS.youtubeComments) {
+        const { content, commentLimit, replyLimit, fetchedCount } = await captureComments(tab, { commentLimit: opts.commentLimit })
+        // Re-check navigation after async fetch
+        const after = await browserApi.tabs.get(tab.id)
+        if (!after?.url || normalizeUrl(after.url) !== normalizeUrl(tab.url)) {
+          throw new Error(`The selected tab "${attachment.title || tab.title}" changed during capture. Select it again.`)
+        }
+        const source = await persistSnapshot(tab, content, kind, { commentLimit, replyLimit, fetchedCount })
+        return { source, tab }
+      }
+
+      const content = await capturePageContent(tab, kind)
+      // Re-check navigation after async extraction
       const after = await browserApi.tabs.get(tab.id)
       if (!after?.url || normalizeUrl(after.url) !== normalizeUrl(tab.url)) {
-        throw new Error(`The selected tab “${attachment.title || tab.title}” changed during capture. Select it again.`)
+        throw new Error(`The selected tab "${attachment.title || tab.title}" changed during capture. Select it again.`)
       }
-      const content = String(extracted?.content || '').trim()
-      if (!content) throw new Error(`The selected tab “${attachment.title || tab.title}” has no readable content.`)
-      const normalizedUrl = normalizeUrl(tab.url)
-      const source = await repository.putSourceSnapshot({
-        normalizedUrl, url: tab.url, title: tab.title || normalizedUrl,
-        sourceType: sourceTypeFor(extracted?.type), contentHash: stableContentHash(content), rawContent: content,
-        // @tab context is always condensed before model assembly. This preserves
-        // provenance while keeping attachments lower-priority than the active page.
-        condensedContent: condenseContent(content), condensationVersion: 1, condensationLanguage: 'en',
-        originalLength: content.length, tabIdHint: tab.id,
-      })
-      sourceIdsByTab.set(tab.id, { sourceId: source.id, normalizedUrl })
+      const source = await persistSnapshot(tab, content, kind)
       return { source, tab }
     },
 
     forgetTab(tabId) {
-      sourceIdsByTab.delete(tabId)
+      // Remove all cache entries for this tabId (across all kinds/urls)
+      for (const [key] of sourceIdsByTab) {
+        if (key.startsWith(`${tabId}|`)) {
+          sourceIdsByTab.delete(key)
+        }
+      }
     },
   }
 }

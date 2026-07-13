@@ -4,6 +4,7 @@ import { conversationRepository } from '@/lib/db/conversationRepository.js'
 import { chatSourceService } from './chatSourceService.js'
 import { chatSessionService } from './chatSessionService.js'
 import { createPersonaSnapshot } from '@/lib/chat/skills/skillService.js'
+import { resolveAutoSourceKind } from './sourceResolution.js'
 
 async function* defaultStreamRequest(request) {
   const { generateContentStreamEnhancedRequest } = await import('@/lib/api/aiSdkAdapter.js')
@@ -81,13 +82,14 @@ export function createChatService({
     }
   }
 
-  async function prepareGroundedAttachments(existingAttachments, sourceRequired, onWarnings) {
+  async function prepareGroundedAttachments(existingAttachments, sourceRequired, { skillInvocation, settings, onWarnings } = {}) {
     const attachmentRefs = []
     const warnings = []
+    const commentLimit = settings?.commentLimit
     for (const attachment of existingAttachments || []) {
       if (typeof attachment === 'string') { attachmentRefs.push(attachment); continue }
       try {
-        const captured = await sourceService.captureTabSource(attachment)
+        const captured = await sourceService.captureTabSource(attachment, attachment.sourceKind, { commentLimit })
         attachmentRefs.push(captured.source.id)
       } catch (error) {
         warnings.push(error.message || `Could not capture ${attachment.title || 'selected tab'}.`)
@@ -95,8 +97,15 @@ export function createChatService({
     }
     if (!sourceRequired) return attachmentRefs
 
-    const cached = await sourceService.getCachedActiveSource()
-    const captured = cached || (await sourceService.captureActiveSource())
+    // Resolve the active source kind from the skill's sourceMode.
+    // Explicit kinds (e.g. 'youtubeComments') pass through; 'auto' or absent →
+    // resolveAutoSourceKind (transcript on YouTube, course transcript, webpage).
+    const mode = skillInvocation?.sourceMode || 'auto'
+    const activeTab = await sourceService.getActiveTab()
+    const sourceKind = mode === 'auto' ? resolveAutoSourceKind(activeTab.url) : mode
+
+    const cached = await sourceService.getCachedActiveSource(sourceKind)
+    const captured = cached || (await sourceService.captureActiveSource(sourceKind, { commentLimit }))
     if (!attachmentRefs.includes(captured.source.id)) attachmentRefs.push(captured.source.id)
     onWarnings?.(warnings)
     return attachmentRefs
@@ -256,7 +265,7 @@ export function createChatService({
 
       let attachmentRefs
       try {
-        attachmentRefs = await prepareGroundedAttachments(pendingAttachments, sourceRequired, onWarnings)
+        attachmentRefs = await prepareGroundedAttachments(pendingAttachments, sourceRequired, { skillInvocation, settings, onWarnings })
       } catch (error) {
         throw handleError(error, { source: 'chatCapture' })
       }

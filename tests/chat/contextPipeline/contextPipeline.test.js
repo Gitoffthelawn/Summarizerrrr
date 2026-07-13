@@ -3,7 +3,11 @@ import {
   buildContextPipeline,
   budgetContext,
 } from '@/lib/chat/contextPipeline/index.js'
-import { getProviderCapabilities } from '@/lib/chat/providerCapabilities.js'
+import {
+  getProviderCapabilities,
+  registerModelCapability,
+  clearDiscoveredCapabilities,
+} from '@/lib/chat/providerCapabilities.js'
 import { injectionLikeSource, longYoutubeTranscript, normalArticle } from './fixtures.js'
 
 function createRepository(sources) {
@@ -166,10 +170,35 @@ describe('Context Pipeline', () => {
     expect(budget.history.map((message) => message.sequence)).toEqual([3, 4, 5, 6])
   })
 
-  it('uses the conservative budget for an unknown model', () => {
+  it('assumes a modern 128K budget for an unknown model', () => {
     expect(getProviderCapabilities('openaiCompatible', 'local-model')).toMatchObject({
-      contextWindowTokens: 16_384,
-      source: 'conservative-fallback',
+      contextWindowTokens: 128_000,
+      source: 'default-fallback',
+    })
+  })
+
+  it('prefers exact limits discovered from a provider models API', () => {
+    clearDiscoveredCapabilities()
+    // Groq exposes context_window per model; discovery registers it.
+    registerModelCapability('groq', 'llama-3.1-8b-instant', { contextWindowTokens: 131_072 })
+    expect(getProviderCapabilities('groq', 'llama-3.1-8b-instant')).toMatchObject({
+      contextWindowTokens: 131_072,
+      source: 'discovered',
+    })
+    // A discovered small window protects against over-estimating the 128K default.
+    registerModelCapability('groq', 'legacy-8k', { contextWindowTokens: 8_192 })
+    expect(getProviderCapabilities('groq', 'legacy-8k').contextWindowTokens).toBe(8_192)
+    clearDiscoveredCapabilities()
+  })
+
+  it('resolves the real 64K window for deepseek chat/reasoner models', () => {
+    expect(getProviderCapabilities('deepseek', 'deepseek-chat')).toMatchObject({
+      contextWindowTokens: 64_000,
+      source: 'known-model',
+    })
+    expect(getProviderCapabilities('deepseek', 'deepseek-reasoner')).toMatchObject({
+      contextWindowTokens: 64_000,
+      source: 'known-model',
     })
   })
 

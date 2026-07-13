@@ -1,10 +1,47 @@
 /**
  * Model context budgets are intentionally kept separate from prompt assembly.
- * Entries below only cover models the current repository explicitly offers;
- * custom and unknown models use the conservative fallback.
+ * Resolution order (see {@link getProviderCapabilities}):
+ *   1. Runtime registry — real limits discovered from a provider's models API.
+ *   2. Static table below — providers whose API does NOT expose context length
+ *      (OpenAI, DeepSeek, Anthropic) or well-known families.
+ *   3. Default fallback — most modern chat models are ≥128K, so an unknown
+ *      model is assumed to be 128K rather than the old ultra-conservative 16K.
  */
-export const CONSERVATIVE_CONTEXT_WINDOW_TOKENS = 16_384
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000
 export const DEFAULT_OUTPUT_TOKENS = 4_000
+
+/**
+ * Runtime map of `${providerId}:${modelId}` → `{ contextWindowTokens,
+ * defaultOutputTokens }`, populated by model discovery when the provider's API
+ * carries context length (e.g. Groq `context_window`, OpenRouter
+ * `context_length`). Empty until discovery runs; entries are exact, so they take
+ * precedence over the static table and the fallback.
+ * @type {Map<string, {contextWindowTokens: number, defaultOutputTokens?: number}>}
+ */
+const discoveredCapabilities = new Map()
+
+/**
+ * Record a model's real limits, discovered from a provider's models endpoint.
+ * @param {string} providerId
+ * @param {string} modelId
+ * @param {{contextWindowTokens?: number, defaultOutputTokens?: number}} caps
+ */
+export function registerModelCapability(providerId, modelId, caps = {}) {
+  if (!providerId || !modelId) return
+  const contextWindowTokens = Number(caps.contextWindowTokens)
+  if (!Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) return
+  discoveredCapabilities.set(`${providerId}:${modelId}`, {
+    contextWindowTokens,
+    ...(Number.isFinite(Number(caps.defaultOutputTokens))
+      ? { defaultOutputTokens: Number(caps.defaultOutputTokens) }
+      : {}),
+  })
+}
+
+/** Test/reset hook: forget all discovered capabilities. */
+export function clearDiscoveredCapabilities() {
+  discoveredCapabilities.clear()
+}
 
 const KNOWN_MODEL_CAPABILITIES = [
   {
@@ -31,6 +68,15 @@ const KNOWN_MODEL_CAPABILITIES = [
     contextWindowTokens: 128_000,
     defaultOutputTokens: DEFAULT_OUTPUT_TOKENS,
   },
+  {
+    // deepseek-chat / deepseek-reasoner serve a 64K context window (default
+    // output 4K, max 8K). Without this entry they fall back to the conservative
+    // 16K window and grounding sources get dropped prematurely.
+    providerId: 'deepseek',
+    modelPattern: /^deepseek-/,
+    contextWindowTokens: 64_000,
+    defaultOutputTokens: DEFAULT_OUTPUT_TOKENS,
+  },
 ]
 
 /**
@@ -39,6 +85,19 @@ const KNOWN_MODEL_CAPABILITIES = [
  * @param {string | null | undefined} modelId
  */
 export function getProviderCapabilities(providerId, modelId) {
+  // 1. Exact limits discovered from the provider's models API win.
+  const discovered = typeof modelId === 'string' ? discoveredCapabilities.get(`${providerId}:${modelId}`) : null
+  if (discovered) {
+    return {
+      providerId,
+      modelId,
+      contextWindowTokens: discovered.contextWindowTokens,
+      defaultOutputTokens: discovered.defaultOutputTokens ?? DEFAULT_OUTPUT_TOKENS,
+      source: 'discovered',
+    }
+  }
+
+  // 2. Static table for providers whose API omits context length.
   const knownCapability = KNOWN_MODEL_CAPABILITIES.find(
     (capability) =>
       capability.providerId === providerId &&
@@ -56,11 +115,12 @@ export function getProviderCapabilities(providerId, modelId) {
     }
   }
 
+  // 3. Modern default (most current chat models are ≥128K).
   return {
     providerId,
     modelId: modelId || null,
-    contextWindowTokens: CONSERVATIVE_CONTEXT_WINDOW_TOKENS,
+    contextWindowTokens: DEFAULT_CONTEXT_WINDOW_TOKENS,
     defaultOutputTokens: DEFAULT_OUTPUT_TOKENS,
-    source: 'conservative-fallback',
+    source: 'default-fallback',
   }
 }

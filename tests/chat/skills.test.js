@@ -34,14 +34,14 @@ describe('chat skills', () => {
     expect(oldTurn.instructionSnapshot).toBe(BUILT_IN_SKILLS[0].instruction)
   })
 
-  it('uses version 2 for rewritten skills and version 1 for Translate', () => {
+  it('uses version 3 for source-mode-aware skills and version 2 for Translate', () => {
     const translate = BUILT_IN_SKILLS.find((s) => s.id === 'translate')
     const summarize = BUILT_IN_SKILLS.find((s) => s.id === 'summarize')
     const chapterSummary = BUILT_IN_SKILLS.find((s) => s.id === 'chapter-summary')
 
-    expect(translate.version).toBe(1)
-    expect(summarize.version).toBe(2)
-    expect(chapterSummary.version).toBe(2)
+    expect(translate.version).toBe(2)
+    expect(summarize.version).toBe(3)
+    expect(chapterSummary.version).toBe(3)
   })
 
   it('does not contain legacy template wrappers in any built-in skill', () => {

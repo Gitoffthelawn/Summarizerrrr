@@ -35,6 +35,7 @@ export function toSkillInvocation(skill) {
     skillVersion: skill.version || 1,
     instructionSnapshot: String(skill.instruction || ''),
     name: skill.name,
+    sourceMode: skill.sourceMode || 'auto',
   }
 }
 

@@ -1,3 +1,5 @@
+import { registerModelCapability } from '@/lib/chat/providerCapabilities.js'
+
 const PROVIDER_CONFIG = {
   groq: {
     url: 'https://api.groq.com/openai/v1/models',
@@ -33,6 +35,26 @@ function isGroqChatModel(model) {
     !id.includes('guard') &&
     !id.includes('moderation')
   )
+}
+
+/**
+ * Capture per-model context length from a provider's `/models` response and
+ * feed it into the shared capability registry. Providers expose it under
+ * different keys: Groq → `context_window`, OpenRouter → `context_length`.
+ * Silently ignores models that don't carry it.
+ *
+ * @param {string} providerId
+ * @param {{data?: Array<object>}} body
+ */
+function registerCapabilitiesFromBody(providerId, body) {
+  if (!Array.isArray(body?.data)) return
+  for (const model of body.data) {
+    const id = typeof model?.id === 'string' ? model.id.trim() : ''
+    if (!id) continue
+    const contextWindowTokens = Number(model.context_window ?? model.context_length)
+    if (!Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) continue
+    registerModelCapability(providerId, id, { contextWindowTokens })
+  }
 }
 
 function normalizeModels(providerId, body) {
@@ -76,12 +98,14 @@ export async function fetchProviderModels(
 
   try {
     const body = await requestModels(config.url, cleanApiKey, fetchFn)
+    registerCapabilitiesFromBody(providerId, body)
     const models = normalizeModels(providerId, body)
     return models.length ? models : FALLBACK_PROVIDER_MODELS[providerId]
   } catch (error) {
     if (!config.publicUrl) throw error
 
     const body = await requestModels(config.publicUrl, '', fetchFn)
+    registerCapabilitiesFromBody(providerId, body)
     const models = normalizeModels(providerId, body)
     return models.length ? models : FALLBACK_PROVIDER_MODELS[providerId]
   }

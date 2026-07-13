@@ -3,6 +3,10 @@ import {
   FALLBACK_PROVIDER_MODELS,
   fetchProviderModels,
 } from '../../src/lib/api/providerModelService.js'
+import {
+  getProviderCapabilities,
+  clearDiscoveredCapabilities,
+} from '../../src/lib/chat/providerCapabilities.js'
 
 function jsonResponse(body, { ok = true, status = 200 } = {}) {
   return {
@@ -45,6 +49,29 @@ describe('provider model discovery', () => {
         headers: { Authorization: 'Bearer secret' },
       }),
     )
+  })
+
+  it('registers each Groq model\'s context_window into the capability registry', async () => {
+    clearDiscoveredCapabilities()
+    const fetchFn = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [
+          { id: 'llama-3.3-70b-versatile', active: true, context_window: 131072 },
+          { id: 'openai/gpt-oss-120b', active: true, context_window: 131072 },
+          { id: 'legacy-model', active: true, context_window: 8192 },
+        ],
+      }),
+    )
+
+    await fetchProviderModels('groq', 'secret', fetchFn)
+
+    expect(getProviderCapabilities('groq', 'llama-3.3-70b-versatile')).toMatchObject({
+      contextWindowTokens: 131072,
+      source: 'discovered',
+    })
+    // Discovered small windows guard against over-estimating the 128K default.
+    expect(getProviderCapabilities('groq', 'legacy-model').contextWindowTokens).toBe(8192)
+    clearDiscoveredCapabilities()
   })
 
   it('falls back to the public Cerebras catalog when authenticated loading fails', async () => {

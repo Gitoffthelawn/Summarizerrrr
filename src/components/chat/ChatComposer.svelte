@@ -16,11 +16,29 @@
     selectChatSkill,
     addTabAttachment,
     removeTabAttachment,
+    dismissActiveSource,
+    restoreActiveSource,
   } from '@/stores/chatStore.svelte.js'
   import { skillService } from '@/lib/chat/skills/skillService.js'
   import { settings } from '@/stores/settingsStore.svelte.js'
+  import {
+    resolveAutoSourceKind,
+    labelForSourceKind,
+    iconForSourceKind,
+    activeSourceLabelForUrl,
+  } from '@/services/chat/sourceResolution.js'
 
   let { autofocus = false } = $props()
+
+  // The effective source kind for the current page. Precedence mirrors
+  // chatService.prepareGroundedAttachments: skill sourceMode → auto.
+  let activeSourceKind = $derived.by(() => {
+    const url = chatState.currentUrl || ''
+    if (!url) return null
+    const skillMode = chatState.selectedSkill?.sourceMode
+    if (skillMode && skillMode !== 'auto') return skillMode
+    return resolveAutoSourceKind(url)
+  })
 
   let richTextRef = $state(null)
   let textareaEl = $state(null)
@@ -36,6 +54,19 @@
   let skillQuery = $state('')
   let skillRange = $state(null)
   let composerError = $state('')
+
+  /**
+   * Resolve the kind/label/icon for an attachment chip.
+   * Comment entries carry their own sourceKind; tab entries resolve via the URL.
+   */
+  function resolveAttachmentDisplay(attachment) {
+    const kind = attachment.sourceKind || resolveAutoSourceKind(attachment.url || '')
+    return {
+      kind,
+      kindLabel: labelForSourceKind(kind),
+      icon: iconForSourceKind(kind),
+    }
+  }
 
   $effect(() => {
     settings.chatUserSkills
@@ -160,13 +191,34 @@
 </script>
 
 <div class="flex w-full flex-col gap-2 px-3 pt-2 pb-3">
-  {#if chatState.selectedSkill || chatState.pendingAttachments.length}
+  {#if chatState.selectedSkill || chatState.currentUrl || chatState.pendingAttachments.length}
     <div class="flex flex-wrap items-center gap-1.5">
       <ChatSkillChip skill={chatState.selectedSkill} onClear={clearSkill} />
-      {#each chatState.pendingAttachments as attachment (attachment.tabId)}
+      {#if activeSourceKind && !chatState.activeSourceDismissed}
+        <ChatSourceChip
+          label={activeSourceLabelForUrl(chatState.currentUrl || '')}
+          icon={iconForSourceKind(activeSourceKind)}
+          kindLabel={labelForSourceKind(activeSourceKind)}
+          onRemove={dismissActiveSource}
+        />
+      {:else if chatState.currentUrl && chatState.activeSourceDismissed}
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-text-tertiary transition-colors hover:border-text-tertiary hover:text-text-secondary"
+          onclick={restoreActiveSource}
+          title="Add this page as context"
+        >
+          <Icon icon="heroicons:plus" width="14" height="14" />
+          {activeSourceLabelForUrl(chatState.currentUrl || '')}
+        </button>
+      {/if}
+      {#each chatState.pendingAttachments as attachment (`${attachment.tabId}-${attachment.sourceKind || 'auto'}`)}
+        {@const display = resolveAttachmentDisplay(attachment)}
         <ChatSourceChip
           label={attachment.title || attachment.hostname || 'Attached tab'}
-          onRemove={() => removeTabAttachment(attachment.tabId)}
+          icon={display.icon}
+          kindLabel={display.kindLabel}
+          onRemove={() => removeTabAttachment(attachment.tabId, attachment.sourceKind)}
         />
       {/each}
     </div>
@@ -177,6 +229,7 @@
       bind:this={mentionMenuRef}
       open={mentionOpen}
       query={mentionQuery}
+      attachments={chatState.pendingAttachments}
       onSelect={handleTabSelect}
       onClose={() => (mentionOpen = false)}
     />

@@ -69,7 +69,7 @@
  * @property {string} normalizedUrl
  * @property {string} url
  * @property {string} title
- * @property {'webpage' | 'youtube' | 'course' | 'selectedText'} sourceType
+ * @property {'webpage' | 'youtube' | 'course' | 'youtubeTranscript' | 'youtubeComments' | 'courseTranscript' | 'selectedText'} sourceType
  * @property {string} capturedAt
  * @property {string} contentHash
  * @property {string} condensedContent
@@ -96,6 +96,9 @@
  * @property {string} instruction
  * @property {boolean} pinned
  * @property {boolean} builtIn
+ * @property {'auto' | 'webpage' | 'youtubeTranscript' | 'youtubeComments' | 'courseTranscript'} [sourceMode]
+ *   Declares the source kind this skill prefers. Defaults to `'auto'` when
+ *   absent — the capture engine resolves the kind from the page type.
  */
 
 export {}

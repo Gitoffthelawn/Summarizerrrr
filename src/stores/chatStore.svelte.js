@@ -34,6 +34,8 @@ function createChatSessionState() {
     composerText: '',
     selectedSkill: null,
     pendingAttachments: [],
+    /** Sticky opt-out: when true, the current page is NOT grounded into the chat. */
+    activeSourceDismissed: false,
     isSending: false,
     streamingMessage: null,
     error: null,
@@ -136,15 +138,34 @@ export async function addTabAttachment(tab) {
     throw new Error(`You can attach up to ${MAX_TAB_ATTACHMENTS} tabs per message.`)
   }
   const attachment = await tabMentionService.select(tab)
-  if (!chatState.pendingAttachments.some((item) => item.tabId === attachment.tabId)) {
+  // Deduplicate by (tabId, sourceKind) so transcript and comments for the same
+  // tab can coexist as separate attachments.
+  const isDuplicate = chatState.pendingAttachments.some(
+    (item) => item.tabId === attachment.tabId && (item.sourceKind || undefined) === (attachment.sourceKind || undefined)
+  )
+  if (!isDuplicate) {
     chatState.pendingAttachments = [...chatState.pendingAttachments, attachment]
     markChatTabsChanged()
   }
   return attachment
 }
 
-export function removeTabAttachment(tabId) {
-  chatState.pendingAttachments = chatState.pendingAttachments.filter((item) => item.tabId !== tabId)
+export function removeTabAttachment(tabId, sourceKind) {
+  chatState.pendingAttachments = chatState.pendingAttachments.filter(
+    (item) => !(item.tabId === tabId && (sourceKind == null || (item.sourceKind || undefined) === sourceKind))
+  )
+  markChatTabsChanged()
+}
+
+/** Stop grounding the current page into the chat (sticky for this conversation). */
+export function dismissActiveSource() {
+  chatState.activeSourceDismissed = true
+  markChatTabsChanged()
+}
+
+/** Re-enable grounding the current page. */
+export function restoreActiveSource() {
+  chatState.activeSourceDismissed = false
   markChatTabsChanged()
 }
 
@@ -321,6 +342,9 @@ export async function sendChatMessage(content = chatState.composerText) {
     ? $state.snapshot(chatState.selectedSkill)
     : null
   const pendingAttachments = $state.snapshot(chatState.pendingAttachments)
+  // When the user has dismissed the page context, don't ground the active tab.
+  // Explicit @ attachments (if any) are still captured.
+  const sourceRequired = !chatState.activeSourceDismissed
 
   writeSession(targetTabId, {
     error: null,
@@ -337,6 +361,7 @@ export async function sendChatMessage(content = chatState.composerText) {
       content,
       skillInvocation,
       pendingAttachments,
+      sourceRequired,
       settings,
       abortController,
       onUserMessage: (message) => {
