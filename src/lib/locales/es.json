@@ -254,7 +254,7 @@
       "api_key_placeholder": "Introduce tu clave API de Groq",
       "model_label": "Nombre del modelo",
       "get_a_key": "Obtener clave",
-      "model_placeholder": "mixtral-8x7b-32768",
+      "model_placeholder": "llama-3.3-70b-versatile",
       "saved_status": "¡Guardado!",
       "view_models": "Ver modelos"
     },

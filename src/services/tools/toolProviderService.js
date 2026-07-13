@@ -198,12 +198,12 @@ function getDefaultModel(providerId) {
   const defaultModels = {
     gemini: 'gemini-2.5-flash',
     chatgpt: 'gpt-5-mini',
-    groq: 'moonshotai/kimi-k2-instruct',
+    groq: 'llama-3.3-70b-versatile',
     deepseek: 'deepseek-chat',
     openrouter: 'deepseek/deepseek-r1-0528:free',
     ollama: 'deepseek-r1:8b',
     lmstudio: 'lmstudio-community/gemma-2b-it-GGUF',
-    cerebras: 'llama-3.3-70b',
+    cerebras: 'gpt-oss-120b',
   }
   return defaultModels[providerId] || 'gemini-2.5-flash'
 }

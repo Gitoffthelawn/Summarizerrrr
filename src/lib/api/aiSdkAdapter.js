@@ -146,7 +146,7 @@ export function getAISDKModel(providerId, settings) {
         apiKey: settings.groqApiKey,
         baseURL: 'https://api.groq.com/openai/v1',
       })
-      return groq(settings.selectedGroqModel || 'mixtral-8x7b-32768')
+      return groq(settings.selectedGroqModel || 'llama-3.3-70b-versatile')
 
     case 'openrouter':
       const openrouter = createOpenAICompatible({
@@ -196,7 +196,7 @@ export function getAISDKModel(providerId, settings) {
         apiKey: settings.cerebrasApiKey,
         baseURL: 'https://api.cerebras.ai/v1',
       })
-      return cerebras(settings.selectedCerebrasModel || 'llama3.1-8b')
+      return cerebras(settings.selectedCerebrasModel || 'gpt-oss-120b')
 
     default:
       throw new Error(`Unsupported provider: ${providerId}`)
@@ -230,7 +230,7 @@ function isModelWithoutTempSupport(modelName) {
  */
 export function mapGenerationConfig(settings) {
   const config = {
-    maxTokens: 4000, // Default max tokens
+    maxOutputTokens: 4000, // Default max output tokens
   }
   
   // Get the current model name from settings
@@ -449,7 +449,7 @@ export async function generateContentRequest(request) {
         // Use the proxy model's custom generateText method
         console.log('[aiSdkAdapter] Using proxy model for generateContent')
         const result = await model.generateText({
-          system: effectiveSystemInstruction,
+          instructions: effectiveSystemInstruction,
           ...input,
           ...generationConfig,
           ...generationOptions,
@@ -479,7 +479,7 @@ export async function generateContentRequest(request) {
         // Use the standard AI SDK generateText for direct calls - no middleware
         const { text } = await generateText({
           model,
-          system: effectiveSystemInstruction,
+          instructions: effectiveSystemInstruction,
           ...input,
           maxRetries: 0, // Disable AI SDK built-in retry to allow custom fallback to work faster
           ...generationConfig,
@@ -725,7 +725,7 @@ export async function* generateContentStreamRequest(request) {
       if (isProxyModel) {
         // Use proxy model's streamText method directly
         const result = await model.streamText({
-          system: effectiveSystemInstruction,
+          instructions: effectiveSystemInstruction,
           ...input,
           ...generationConfig,
           ...generationOptions,
@@ -766,7 +766,7 @@ export async function* generateContentStreamRequest(request) {
 
         const streamConfig = {
           model,
-          system: effectiveSystemInstruction,
+          instructions: effectiveSystemInstruction,
           ...input,
           ...generationConfig,
           maxRetries: 0, // Disable AI SDK built-in retry to allow custom fallback to work faster
@@ -1027,7 +1027,7 @@ function getDisplayModelName(providerId, settings) {
     case 'chatgpt':
       return settings.selectedChatgptModel || 'gpt-3.5-turbo'
     case 'groq':
-      return settings.selectedGroqModel || 'mixtral-8x7b-32768'
+      return settings.selectedGroqModel || 'llama-3.3-70b-versatile'
     case 'openrouter':
       return settings.selectedOpenrouterModel || 'openrouter/auto'
     case 'deepseek':
@@ -1039,7 +1039,7 @@ function getDisplayModelName(providerId, settings) {
     case 'lmstudio':
       return settings.selectedLmStudioModel || 'lmstudio-community/gemma-2b-it-GGUF'
     case 'cerebras':
-      return settings.selectedCerebrasModel || 'qwen-3-32b'
+      return settings.selectedCerebrasModel || 'gpt-oss-120b'
     default:
       return providerId
   }

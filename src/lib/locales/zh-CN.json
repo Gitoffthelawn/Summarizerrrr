@@ -179,7 +179,7 @@
       "api_key_placeholder": "输入您的 Groq API 密钥",
       "model_label": "模型名称",
       "get_a_key": "获取密钥",
-      "model_placeholder": "mixtral-8x7b-32768",
+      "model_placeholder": "llama-3.3-70b-versatile",
       "saved_status": "已保存!",
       "view_models": "查看模型"
     },

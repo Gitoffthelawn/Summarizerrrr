@@ -1,9 +1,10 @@
 <script>
   // @ts-nocheck
-  import SvelteMarkdown from 'svelte-markdown'
+  import SvelteMarkdown, {
+    buildUnsupportedHTML,
+  } from '@humanspeak/svelte-markdown'
   import TableRenderer from '@/components/displays/ui/TableRenderer.svelte'
   import ChatUserLink from './ChatUserLink.svelte'
-  import ChatUserHtml from './ChatUserHtml.svelte'
   import ChatUserHeading from './ChatUserHeading.svelte'
   import ChatUserHr from './ChatUserHr.svelte'
 
@@ -20,12 +21,14 @@
       return ''
     }
   })
+
+  const htmlRenderers = buildUnsupportedHTML()
 </script>
 
 <div class="prose prose-sm max-w-none text-text-primary wrap-anywhere">
   <SvelteMarkdown
     source={safeSource}
-    renderers={{ table: TableRenderer, link: ChatUserLink, html: ChatUserHtml, heading: ChatUserHeading, hr: ChatUserHr }}
+    renderers={{ table: TableRenderer, link: ChatUserLink, html: htmlRenderers, heading: ChatUserHeading, hr: ChatUserHr }}
   />
 </div>
 

@@ -17,7 +17,7 @@ describe('Ollama proxy model', () => {
   it('accepts legacy prompt requests and new message requests without flattening messages', async () => {
     const model = createOllamaProxyModel({ selectedOllamaModel: 'llama-test' })
 
-    await model.generateText({ system: 'System', prompt: 'Legacy prompt' })
+    await model.generateText({ instructions: 'System', prompt: 'Legacy prompt' })
     expect(mocks.sendMessage).toHaveBeenLastCalledWith(
       expect.objectContaining({
         systemInstruction: 'System',
@@ -30,7 +30,7 @@ describe('Ollama proxy model', () => {
       { role: 'user', content: 'First turn' },
       { role: 'assistant', content: 'Second turn' },
     ]
-    await model.generateText({ system: 'System', messages })
+    await model.generateText({ instructions: 'System', messages })
     expect(mocks.sendMessage).toHaveBeenLastCalledWith(
       expect.objectContaining({
         systemInstruction: 'System',

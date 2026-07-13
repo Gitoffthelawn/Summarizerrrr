@@ -260,7 +260,7 @@
       "api_key_placeholder": "Enter your Groq API key",
       "model_label": "Model Name",
       "get_a_key": "Get a key",
-      "model_placeholder": "mixtral-8x7b-32768",
+      "model_placeholder": "llama-3.3-70b-versatile",
       "saved_status": "Saved!",
       "view_models": "View Models"
     },

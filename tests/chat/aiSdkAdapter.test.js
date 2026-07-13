@@ -102,9 +102,9 @@ describe('AI SDK generation requests', () => {
     expect(mocks.generateText).toHaveBeenCalledWith(
       expect.objectContaining({
         model: directModel,
-        system: 'System',
+        instructions: 'System',
         prompt: 'Prompt',
-        maxTokens: 4000,
+        maxOutputTokens: 4000,
       })
     )
     expect(mocks.generateText.mock.calls[0][0].messages).toBeUndefined()
@@ -125,7 +125,7 @@ describe('AI SDK generation requests', () => {
     })
 
     expect(mocks.generateText).toHaveBeenCalledWith(
-      expect.objectContaining({ messages, system: 'System' })
+      expect.objectContaining({ messages, instructions: 'System' })
     )
     expect(mocks.generateText.mock.calls[0][0].prompt).toBeUndefined()
   })

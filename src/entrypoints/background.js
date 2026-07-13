@@ -261,7 +261,7 @@ class OllamaApiProxyService {
       const { providerOptions, tools, ...proxyGenerationConfig } = requestConfig
       const { text } = await generateText({
         model: baseModel,
-        system: systemInstruction,
+        instructions: systemInstruction,
         ...(messages ? { messages } : { prompt: userPrompt }),
         ...generationConfig,
         ...proxyGenerationConfig,

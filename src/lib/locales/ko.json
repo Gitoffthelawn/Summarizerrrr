@@ -254,7 +254,7 @@
       "api_key_placeholder": "Groq API 키를 입력하세요",
       "model_label": "모델명",
       "get_a_key": "키 얻기",
-      "model_placeholder": "mixtral-8x7b-32768",
+      "model_placeholder": "llama-3.3-70b-versatile",
       "saved_status": "저장됨!",
       "view_models": "모델 보기"
     },

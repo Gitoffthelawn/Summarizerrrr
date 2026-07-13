@@ -254,7 +254,7 @@
       "api_key_placeholder": "Entrez votre clé API Groq",
       "model_label": "Nom du modèle",
       "get_a_key": "Obtenir une clé",
-      "model_placeholder": "mixtral-8x7b-32768",
+      "model_placeholder": "llama-3.3-70b-versatile",
       "saved_status": "Sauvegardé !",
       "view_models": "Voir les modèles"
     },

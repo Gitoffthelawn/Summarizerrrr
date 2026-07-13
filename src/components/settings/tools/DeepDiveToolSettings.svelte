@@ -71,12 +71,12 @@
       gemini: 'gemma-4-26b-a4b-it',
       chatgpt: 'gpt-5-mini',
       deepseek: 'deepseek-chat',
-      groq: 'moonshotai/kimi-k2-instruct',
+      groq: 'llama-3.3-70b-versatile',
       ollama: 'deepseek-r1:8b',
       lmstudio: 'google/gemma-3-12b',
       openrouter: 'google/gemma-4-26b-a4b-it:free',
       openaiCompatible: '',
-      cerebras: 'llama-3.3-70b',
+      cerebras: 'gpt-oss-120b',
     }
 
     updateSettings({

@@ -254,7 +254,7 @@
       "api_key_placeholder": "Groq API-Schlüssel eingeben",
       "model_label": "Modellname",
       "get_a_key": "Schlüssel holen",
-      "model_placeholder": "mixtral-8x7b-32768",
+      "model_placeholder": "llama-3.3-70b-versatile",
       "saved_status": "Gespeichert!",
       "view_models": "Modelle anzeigen"
     },

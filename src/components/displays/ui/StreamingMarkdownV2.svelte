@@ -2,7 +2,7 @@
 <script>
   import 'highlight.js/styles/github-dark.css'
   import hljs from 'highlight.js'
-  import SvelteMarkdown from 'svelte-markdown'
+  import SvelteMarkdown from '@humanspeak/svelte-markdown'
   import { processThinkTags } from '@/lib/utils/thinkTagProcessor.js'
   import { processTimestamps } from '@/lib/utils/timestampProcessor.js'
   import { isRTLLanguage } from '@/lib/utils/rtlUtils.js'
