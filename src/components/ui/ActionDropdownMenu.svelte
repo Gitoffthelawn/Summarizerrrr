@@ -22,12 +22,12 @@
 </script>
 
 <DropdownMenu.Root>
-  <DropdownMenu.Trigger asChild>
-    {#snippet children({ builder })}
+  <DropdownMenu.Trigger>
+    {#snippet child({ props })}
       <button
         class="p-2 hover:text-text-primary relative"
         title={$t('tags.actions')}
-        {...builder}
+        {...props}
       >
         <Icon icon="tabler:dots-vertical" width="20" height="20" />
       </button>

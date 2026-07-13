@@ -15,12 +15,12 @@
 </script>
 
 <Tooltip.Root {delayDuration} {disableHoverableContent}>
-  <Tooltip.Trigger asChild>
-    {#snippet children({ builder })}
-      {@render children?.({ builder })}
+  <Tooltip.Trigger>
+    {#snippet child({ props })}
+      {@render children?.({ builder: props })}
     {/snippet}
   </Tooltip.Trigger>
-  <Tooltip.Content {side} {sideOffset} {customAnchor} forceMount>
+  <Tooltip.Content {side} {align} {sideOffset} {customAnchor} forceMount>
     {#snippet child({ wrapperProps, props, open })}
       {#if open}
         <div {...wrapperProps}>

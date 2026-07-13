@@ -9,7 +9,7 @@
   let { summary, close, onUpdate } = $props()
 
   let allTags = $state([])
-  let selectedTagIds = $state(new Set(summary.tags || []))
+  let selectedTagIds = $state((() => new Set(summary.tags || []))())
 
   async function loadAllTags() {
     const tagsResult = await getAllTags()

@@ -28,12 +28,12 @@
 </script>
 
 <DropdownMenu.Root onOpenChange={loadRecent}>
-  <DropdownMenu.Trigger asChild>
-    {#snippet children({ builder })}
+  <DropdownMenu.Trigger>
+    {#snippet child({ props })}
       <button
         class="p-1.5 hover:text-text-primary relative text-text-secondary"
         aria-label="Conversation menu"
-        {...builder}
+        {...props}
       >
         <Icon icon="tabler:dots-vertical" width="18" height="18" />
       </button>

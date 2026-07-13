@@ -34,7 +34,7 @@
 
   // === State nội bộ ===
   let container = $state()
-  let isStreaming = $state(isLoading) // Khởi tạo dựa trên prop isLoading
+  let isStreaming = $state((() => isLoading)()) // Khởi tạo dựa trên prop isLoading
   let completionTimeout = null
   let hasCalledFinish = false
   let highlightTimeout = null

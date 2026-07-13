@@ -10,7 +10,7 @@
     shouldAutoFocus = false, // NEW: Auto-focus when dialog opens
   } = $props()
 
-  let inputValue = $state(value)
+  let inputValue = $state((() => value)())
   let isFocused = $state(false)
   let showClearButton = $state(false)
   let textareaElement = $state(null)

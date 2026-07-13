@@ -15,7 +15,7 @@
   let editorContainer = $state(null)
   let editor = $state(null)
   let editorError = $state(false)
-  let fallbackText = $state(value)
+  let fallbackText = $state((() => value)())
 
   onMount(() => {
     try {

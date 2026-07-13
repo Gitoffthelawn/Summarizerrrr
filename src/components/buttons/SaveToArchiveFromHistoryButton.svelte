@@ -11,7 +11,9 @@
   import { appStateStorage } from '@/services/wxtStorageService.js'
 
   let { selectedSummary } = $props()
-  let isItemArchived = $state(selectedSummary.isArchived || false)
+  let isItemArchived = $state(
+    (() => selectedSummary.isArchived || false)(),
+  )
   let isProcessing = $state(false)
   loadIcons(['heroicons:archive-box', 'heroicons:archive-box-solid'])
 

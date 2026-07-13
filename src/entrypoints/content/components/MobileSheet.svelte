@@ -35,7 +35,7 @@
   let toastTimeout
 
   // Delayed visibility for animation
-  let delayedVisible = $state(visible)
+  let delayedVisible = $state((() => visible)())
   let visibleTimer
   let safariHackVisible = $state(false)
 

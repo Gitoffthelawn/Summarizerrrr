@@ -5,8 +5,8 @@
   let { href, title, text, children } = $props()
 
   // Check if this is a timestamp link
-  const isTimestamp = href && href.startsWith('timestamp:')
-  const seconds = isTimestamp ? parseInt(href.split(':')[1], 10) : 0
+  let isTimestamp = $derived(href && href.startsWith('timestamp:'))
+  let seconds = $derived(isTimestamp ? parseInt(href.split(':')[1], 10) : 0)
 
   async function handleTimestampClick(e) {
     e.preventDefault()
