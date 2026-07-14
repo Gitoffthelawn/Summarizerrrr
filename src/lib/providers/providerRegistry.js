@@ -1,0 +1,254 @@
+// Canonical provider registry for Summarizerrrr
+
+export const PROVIDER_LIST = [
+  {
+    id: 'gemini',
+    label: 'Google Gemini',
+    description: 'Fast, multimodal AI from Google',
+    iconifyIcon: 'simple-icons:google',
+    adapterId: 'gemini',
+    adapterOverlay: {},
+    apiKeyField: 'geminiApiKey',
+    additionalKeysField: 'geminiAdditionalApiKeys',
+    baseUrlField: null,
+    endpointField: null,
+    legacyModelField: 'selectedGeminiModel',
+    defaultModel: 'gemini-3-flash-preview',
+    requiresKey: true,
+    discoveryId: 'gemini',
+    modelSource: 'discovery',
+    capabilityProviderId: 'gemini',
+    icon: 'gemini',
+  },
+  {
+    id: 'chatgpt',
+    label: 'OpenAI',
+    description: 'GPT models for fast, capable general AI tasks',
+    iconifyIcon: 'simple-icons:openai',
+    adapterId: 'chatgpt',
+    adapterOverlay: {},
+    apiKeyField: 'chatgptApiKey',
+    additionalKeysField: null,
+    baseUrlField: 'chatgptBaseUrl',
+    endpointField: null,
+    legacyModelField: 'selectedChatgptModel',
+    defaultModel: 'gpt-5-mini',
+    requiresKey: true,
+    discoveryId: null,
+    modelSource: 'static',
+    capabilityProviderId: 'chatgpt',
+    icon: 'chatgpt',
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    description: 'Unified gateway to 200+ AI models',
+    iconifyIcon: 'simple-icons:openrouter',
+    adapterId: 'openrouter',
+    adapterOverlay: {},
+    apiKeyField: 'openrouterApiKey',
+    additionalKeysField: null,
+    baseUrlField: null,
+    endpointField: null,
+    legacyModelField: 'selectedOpenrouterModel',
+    defaultModel: 'deepseek/deepseek-r1-0528:free',
+    requiresKey: true,
+    discoveryId: null,
+    modelSource: 'static',
+    capabilityProviderId: 'openrouter',
+    icon: 'openrouter',
+  },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    description: 'Efficient reasoning and coding models',
+    iconifyIcon: 'simple-icons:deepseek',
+    adapterId: 'deepseek',
+    adapterOverlay: {},
+    apiKeyField: 'deepseekApiKey',
+    additionalKeysField: null,
+    baseUrlField: 'deepseekBaseUrl',
+    endpointField: null,
+    legacyModelField: 'selectedDeepseekModel',
+    defaultModel: 'deepseek-chat',
+    requiresKey: true,
+    discoveryId: 'deepseek',
+    modelSource: 'discovery',
+    capabilityProviderId: 'deepseek',
+    icon: 'deepseek',
+  },
+  {
+    id: 'groq',
+    label: 'Groq',
+    description: 'Ultra-fast inference with LPU hardware',
+    iconifyIcon: 'simple-icons:groq',
+    adapterId: 'groq',
+    adapterOverlay: {},
+    apiKeyField: 'groqApiKey',
+    additionalKeysField: null,
+    baseUrlField: null,
+    endpointField: null,
+    legacyModelField: 'selectedGroqModel',
+    defaultModel: 'llama-3.3-70b-versatile',
+    requiresKey: true,
+    discoveryId: 'groq',
+    modelSource: 'discovery',
+    capabilityProviderId: 'groq',
+    icon: 'groq',
+  },
+  {
+    id: 'cerebras',
+    label: 'Cerebras',
+    description: 'High-performance wafer-scale AI inference',
+    iconifyIcon: 'heroicons:cpu-chip-20-solid',
+    adapterId: 'cerebras',
+    adapterOverlay: {},
+    apiKeyField: 'cerebrasApiKey',
+    additionalKeysField: null,
+    baseUrlField: null,
+    endpointField: null,
+    legacyModelField: 'selectedCerebrasModel',
+    defaultModel: 'gpt-oss-120b',
+    requiresKey: true,
+    discoveryId: 'cerebras',
+    modelSource: 'discovery',
+    capabilityProviderId: 'cerebras',
+    icon: 'cerebras',
+  },
+  {
+    id: 'ollama',
+    label: 'Ollama',
+    description: 'Run open-source models locally',
+    iconifyIcon: 'simple-icons:ollama',
+    adapterId: 'ollama',
+    adapterOverlay: {},
+    apiKeyField: null,
+    additionalKeysField: null,
+    baseUrlField: null,
+    endpointField: 'ollamaEndpoint',
+    legacyModelField: 'selectedOllamaModel',
+    defaultModel: 'deepseek-r1:8b',
+    requiresKey: false,
+    discoveryId: null,
+    modelSource: 'freeText',
+    capabilityProviderId: 'ollama',
+    icon: 'ollama',
+  },
+  {
+    id: 'lmstudio',
+    label: 'LM Studio',
+    description: 'Local inference engine for LLMs',
+    iconifyIcon: 'heroicons:computer-desktop-20-solid',
+    adapterId: 'lmstudio',
+    adapterOverlay: {},
+    apiKeyField: null,
+    additionalKeysField: null,
+    baseUrlField: null,
+    endpointField: 'lmStudioEndpoint',
+    legacyModelField: 'selectedLmStudioModel',
+    defaultModel: 'lmstudio-community/gemma-2b-it-GGUF',
+    requiresKey: false,
+    discoveryId: null,
+    modelSource: 'freeText',
+    capabilityProviderId: 'lmstudio',
+    icon: 'lmstudio',
+  },
+  {
+    id: 'openaiCompatible',
+    label: 'OpenAI Compatible',
+    description: 'Any OpenAI-compatible API server',
+    iconifyIcon: 'heroicons:link-20-solid',
+    adapterId: 'openaiCompatible',
+    adapterOverlay: {},
+    apiKeyField: 'openaiCompatibleApiKey',
+    additionalKeysField: null,
+    baseUrlField: 'openaiCompatibleBaseUrl',
+    endpointField: null,
+    legacyModelField: 'selectedOpenAICompatibleModel',
+    defaultModel: '',
+    requiresKey: true,
+    discoveryId: null,
+    modelSource: 'freeText',
+    capabilityProviderId: 'openaiCompatible',
+    icon: 'openaiCompatible',
+  },
+];
+
+export function getProvider(id) {
+  return PROVIDER_LIST.find((p) => p.id === id) || null;
+}
+
+export function normalizeProviderId(id) {
+  if (id === 'openai') return 'chatgpt';
+  if (id === 'geminiAdvanced') return 'gemini';
+  const provider = getProvider(id);
+  return provider ? provider.id : 'gemini';
+}
+
+export function getApiKey(id, settings) {
+  const provider = getProvider(id);
+  if (!provider || !settings) return null;
+  if (provider.apiKeyField) {
+    return settings[provider.apiKeyField] || null;
+  }
+  return null;
+}
+
+export function isProviderConfigured(id, settings) {
+  const provider = getProvider(id);
+  if (!provider || !settings) return false;
+  if (provider.requiresKey === false) {
+    if (provider.endpointField) {
+      const endpoint = settings[provider.endpointField];
+      return typeof endpoint === 'string' && endpoint.trim().length > 0;
+    }
+    return true;
+  }
+  const key = getApiKey(id, settings);
+  return typeof key === 'string' && key.trim().length > 0;
+}
+
+export function listConfiguredProviders(settings) {
+  if (!settings) return [];
+  return PROVIDER_LIST.filter((p) => isProviderConfigured(p.id, settings));
+}
+
+export function getLegacyModel(id, settings) {
+  const provider = getProvider(id);
+  if (!provider || !settings || !provider.legacyModelField) return null;
+  return settings[provider.legacyModelField] || null;
+}
+
+export function getDefaultModel(id) {
+  const provider = getProvider(id);
+  return provider ? provider.defaultModel : null;
+}
+
+export function getModelSource(id) {
+  const provider = getProvider(id);
+  return provider ? provider.modelSource : null;
+}
+
+export function resolveAdapterCall(featureProviderId, modelId, settings) {
+  const provider = getProvider(featureProviderId);
+  if (!provider) {
+    throw new Error(`Unknown provider: ${featureProviderId}`);
+  }
+  const adapterId = provider.adapterId;
+  const overlay = provider.adapterOverlay || {};
+  const legacyModelField = provider.legacyModelField;
+
+  const updatedSettings = {
+    ...settings,
+    ...overlay,
+  };
+
+  if (legacyModelField) {
+    updatedSettings[legacyModelField] = modelId;
+  }
+
+  return {
+    providerId: adapterId,
+    settings: updatedSettings,
+  };
+}

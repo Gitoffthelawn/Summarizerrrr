@@ -12,7 +12,9 @@
   import {
     settings,
     updateSettings,
+    updateFeatureSettings,
   } from '../../stores/settingsStore.svelte.js'
+  import FeatureModelPicker from '../inputs/FeatureModelPicker.svelte'
   import { browser } from 'wxt/browser'
 
   function handleUpdateSetting(key, value) {
@@ -140,6 +142,25 @@
   </div>
 
   <div class="setting-secsion flex flex-col gap-6 px-5">
+    <!-- Summarize Model Picker -->
+    <div class="flex flex-col gap-2">
+      {#if settings.isSummaryAdvancedMode}
+        <FeatureModelPicker
+          bind:provider={settings.summarize.provider}
+          bind:model={settings.summarize.model}
+          onchange={(p, m) => updateFeatureSettings('summarize', { provider: p, model: m })}
+        />
+      {:else}
+        <div class="flex flex-col gap-1.5">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
+          <label class="text-xs text-text-secondary">{$t('settings.feature_model_picker.model_label', { default: 'Model Name' })}</label>
+          <div class="text-xs font-mono text-text-secondary bg-muted/5 dark:bg-muted/5 border border-border px-3 py-2">
+            {$t('settings.summary.uses_gemini_basic', { default: 'Uses Gemini Basic' })}
+          </div>
+        </div>
+      {/if}
+    </div>
+
     <!-- Summary Language Section -->
     <div class="flex flex-col gap-2">
       <!-- svelte-ignore a11y_label_has_associated_control -->

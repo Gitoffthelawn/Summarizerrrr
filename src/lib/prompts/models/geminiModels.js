@@ -6,8 +6,6 @@ export const geminiBasicModels = [
     description: 'A lighter version of 3.1 Flash.',
     generationConfig: {
       maxOutputTokens: 65536,
-      temperature: 0.3,
-      topP: 0.9,
     },
   },
   {
@@ -16,8 +14,6 @@ export const geminiBasicModels = [
     description: 'Latest and fastest.',
     generationConfig: {
       maxOutputTokens: 65536,
-      temperature: 0.3,
-      topP: 0.9,
     },
   },
   {
@@ -26,8 +22,6 @@ export const geminiBasicModels = [
     description: 'Powerful but slow.',
     generationConfig: {
       maxOutputTokens: 65536,
-      temperature: 0.3,
-      topP: 0.9,
     },
   },
   {
@@ -36,8 +30,6 @@ export const geminiBasicModels = [
     description: 'A lighter version of 2.5 Flash.',
     generationConfig: {
       maxOutputTokens: 65536,
-      temperature: 0.3,
-      topP: 0.9,
     },
   },
   {
@@ -46,8 +38,6 @@ export const geminiBasicModels = [
     description: 'Gemma 4 31B instruction-tuned.',
     generationConfig: {
       maxOutputTokens: 65536,
-      temperature: 0.3,
-      topP: 0.9,
     },
   },
   {
@@ -56,8 +46,6 @@ export const geminiBasicModels = [
     description: 'Gemma 4 26B MoE instruction-tuned.',
     generationConfig: {
       maxOutputTokens: 65536,
-      temperature: 0.3,
-      topP: 0.9,
     },
   },
 ]

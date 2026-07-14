@@ -4,7 +4,6 @@ import { settings } from '@/stores/settingsStore.svelte.js'
 // Provider to API key field mapping
 export const providerApiKeyMap = {
   gemini: 'geminiApiKey',
-  'gemini-advanced': 'geminiAdvancedApiKey',
   'openai-compatible': 'openaiCompatibleApiKey',
   openrouter: 'openrouterApiKey',
   deepseek: 'deepseekApiKey',
@@ -16,7 +15,6 @@ export const providerApiKeyMap = {
 // Provider display names for user-friendly messages
 export const providerDisplayNames = {
   gemini: 'Gemini',
-  'gemini-advanced': 'Gemini Advanced',
   'openai-compatible': 'OpenAI Compatible',
   openrouter: 'OpenRouter',
   deepseek: 'DeepSeek',
@@ -34,21 +32,14 @@ export function useApiKeyValidation() {
   // Check if current provider needs API key setup
   const needsApiKeySetup = $derived(() => {
     const rawProvider = settings.selectedProvider
-    const isAdvanced = settings.isAdvancedMode
 
     // Determine the actual provider based on isAdvancedMode (like in api.js)
     let actualProvider = rawProvider
-    if (!isAdvanced) {
+    if (!settings.isAdvancedMode) {
       actualProvider = 'gemini' // Force Gemini in basic mode
     }
 
-    // Special handling for Gemini provider based on advanced mode
-    let keyField
-    if (actualProvider === 'gemini') {
-      keyField = isAdvanced ? 'geminiAdvancedApiKey' : 'geminiApiKey'
-    } else {
-      keyField = providerApiKeyMap[actualProvider]
-    }
+    const keyField = providerApiKeyMap[actualProvider]
 
     // Providers không cần API key (ollama, lmstudio)
     if (!keyField) {
@@ -77,10 +68,7 @@ export function useApiKeyValidation() {
    * @param {boolean} isAdvanced - Whether advanced mode is enabled
    * @returns {string|null} The API key field name or null if not needed
    */
-  const getApiKeyField = (provider, isAdvanced = false) => {
-    if (provider === 'gemini') {
-      return isAdvanced ? 'geminiAdvancedApiKey' : 'geminiApiKey'
-    }
+  const getApiKeyField = (provider) => {
     return providerApiKeyMap[provider] || null
   }
 

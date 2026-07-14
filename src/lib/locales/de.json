@@ -197,7 +197,8 @@
         "override_note": "* Benutzerdefinierte Prompts haben Vorrang vor den Basis-Einstellungen."
       },
       "comment_limit": "YouTube-Kommentar-Limit",
-      "comment_limit_desc": "Maximale Anzahl der zu analysierenden Kommentare."
+      "comment_limit_desc": "Maximale Anzahl der zu analysierenden Kommentare.",
+      "uses_gemini_basic": "Verwendet Gemini Basic"
     },
     "chatgpt_config": {
       "api_key_label": "API-Schlüssel",
@@ -306,8 +307,30 @@
         "generate_new_questions": "Neue Fragen generieren",
         "previous_questions": "Vorherige Fragen",
         "next_questions": "Nächste Fragen",
-        "ask_own_question_in_chat": "Stellen Sie Ihre eigene Frage im Chat"
+        "ask_own_question_in_chat": "Stellen Sie Ihre eigene Frage im Chat",
+        "api_keys_info_restructured": "API-Schlüssel werden global verwaltet. Gehen Sie zum Tab",
+        "api_keys_link_text": "Anbieter & API-Schlüssel",
+        "api_keys_info_restructured_end": "um Anmeldedaten zu konfigurieren."
       }
+    },
+    "feature_model_picker": {
+      "provider_label": "Modell-Anbieter",
+      "model_label": "Modellname",
+      "model_placeholder": "Modell suchen oder auswählen",
+      "unconfigured_suffix": "nicht konfiguriert",
+      "unconfigured_warning": "Dieser Anbieter ist nicht konfiguriert.",
+      "configure_link": "API-Schlüssel konfigurieren",
+      "free_text_placeholder": "Modell-ID eingeben"
+    },
+    "provider_key_config": {
+      "status_configured": "konfiguriert",
+      "status_unconfigured": "nicht konfiguriert",
+      "base_url_label": "Basis-URL",
+      "endpoint_label": "Endpunkt-URL",
+      "api_key_label": "API-Schlüssel",
+      "api_key_placeholder": "API-Schlüssel eingeben",
+      "get_a_key": "API-Schlüssel erhalten",
+      "api_keys_section_title": "API-Schlüssel & Endpunkte"
     }
   },
   "tab_navigation": {

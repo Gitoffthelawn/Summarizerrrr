@@ -120,7 +120,7 @@ describe('provider model discovery', () => {
       )
 
     await expect(
-      fetchProviderModels('geminiAdvanced', 'secret', fetchFn),
+      fetchProviderModels('gemini', 'secret', fetchFn),
     ).resolves.toEqual(['gemini-2.5-flash', 'gemini-2.5-pro'])
     expect(fetchFn).toHaveBeenNthCalledWith(
       1,
@@ -142,7 +142,7 @@ describe('provider model discovery', () => {
   it('uses fallback Gemini models until an API key is available', async () => {
     const fetchFn = vi.fn()
 
-    expect(FALLBACK_PROVIDER_MODELS.geminiAdvanced).toEqual([
+    expect(FALLBACK_PROVIDER_MODELS.gemini).toEqual([
       'gemini-3.5-flash',
       'gemini-3.1-flash-lite',
       'gemini-3.1-pro-preview',
@@ -151,8 +151,8 @@ describe('provider model discovery', () => {
       'gemini-2.5-flash',
       'gemini-2.5-flash-lite',
     ])
-    await expect(fetchProviderModels('geminiAdvanced', '', fetchFn)).resolves.toEqual(
-      FALLBACK_PROVIDER_MODELS.geminiAdvanced,
+    await expect(fetchProviderModels('gemini', '', fetchFn)).resolves.toEqual(
+      FALLBACK_PROVIDER_MODELS.gemini,
     )
     expect(fetchFn).not.toHaveBeenCalled()
   })

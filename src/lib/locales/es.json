@@ -197,7 +197,8 @@
         "override_note": "* Los prompts activos anulan los ajustes básicos."
       },
       "comment_limit": "Límite de comentarios de YouTube",
-      "comment_limit_desc": "Número máximo de comentarios para analizar."
+      "comment_limit_desc": "Número máximo de comentarios para analizar.",
+      "uses_gemini_basic": "Usa Gemini Básico"
     },
     "chatgpt_config": {
       "api_key_label": "Clave API",
@@ -306,8 +307,30 @@
         "generate_new_questions": "Generar nuevas preguntas",
         "previous_questions": "Preguntas anteriores",
         "next_questions": "Siguientes preguntas",
-        "ask_own_question_in_chat": "Haz tu propia pregunta en el chat"
+        "ask_own_question_in_chat": "Haz tu propia pregunta en el chat",
+        "api_keys_info_restructured": "Las claves API se gestionan globalmente. Vaya a la pestaña",
+        "api_keys_link_text": "Proveedores y claves API",
+        "api_keys_info_restructured_end": "para configurar las credenciales."
       }
+    },
+    "feature_model_picker": {
+      "provider_label": "Proveedor de modelos",
+      "model_label": "Nombre del modelo",
+      "model_placeholder": "Buscar o seleccionar modelo",
+      "unconfigured_suffix": "no configurado",
+      "unconfigured_warning": "Este proveedor no está configurado.",
+      "configure_link": "Configurar clave API",
+      "free_text_placeholder": "Introducir ID del modelo"
+    },
+    "provider_key_config": {
+      "status_configured": "configurado",
+      "status_unconfigured": "no configurado",
+      "base_url_label": "URL base",
+      "endpoint_label": "URL de endpoint",
+      "api_key_label": "Clave API",
+      "api_key_placeholder": "Introducir clave API",
+      "get_a_key": "Obtener clave API",
+      "api_keys_section_title": "Claves API y endpoints"
     }
   },
   "tab_navigation": {

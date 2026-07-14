@@ -86,7 +86,7 @@
         "position_left": "Trái",
         "position_right": "Phải"
       },
-       "one_click_mode": "1 Click tóm tắt",
+      "one_click_mode": "1 Click tóm tắt",
       "one_click_disabled_title": "Tắt",
       "one_click_disabled_desc": "Click nút FAB mở hanh bên (mặc dịnh)",
       "one_click_enabled_title": "Bật",
@@ -197,7 +197,8 @@
         "override_note": "* Prompt tùy chỉnh sẽ ghi đè cài đặt mặc định."
       },
       "comment_limit": "Giới hạn bình luận YouTube",
-      "comment_limit_desc": "Số lượng bình luận tối đa để phân tích."
+      "comment_limit_desc": "Số lượng bình luận tối đa để phân tích.",
+      "uses_gemini_basic": "Sử dụng Gemini Cơ bản"
     },
     "chatgpt_config": {
       "api_key_label": "Khóa API",
@@ -312,8 +313,30 @@
         "generate_new_questions": "Tạo câu hỏi mới",
         "previous_questions": "Câu hỏi trước đó",
         "next_questions": "Câu hỏi tiếp theo",
-        "ask_own_question_in_chat": "Đặt câu hỏi của bạn"
+        "ask_own_question_in_chat": "Đặt câu hỏi của bạn",
+        "api_keys_info_restructured": "API Keys được quản lý toàn cục. Đi tới tab",
+        "api_keys_link_text": "Providers & API Keys",
+        "api_keys_info_restructured_end": "để cấu hình thông tin đăng nhập."
       }
+    },
+    "feature_model_picker": {
+      "provider_label": "Nhà cung cấp mô hình",
+      "model_label": "Tên mô hình",
+      "model_placeholder": "Tìm kiếm hoặc chọn mô hình",
+      "unconfigured_suffix": "chưa cấu hình",
+      "unconfigured_warning": "Nhà cung cấp này chưa được cấu hình.",
+      "configure_link": "Cấu hình API Key",
+      "free_text_placeholder": "Nhập ID mô hình"
+    },
+    "provider_key_config": {
+      "status_configured": "đã cấu hình",
+      "status_unconfigured": "chưa cấu hình",
+      "base_url_label": "Base URL",
+      "endpoint_label": "Endpoint URL",
+      "api_key_label": "API Key",
+      "api_key_placeholder": "Nhập API Key",
+      "get_a_key": "Lấy API Key",
+      "api_keys_section_title": "API Keys & Endpoints"
     }
   },
   "tab_navigation": {

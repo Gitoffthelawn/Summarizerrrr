@@ -197,7 +197,8 @@
         "override_note": "* 기본 설정은 활성 사용자 지정 프롬프트로 재정의됩니다."
       },
       "comment_limit": "YouTube 댓글 제한",
-      "comment_limit_desc": "분석할 댓글의 최대 수."
+      "comment_limit_desc": "분석할 댓글의 최대 수.",
+      "uses_gemini_basic": "Gemini Basic 사용"
     },
     "chatgpt_config": {
       "api_key_label": "API 키",
@@ -306,8 +307,30 @@
         "generate_new_questions": "새 질문 생성",
         "previous_questions": "이전 질문",
         "next_questions": "다음 질문",
-        "ask_own_question_in_chat": "채팅에서 자신만의 질문하기"
+        "ask_own_question_in_chat": "채팅에서 자신만의 질문하기",
+        "api_keys_info_restructured": "API 키는 전역으로 관리됩니다. ",
+        "api_keys_link_text": "제공자 및 API 키",
+        "api_keys_info_restructured_end": " 탭에서 자격 증명을 설정하십시오."
       }
+    },
+    "feature_model_picker": {
+      "provider_label": "모델 제공자",
+      "model_label": "모델 이름",
+      "model_placeholder": "모델 검색 또는 선택",
+      "unconfigured_suffix": "미설정",
+      "unconfigured_warning": "이 제공자는 설정되지 않았습니다.",
+      "configure_link": "API 키 설정",
+      "free_text_placeholder": "모델 ID 입력"
+    },
+    "provider_key_config": {
+      "status_configured": "설정됨",
+      "status_unconfigured": "미설정",
+      "base_url_label": "기본 URL",
+      "endpoint_label": "엔드포인트 URL",
+      "api_key_label": "API 키",
+      "api_key_placeholder": "API 키 입력",
+      "get_a_key": "API 키 받기",
+      "api_keys_section_title": "API 키 및 엔드포인트"
     }
   },
   "tab_navigation": {

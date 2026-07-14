@@ -15,12 +15,8 @@ export const VALID_SETTING_KEYS = [
   'geminiApiKey',
   'geminiAdditionalApiKeys',
   'selectedGeminiModel',
-  'geminiAdvancedApiKey',
-  'geminiAdvancedAdditionalApiKeys',
-  'selectedGeminiAdvancedModel',
-  'geminiAdvancedEnableAutoFallback',
+  'geminiEnableAutoFallback',
   'geminiThinkingLevel',
-  'geminiAdvancedThinkingLevel',
   'openaiCompatibleApiKey',
   'openaiCompatibleBaseUrl',
   'selectedOpenAICompatibleModel',
@@ -132,15 +128,109 @@ export const VALID_SETTING_KEYS = [
 
   // Advanced Mode
   'isAdvancedMode',
-  'temperature',
-  'topP',
 
   // Tools Configuration
   'tools',
+  'summarize',
+  'chat',
   
   // Metadata
   'lastModified',
 ]
+
+/**
+ * Migrates legacy geminiAdvanced* settings to unified gemini* settings.
+ * MUST run on raw settings BEFORE sanitizeSettings() strips unknown keys.
+ *
+ * @param {Object} raw - Raw settings object (may contain legacy keys)
+ * @returns {Object} - Settings with legacy keys migrated
+ */
+export function migrateLegacyGeminiAdvanced(raw) {
+  if (!raw || typeof raw !== 'object') return raw
+
+  // Quick-exit: no legacy keys present
+  if (
+    !raw.geminiAdvancedApiKey &&
+    !raw.geminiAdvancedAdditionalApiKeys?.length &&
+    !raw.selectedGeminiAdvancedModel &&
+    !raw.geminiAdvancedThinkingLevel &&
+    raw.geminiAdvancedEnableAutoFallback === undefined &&
+    raw.geminiAdvancedBackupModels === undefined &&
+    raw.summarize?.provider !== 'geminiAdvanced' &&
+    raw.chat?.provider !== 'geminiAdvanced' &&
+    raw.tools?.deepDive?.customProvider !== 'geminiAdvanced'
+  ) {
+    return raw
+  }
+
+  console.log('[settingsSchema] Migrating legacy geminiAdvanced settings...')
+  const s = { ...raw }
+
+  // --- 1. API Key merge+dedupe ---
+  const basicKey = s.geminiApiKey?.trim() || ''
+  const advKey = s.geminiAdvancedApiKey?.trim() || ''
+  const primary = basicKey || advKey
+
+  const basicAdditional = (s.geminiAdditionalApiKeys || []).filter(k => k?.trim())
+  const advAdditional = (s.geminiAdvancedAdditionalApiKeys || []).filter(k => k?.trim())
+  const extra = []
+  if (advKey && advKey !== primary) extra.push(advKey)
+  extra.push(...advAdditional)
+  const allAdditional = [...basicAdditional, ...extra]
+  const uniqueAdditional = [...new Set(allAdditional)].filter(k => k !== primary)
+
+  s.geminiApiKey = primary
+  s.geminiAdditionalApiKeys = uniqueAdditional
+
+  // --- 2. Model: prefer active mode's value ---
+  if (s.selectedGeminiAdvancedModel && !s.selectedGeminiModel) {
+    s.selectedGeminiModel = s.selectedGeminiAdvancedModel
+  } else if (s.isAdvancedMode && s.selectedGeminiAdvancedModel) {
+    s.selectedGeminiModel = s.selectedGeminiAdvancedModel
+  }
+
+  // --- 3. Thinking level: prefer active mode's value ---
+  if (s.geminiAdvancedThinkingLevel && !s.geminiThinkingLevel) {
+    s.geminiThinkingLevel = s.geminiAdvancedThinkingLevel
+  } else if (s.isAdvancedMode && s.geminiAdvancedThinkingLevel) {
+    s.geminiThinkingLevel = s.geminiAdvancedThinkingLevel
+  }
+
+  // --- 4. Auto-fallback toggle ---
+  if (s.geminiAdvancedEnableAutoFallback !== undefined && s.geminiEnableAutoFallback === undefined) {
+    s.geminiEnableAutoFallback = s.geminiAdvancedEnableAutoFallback
+  }
+
+  // --- 5. Rewrite persisted provider IDs ---
+  if (s.summarize?.provider === 'geminiAdvanced') {
+    s.summarize = { ...s.summarize, provider: 'gemini' }
+  }
+  if (s.chat?.provider === 'geminiAdvanced') {
+    s.chat = { ...s.chat, provider: 'gemini' }
+  }
+  if (s.tools?.deepDive?.customProvider === 'geminiAdvanced') {
+    s.tools = { ...s.tools, deepDive: { ...s.tools.deepDive, customProvider: 'gemini' } }
+  }
+  // Rewrite quickModels provider IDs
+  if (Array.isArray(s.chat?.quickModels)) {
+    s.chat = {
+      ...s.chat,
+      quickModels: s.chat.quickModels.map(qm =>
+        qm?.provider === 'geminiAdvanced' ? { ...qm, provider: 'gemini' } : qm
+      ),
+    }
+  }
+
+  // --- 6. Clean up legacy keys ---
+  delete s.geminiAdvancedApiKey
+  delete s.geminiAdvancedAdditionalApiKeys
+  delete s.selectedGeminiAdvancedModel
+  delete s.geminiAdvancedThinkingLevel
+  delete s.geminiAdvancedEnableAutoFallback
+  delete s.geminiAdvancedBackupModels
+
+  return s
+}
 
 /**
  * Sanitizes settings object to only include valid keys
@@ -230,6 +320,6 @@ export const SETTING_CATEGORIES = {
   summary: VALID_SETTING_KEYS.filter(
     (key) => key.startsWith('summary') || key === 'isSummaryAdvancedMode'
   ),
-  advanced: ['isAdvancedMode', 'temperature', 'topP', 'enableStreaming'],
+  advanced: ['isAdvancedMode', 'enableStreaming'],
   tools: ['tools'],
 }

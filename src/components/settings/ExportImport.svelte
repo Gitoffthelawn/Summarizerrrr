@@ -39,7 +39,7 @@
     importFromJsonl,
     parseJsonlWithMeta,
   } from '../../lib/exportImport/jsonlService.js'
-  import { sanitizeSettings } from '../../lib/config/settingsSchema.js'
+  import { sanitizeSettings, migrateLegacyGeminiAdvanced } from '../../lib/config/settingsSchema.js'
 
   import SwitchPermission from '../inputs/SwitchPermission.svelte'
   import ButtonSet from '../buttons/ButtonSet.svelte'
@@ -276,7 +276,7 @@
 
           // New format (Cloud Sync compatible)
           if (parsedSettingsFile.data) {
-            data.settings = sanitizeSettings(parsedSettingsFile.data)
+            data.settings = sanitizeSettings(migrateLegacyGeminiAdvanced(parsedSettingsFile.data))
             if (parsedSettingsFile._backup) {
               data.metadata = parsedSettingsFile._backup
             }
@@ -284,11 +284,11 @@
           // Old format (metadata + settings)
           else if (parsedSettingsFile.metadata && parsedSettingsFile.settings) {
             data.metadata = parsedSettingsFile.metadata
-            data.settings = sanitizeSettings(parsedSettingsFile.settings)
+            data.settings = sanitizeSettings(migrateLegacyGeminiAdvanced(parsedSettingsFile.settings))
           }
           // Legacy format (just settings object)
           else {
-            data.settings = sanitizeSettings(parsedSettingsFile)
+            data.settings = sanitizeSettings(migrateLegacyGeminiAdvanced(parsedSettingsFile))
           }
         } catch (error) {
           console.error(`Failed to parse settings: ${error.message}`)
@@ -525,7 +525,7 @@
   async function performSimpleImport(importedData) {
     // Handle Settings
     if (importedData.settings) {
-      const cleanImportedSettings = sanitizeSettings(importedData.settings)
+      const cleanImportedSettings = sanitizeSettings(migrateLegacyGeminiAdvanced(importedData.settings))
 
       // ✅ MIGRATION: Migrate 'alien' tone to 'witty' on import
       if (cleanImportedSettings.summaryTone === 'alien') {
@@ -535,7 +535,7 @@
 
       if (importOptions.mergeMode === 'replace') {
         // Replace: Overwrite all settings
-        await updateSettings(cleanImportedSettings)
+        await updateSettings(cleanImportedSettings, { isFullIngress: true })
       } else {
         // Merge: Combine settings
         // ✅ FIX: Sanitize current settings trước khi merge để loại bỏ invalid keys
@@ -544,7 +544,7 @@
           ...cleanCurrentSettings,
           ...cleanImportedSettings,
         }
-        await updateSettings(mergedSettings)
+        await updateSettings(mergedSettings, { isFullIngress: true })
       }
 
       // Import sync credentials if present (goes with settings)

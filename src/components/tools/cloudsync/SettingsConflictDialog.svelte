@@ -16,7 +16,6 @@
 
     const apiKeyFields = [
       'geminiApiKey',
-      'geminiAdvancedApiKey',
       'chatgptApiKey',
       'deepseekApiKey',
       'groqApiKey',

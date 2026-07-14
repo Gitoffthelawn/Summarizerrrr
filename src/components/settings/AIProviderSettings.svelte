@@ -5,18 +5,10 @@
   import { t } from 'svelte-i18n'
   import Icon from '@iconify/svelte'
   import ButtonSet from '../buttons/ButtonSet.svelte'
-  import ProvidersSelect from '../inputs/ProvidersSelect.svelte'
   import TextScramble from '../../lib/ui/textScramble.js'
   import GeminiBasicConfig from '../providerConfigs/GeminiBasicConfig.svelte'
-  import GeminiAdvancedConfig from '../providerConfigs/GeminiAdvancedConfig.svelte'
-  import OpenrouterConfig from '../providerConfigs/OpenrouterConfig.svelte'
-  import OllamaConfig from '../providerConfigs/OllamaConfig.svelte'
-  import OpenAICompatibleConfig from '../providerConfigs/OpenAICompatibleConfig.svelte'
-  import ChatGPTConfig from '../providerConfigs/ChatGPTConfig.svelte'
-  import DeepseekConfig from '../providerConfigs/DeepseekConfig.svelte'
-  import LMStudioConfig from '../providerConfigs/LMStudioConfig.svelte'
-  import GroqConfig from '../providerConfigs/GroqConfig.svelte'
-  import CerebrasConfig from '../providerConfigs/CerebrasConfig.svelte'
+  import ProviderKeyConfig from './ProviderKeyConfig.svelte'
+  import { PROVIDER_LIST } from '@/lib/providers/providerRegistry.js'
   import { Label, Switch } from 'bits-ui'
   import {
     settings,
@@ -31,6 +23,12 @@
   function handleAdvancedModeToggle(value) {
     handleUpdateSetting('isAdvancedMode', value)
     handleUpdateSetting('isSummaryAdvancedMode', value)
+  }
+
+  let expandedProviderId = $state(null)
+
+  function toggleProvider(id) {
+    expandedProviderId = expandedProviderId === id ? null : id
   }
 
   let textElement
@@ -92,57 +90,21 @@
   <div class="setting-secsion flex flex-col gap-6 px-5">
     {#if settings.isAdvancedMode}
       <!-- Advanced Mode Content -->
-      <div class="flex flex-col gap-2">
-        <label class="block text-text-secondary"
-          >{$t('settings.ai_model.selected_provider')}</label
+      <div class="flex flex-col gap-4">
+        <label class="block font-bold text-text-primary"
+          >{$t('settings.provider_key_config.api_keys_section_title', { default: 'API Keys & Endpoints' })}</label
         >
-        <ProvidersSelect bind:value={settings.selectedProvider} />
-      </div>
 
-      {#if settings.selectedProvider === 'gemini'}
-        <GeminiAdvancedConfig
-          bind:geminiAdvancedApiKey={settings.geminiAdvancedApiKey}
-          bind:geminiAdvancedAdditionalApiKeys={
-            settings.geminiAdvancedAdditionalApiKeys
-          }
-          bind:selectedGeminiAdvancedModel={
-            settings.selectedGeminiAdvancedModel
-          }
-        />
-      {:else if settings.selectedProvider === 'openrouter'}
-        <OpenrouterConfig
-          bind:openrouterApiKey={settings.openrouterApiKey}
-          bind:selectedOpenrouterModel={settings.selectedOpenrouterModel}
-        />
-      {:else if settings.selectedProvider === 'ollama'}
-        <OllamaConfig />
-      {:else if settings.selectedProvider === 'openaiCompatible'}
-        <OpenAICompatibleConfig
-          bind:openaiCompatibleApiKey={settings.openaiCompatibleApiKey}
-          bind:openaiCompatibleBaseUrl={settings.openaiCompatibleBaseUrl}
-          bind:selectedOpenAICompatibleModel={
-            settings.selectedOpenAICompatibleModel
-          }
-        />
-      {:else if settings.selectedProvider === 'chatgpt'}
-        <ChatGPTConfig
-          bind:chatgptApiKey={settings.chatgptApiKey}
-          bind:chatgptBaseUrl={settings.chatgptBaseUrl}
-          bind:selectedChatgptModel={settings.selectedChatgptModel}
-        />
-      {:else if settings.selectedProvider === 'deepseek'}
-        <DeepseekConfig
-          bind:deepseekApiKey={settings.deepseekApiKey}
-          bind:deepseekBaseUrl={settings.deepseekBaseUrl}
-          bind:selectedDeepseekModel={settings.selectedDeepseekModel}
-        />
-      {:else if settings.selectedProvider === 'lmstudio'}
-        <LMStudioConfig />
-      {:else if settings.selectedProvider === 'groq'}
-        <GroqConfig />
-      {:else if settings.selectedProvider === 'cerebras'}
-        <CerebrasConfig />
-      {/if}
+        <div class="flex flex-col">
+          {#each PROVIDER_LIST as entry (entry.id)}
+            <ProviderKeyConfig
+              {entry}
+              isExpanded={expandedProviderId === entry.id}
+              onToggle={() => toggleProvider(entry.id)}
+            />
+          {/each}
+        </div>
+      </div>
 
       <div class="flex flex-col gap-2">
         <label class="block text-text-secondary"
@@ -174,46 +136,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-4">
-        <div class="flex flex-col gap-2">
-          <label class=" text-text-secondary flex justify-between items-center">
-            <span>{$t('settings.ai_model.temperature')}</span>
-            <span class="text-text-primary font-bold"
-              >{settings.temperature.toFixed(2)}</span
-            >
-          </label>
-          <input
-            type="range"
-            id="temperature-range"
-            min="0"
-            max="1"
-            step="0.05"
-            bind:value={settings.temperature}
-            onchange={() =>
-              handleUpdateSetting('temperature', settings.temperature)}
-            class="range range-primary"
-          />
-        </div>
 
-        <div class="flex flex-col gap-2 relative">
-          <label class=" text-text-secondary flex justify-between items-center">
-            <span>{$t('settings.ai_model.top_p')}</span>
-            <span class="text-text-primary font-bold"
-              >{settings.topP.toFixed(2)}</span
-            >
-          </label>
-          <input
-            type="range"
-            id="topP-range"
-            min="0"
-            max="1"
-            step="0.01"
-            bind:value={settings.topP}
-            onchange={() => handleUpdateSetting('topP', settings.topP)}
-            class="range range-primary"
-          />
-        </div>
-      </div>
     {:else}
       <!-- Basic Mode Content -->
       <div class="setting-block flex gap-5 pb-2 flex-col">

@@ -9,6 +9,13 @@ import {
   generateContentStreamEnhanced as aiSdkGenerateContentStreamEnhanced,
 } from './aiSdkAdapter.js'
 import { getBrowserCompatibility } from '@/lib/utils/browserDetection.js'
+import { resolveFeatureModel } from '@/lib/providers/featureModelResolver.js'
+import {
+  getProvider,
+  normalizeProviderId,
+  isProviderConfigured,
+  resolveAdapterCall,
+} from '@/lib/providers/providerRegistry.js'
 
 /**
  * Checks if the selected provider supports streaming.
@@ -17,24 +24,47 @@ import { getBrowserCompatibility } from '@/lib/utils/browserDetection.js'
  * @returns {boolean} - True if provider supports streaming, false otherwise.
  */
 export function providerSupportsStreaming(selectedProviderId) {
-  // AI SDK 5 supports streaming for all providers
-  const supportedProviders = [
-    'gemini',
-    'openrouter',
-    'ollama',
-    'openaiCompatible',
-    'chatgpt',
-    'deepseek',
-  ]
-
-  // Check if provider is supported
-  const isProviderSupported = supportedProviders.includes(selectedProviderId)
+  const normalizedId = normalizeProviderId(selectedProviderId)
+  const provider = getProvider(normalizedId)
+  const isProviderSupported = !!provider
 
   // Check browser compatibility
   const browserCompatibility = getBrowserCompatibility()
 
   // Return true only if both provider and browser support streaming
   return isProviderSupported && browserCompatibility.supportsAdvancedStreaming
+}
+
+/**
+ * Resolves the provider and settings for summarization.
+ * @param {object} userSettings - The current settings object
+ * @returns {{ providerId: string, settings: object }} Resolved adapter provider ID and settings.
+ * @throws {Error} If API key is not configured
+ */
+export function resolveSummarizeProvider(userSettings) {
+  const { providerId, modelId } = resolveFeatureModel('summarize', userSettings)
+
+  const provider = getProvider(providerId)
+  if (!provider) {
+    throw new Error(`Unknown provider: ${providerId}`)
+  }
+
+  // Special check for additional API keys (like in gemini provider)
+  let isConfigured = isProviderConfigured(providerId, userSettings)
+  if (!isConfigured && provider.additionalKeysField) {
+    const additionalKeys = userSettings[provider.additionalKeysField]
+    if (Array.isArray(additionalKeys) && additionalKeys.some((k) => k && k.trim() !== '')) {
+      isConfigured = true
+    }
+  }
+
+  if (!isConfigured) {
+    throw new Error(
+      `${provider.label} API key is not configured. Click the settings icon on the right to add your API key.`
+    )
+  }
+
+  return resolveAdapterCall(providerId, modelId, userSettings)
 }
 
 /**
@@ -49,16 +79,7 @@ function validateApiKey(userSettings, selectedProviderId) {
 
   switch (selectedProviderId) {
     case 'gemini':
-      if (userSettings.isAdvancedMode) {
-        // Check if there are any valid keys in the additional array for Advanced mode
-        const hasAdvancedAdditionalKeys =
-          userSettings.geminiAdvancedAdditionalApiKeys?.some((k) => k && k.trim() !== '')
-        
-        // Valid if main key exists OR additional keys exist
-        const hasAdvancedMainKey = userSettings.geminiAdvancedApiKey && userSettings.geminiAdvancedApiKey.trim() !== ''
-        
-        apiKey = (hasAdvancedMainKey || hasAdvancedAdditionalKeys) ? 'valid' : ''
-      } else {
+      {
         // Check if there are any valid keys in the additional array
         const hasAdditionalKeys =
           userSettings.geminiAdditionalApiKeys?.some((k) => k && k.trim() !== '')
@@ -115,14 +136,7 @@ export async function summarizeContent(text, contentType, abortSignal = null) {
   await loadSettings()
 
   const userSettings = settings
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
-
-  // Validate API key
-  validateApiKey(userSettings, selectedProviderId)
+  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
 
   let systemInstruction, userPrompt
 
@@ -189,8 +203,8 @@ export async function summarizeContent(text, contentType, abortSignal = null) {
   try {
     // Use AI SDK adapter for unified content generation
     return await aiSdkGenerateContent(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
       userPrompt,
       { abortSignal }
@@ -206,14 +220,7 @@ export async function* summarizeContentStream(text, contentType, abortSignal = n
   await loadSettings()
 
   const userSettings = settings
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
-
-  // Validate API key
-  validateApiKey(userSettings, selectedProviderId)
+  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
 
   // Check browser compatibility for streaming
   const browserCompatibility = getBrowserCompatibility()
@@ -303,8 +310,8 @@ export async function* summarizeContentStream(text, contentType, abortSignal = n
   try {
     // Use AI SDK adapter for unified streaming với smoothing
     const streamGenerator = aiSdkGenerateContentStream(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
       userPrompt,
       {
@@ -344,14 +351,7 @@ export async function enhancePrompt(userPrompt) {
   await loadSettings()
 
   const userSettings = settings
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
-
-  // Validate API key
-  validateApiKey(userSettings, selectedProviderId)
+  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
 
   const contentConfig = promptBuilders['promptEnhance']
 
@@ -367,8 +367,8 @@ export async function enhancePrompt(userPrompt) {
   try {
     // Use AI SDK adapter for unified content generation
     return await aiSdkGenerateContent(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
       enhancedPrompt
     )
@@ -388,14 +388,7 @@ export async function summarizeChapters(timestampedTranscript, abortSignal = nul
   await loadSettings()
 
   const userSettings = settings
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
-
-  // Validate API key
-  validateApiKey(userSettings, selectedProviderId)
+  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
 
   const chapterConfig = promptBuilders['chapter']
 
@@ -413,8 +406,8 @@ export async function summarizeChapters(timestampedTranscript, abortSignal = nul
   try {
     // Use AI SDK adapter for unified content generation
     return await aiSdkGenerateContent(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
       userPrompt,
       { abortSignal }
@@ -430,14 +423,7 @@ export async function* summarizeChaptersStream(timestampedTranscript, abortSigna
   await loadSettings()
 
   const userSettings = settings
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
-
-  // Validate API key
-  validateApiKey(userSettings, selectedProviderId)
+  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
 
   // Check browser compatibility for streaming
   const browserCompatibility = getBrowserCompatibility()
@@ -463,8 +449,8 @@ export async function* summarizeChaptersStream(timestampedTranscript, abortSigna
   try {
     // Use AI SDK adapter for unified streaming với smoothing
     const streamGenerator = aiSdkGenerateContentStream(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
       userPrompt,
       {
@@ -506,12 +492,7 @@ export async function* summarizeContentStreamEnhanced(text, contentType) {
   await loadSettings()
 
   const userSettings = settings
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini'
-  }
-
-  validateApiKey(userSettings, selectedProviderId)
+  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
 
   // Check browser compatibility for streaming
   const browserCompatibility = getBrowserCompatibility()
@@ -600,8 +581,8 @@ export async function* summarizeContentStreamEnhanced(text, contentType) {
 
   try {
     const streamGenerator = aiSdkGenerateContentStreamEnhanced(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
       userPrompt,
       { useSmoothing: browserCompatibility.streamingOptions.useSmoothing }

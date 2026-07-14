@@ -17,6 +17,7 @@
     ariaLabel,
     modelInfoHref = '',
     modelInfoText = '',
+    allowCustomValue = true,
     onModelChange = () => {},
   } = $props()
 
@@ -100,6 +101,7 @@
     {placeholder}
     id={inputId}
     {ariaLabel}
+    {allowCustomValue}
     onValueChangeCallback={onModelChange}
   />
 </div>

@@ -162,8 +162,7 @@ export function getNextFallbackModel(currentModel) {
  * @returns {string|null} Next model to try, or null if no more fallbacks
  */
 export function getNextAdvancedFallbackModel(currentModel, settings) {
-  // Check if auto-fallback is enabled
-  if (!settings?.geminiAdvancedEnableAutoFallback) {
+  if (!settings?.geminiEnableAutoFallback) {
     return null
   }
 
@@ -210,13 +209,8 @@ export function shouldEnableAutoFallback(providerId, settings) {
     return false
   }
 
-  // For Advanced mode: check if auto-fallback toggle is enabled
-  if (settings.isAdvancedMode) {
-    return settings.geminiAdvancedEnableAutoFallback === true
-  }
-
-  // Basic mode always has auto-fallback enabled
-  return true
+  // Check if auto-fallback toggle is enabled
+  return settings.geminiEnableAutoFallback === true
 }
 
 /**
@@ -225,7 +219,5 @@ export function shouldEnableAutoFallback(providerId, settings) {
  * @returns {string} Current model name
  */
 export function getCurrentGeminiModel(settings) {
-  return settings.isAdvancedMode
-    ? settings.selectedGeminiAdvancedModel || 'gemini-3-flash-preview'
-    : settings.selectedGeminiModel || 'gemini-3-flash-preview'
+  return settings.selectedGeminiModel || 'gemini-3-flash-preview'
 }

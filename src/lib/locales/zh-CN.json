@@ -122,7 +122,8 @@
         "override_note": "* 激活的提示将覆盖基础设置。"
       },
       "comment_limit": "YouTube评论限制",
-      "comment_limit_desc": "分析评论的最大数量。"
+      "comment_limit_desc": "分析评论的最大数量。",
+      "uses_gemini_basic": "使用 Gemini 基础版"
     },
     "chatgpt_config": {
       "api_key_label": "API 密钥",
@@ -306,8 +307,30 @@
         "generate_new_questions": "生成新问题",
         "previous_questions": "上一个问题",
         "next_questions": "下一个问题",
-        "ask_own_question_in_chat": "在聊天中提出自己的问题"
+        "ask_own_question_in_chat": "在聊天中提出自己的问题",
+        "api_keys_info_restructured": "API 密钥为全局管理。请前往",
+        "api_keys_link_text": "服务商与 API 密钥",
+        "api_keys_info_restructured_end": "选项卡配置凭据。"
       }
+    },
+    "feature_model_picker": {
+      "provider_label": "模型商",
+      "model_label": "模型名称",
+      "model_placeholder": "搜索或选择模型",
+      "unconfigured_suffix": "未配置",
+      "unconfigured_warning": "该供应商未配置。",
+      "configure_link": "配置 API Key",
+      "free_text_placeholder": "输入模型 ID"
+    },
+    "provider_key_config": {
+      "status_configured": "已配置",
+      "status_unconfigured": "未配置",
+      "base_url_label": "基础 URL",
+      "endpoint_label": "端点 URL",
+      "api_key_label": "API 密钥",
+      "api_key_placeholder": "输入 API 密钥",
+      "get_a_key": "获取 API 密钥",
+      "api_keys_section_title": "API 密钥与端点"
     }
   },
   "tab_navigation": {

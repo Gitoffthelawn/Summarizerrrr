@@ -38,33 +38,7 @@ let currentKeyIndex = 0
  * @returns {string} The selected API key
  */
 function getGeminiApiKey(settings) {
-  if (settings.isAdvancedMode) {
-    // Combine main key and additional keys for Advanced mode
-    const allKeys = [
-      settings.geminiAdvancedApiKey,
-      ...(settings.geminiAdvancedAdditionalApiKeys || [])
-    ]
-    
-    // Filter out empty keys
-    const validKeys = allKeys.filter((k) => k && k.trim() !== '')
-
-    if (validKeys.length === 0) {
-      return settings.geminiAdvancedApiKey // Fallback even if empty
-    }
-
-    // Use round-robin selection
-    const key = validKeys[currentKeyIndex % validKeys.length]
-    console.log(
-      `[aiSdkAdapter] 🔑 Using Gemini Advanced Key Index ${currentKeyIndex % validKeys.length} (Total: ${validKeys.length})`
-    )
-    
-    // Increment index for next call
-    currentKeyIndex++
-    
-    return key
-  }
-
-  // Combine main key and additional keys for Basic mode
+  // Combine main key and additional keys (unified for both modes)
   const allKeys = [
     settings.geminiApiKey,
     ...(settings.geminiAdditionalApiKeys || [])
@@ -104,11 +78,8 @@ export function getAISDKModel(providerId, settings) {
   switch (providerId) {
     case 'gemini':
       // Use sequential rotation for keys or specific key if provided
-      // getGeminiApiKey handles both Advanced and Basic mode
       const geminiApiKey = settings.specificApiKey || getGeminiApiKey(settings)
-      const geminiModel = settings.isAdvancedMode
-        ? settings.selectedGeminiAdvancedModel || 'gemini-3-flash-preview'
-        : settings.selectedGeminiModel || 'gemini-3-flash-preview'
+      const geminiModel = settings.selectedGeminiModel || 'gemini-3-flash-preview'
 
       if (!geminiApiKey || geminiApiKey.trim() === '') {
         throw new Error(
@@ -208,58 +179,13 @@ export function getAISDKModel(providerId, settings) {
 }
 
 /**
- * Checks if a model doesn't support temperature/topP parameters
- * GPT-5.x and other newer OpenAI models only support default values (1.0)
- * @param {string} modelName - The model name to check
- * @returns {boolean} True if the model doesn't support temperature/topP
- */
-function isModelWithoutTempSupport(modelName) {
-  if (!modelName) return false
-  const lowerModel = modelName.toLowerCase()
-  // GPT-5.x models don't support temperature/topP (only default value 1.0)
-  // Add more patterns here as needed for future models
-  return lowerModel.startsWith('gpt-5') || 
-         lowerModel.includes('gpt-5') ||
-         lowerModel.startsWith('o1') ||
-         lowerModel.startsWith('o3') ||
-         lowerModel.startsWith('o4')
-}
-
-/**
  * Maps user settings to AI SDK generation configuration
  * @param {object} settings - User settings object
- * @param {object} advancedModeSettings - Advanced mode settings
- * @param {object} basicModeSettings - Basic mode settings
  * @returns {object} Generation configuration for AI SDK
  */
 export function mapGenerationConfig(settings) {
   const config = {
     maxOutputTokens: 4000, // Default max output tokens
-  }
-  
-  // Get the current model name from settings
-  const modelName = settings.selectedChatgptModel || 
-                    settings.selectedOpenAICompatibleModel ||
-                    settings.selectedGeminiModel ||
-                    ''
-  
-  // Only add temperature/topP if the model supports them
-  // GPT-5.x and similar models only support default value (1.0)
-  // If value is 1.0 (default), we can safely omit these parameters
-  const skipTempParams = isModelWithoutTempSupport(modelName)
-  
-  if (!skipTempParams) {
-    // Only include temperature if it's not the default (1.0) or if explicitly set
-    if (settings.temperature !== undefined && settings.temperature !== 1.0) {
-      config.temperature = settings.temperature
-    }
-    
-    // Only include topP if it's not the default (1.0) or if explicitly set
-    if (settings.topP !== undefined && settings.topP !== 1.0) {
-      config.topP = settings.topP
-    }
-  } else {
-    console.log(`[aiSdkAdapter] Skipping temperature/topP for model: ${modelName} (not supported)`)
   }
   
   return config
@@ -391,15 +317,10 @@ export async function generateContentRequest(request) {
       // Create settings with current model & key
       // If apiKeyRetryEnabled (Gemini Basic or Advanced), explicit key management is needed
       if (apiKeyRetryEnabled && !currentApiKey) {
-           const allKeys = settings.isAdvancedMode 
-             ? [
-                 settings.geminiAdvancedApiKey,
-                 ...(settings.geminiAdvancedAdditionalApiKeys || [])
-               ]
-             : [
-                 settings.geminiApiKey,
-                 ...(settings.geminiAdditionalApiKeys || [])
-               ]
+           const allKeys = [
+               settings.geminiApiKey,
+               ...(settings.geminiAdditionalApiKeys || [])
+             ]
            const validKeys = allKeys.filter(k => k && k.trim() !== '')
            
            if (validKeys.length > 0) {
@@ -410,11 +331,7 @@ export async function generateContentRequest(request) {
 
       const currentSettings = {
         ...settings,
-        ...(autoFallbackEnabled ? (
-          settings.isAdvancedMode 
-            ? { selectedGeminiAdvancedModel: currentModel }
-            : { selectedGeminiModel: currentModel }
-        ) : {}),
+        ...(autoFallbackEnabled ? { selectedGeminiModel: currentModel } : {}),
         ...(currentApiKey ? { specificApiKey: currentApiKey } : {})
       }
 
@@ -467,9 +384,7 @@ export async function generateContentRequest(request) {
       } else {
         // Build thinking providerOptions from user settings (Gemini-only)
         // Caller-provided providerOptions (e.g. DeepDive) take precedence
-        const thinkingLevel = currentSettings.isAdvancedMode
-          ? (currentSettings.geminiAdvancedThinkingLevel || 'high')
-          : (currentSettings.geminiThinkingLevel || 'high')
+        const thinkingLevel = currentSettings.geminiThinkingLevel || 'high'
         const thinkingProviderOptions =
           providerId === 'gemini'
             ? buildThinkingProviderOptions(modelName, thinkingLevel)
@@ -530,12 +445,7 @@ export async function generateContentRequest(request) {
          failedKeys.add(currentApiKey)
          
          // Find a key that hasn't failed yet
-         const allKeys = settings.isAdvancedMode
-           ? [
-               settings.geminiAdvancedApiKey,
-               ...(settings.geminiAdvancedAdditionalApiKeys || [])
-             ]
-           : [
+         const allKeys = [
                settings.geminiApiKey,
                ...(settings.geminiAdditionalApiKeys || [])
              ]
@@ -557,10 +467,8 @@ export async function generateContentRequest(request) {
       // 2. Check for Overload Error (503) OR (All keys failed quota) -> Try different MODEL
       if (autoFallbackEnabled) {
           if (isOverloadError(error) || (isQuotaError(error) && failedKeys.size >= ([settings.geminiApiKey, ...(settings.geminiAdditionalApiKeys||[])].filter(k => k && k.trim() !== '').length || 1))) {
-               // Use appropriate fallback function based on mode
-               const nextModel = settings.isAdvancedMode
-                 ? getNextAdvancedFallbackModel(currentModel, settings)
-                 : getNextFallbackModel(currentModel)
+               const nextModel = getNextAdvancedFallbackModel(currentModel, settings)
+                  || getNextFallbackModel(currentModel)
 
                 if (nextModel) {
                   console.log(
@@ -667,15 +575,10 @@ export async function* generateContentStreamRequest(request) {
       // Create settings with current model & key
       // If apiKeyRetryEnabled (Gemini Basic or Advanced), explicit key management is needed
       if (apiKeyRetryEnabled && !currentApiKey) {
-           const allKeys = settings.isAdvancedMode 
-             ? [
-                 settings.geminiAdvancedApiKey,
-                 ...(settings.geminiAdvancedAdditionalApiKeys || [])
-               ]
-             : [
-                 settings.geminiApiKey,
-                 ...(settings.geminiAdditionalApiKeys || [])
-               ]
+           const allKeys = [
+               settings.geminiApiKey,
+               ...(settings.geminiAdditionalApiKeys || [])
+             ]
            const validKeys = allKeys.filter(k => k && k.trim() !== '')
            
            if (validKeys.length > 0) {
@@ -686,11 +589,7 @@ export async function* generateContentStreamRequest(request) {
 
       const currentSettings = {
         ...settings,
-        ...(autoFallbackEnabled ? (
-          settings.isAdvancedMode 
-            ? { selectedGeminiAdvancedModel: currentModel }
-            : { selectedGeminiModel: currentModel }
-        ) : {}),
+        ...(autoFallbackEnabled ? { selectedGeminiModel: currentModel } : {}),
         ...(currentApiKey ? { specificApiKey: currentApiKey } : {})
       }
 
@@ -756,9 +655,7 @@ export async function* generateContentStreamRequest(request) {
           useSmoothing !== false
 
         // Build thinking providerOptions from user settings (Gemini-only)
-        const thinkingLevel = currentSettings.isAdvancedMode
-          ? (currentSettings.geminiAdvancedThinkingLevel || 'high')
-          : (currentSettings.geminiThinkingLevel || 'high')
+        const thinkingLevel = currentSettings.geminiThinkingLevel || 'high'
         const thinkingProviderOptions =
           providerId === 'gemini'
             ? buildThinkingProviderOptions(modelName, thinkingLevel)
@@ -852,12 +749,7 @@ export async function* generateContentStreamRequest(request) {
          failedKeys.add(currentApiKey)
          
          // Find a key that hasn't failed yet
-         const allKeys = settings.isAdvancedMode
-           ? [
-               settings.geminiAdvancedApiKey,
-               ...(settings.geminiAdvancedAdditionalApiKeys || [])
-             ]
-           : [
+         const allKeys = [
                settings.geminiApiKey,
                ...(settings.geminiAdditionalApiKeys || [])
              ]
@@ -879,10 +771,8 @@ export async function* generateContentStreamRequest(request) {
       // 2. Check for Overload Error (503) OR (All keys failed quota) -> Try different MODEL
       if (autoFallbackEnabled) {
           if (isOverloadError(error) || (isQuotaError(error) && failedKeys.size >= ([settings.geminiApiKey, ...(settings.geminiAdditionalApiKeys||[])].filter(k => k && k.trim() !== '').length || 1))) {
-                // Use appropriate fallback function based on mode
-                const nextModel = settings.isAdvancedMode
-                  ? getNextAdvancedFallbackModel(currentModel, settings)
-                  : getNextFallbackModel(currentModel)
+                const nextModel = getNextAdvancedFallbackModel(currentModel, settings)
+                  || getNextFallbackModel(currentModel)
         
                 if (nextModel) {
                   console.log(

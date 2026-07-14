@@ -2,7 +2,8 @@
 import { get } from 'svelte/store'
 import { locale } from 'svelte-i18n'
 import { settingsStorage } from '@/services/wxtStorageService.js'
-import { sanitizeSettings } from '@/lib/config/settingsSchema.js'
+import { sanitizeSettings, migrateLegacyGeminiAdvanced } from '@/lib/config/settingsSchema.js'
+import { normalizeProviderId, getLegacyModel, getProvider, getDefaultModel } from '@/lib/providers/providerRegistry.js'
 
 // --- Default Settings (Merged) ---
 const DEFAULT_SETTINGS = {
@@ -16,12 +17,8 @@ const DEFAULT_SETTINGS = {
   geminiApiKey: '',
   geminiAdditionalApiKeys: [], // New storage for extra keys
   selectedGeminiModel: 'gemini-3-flash-preview',
-  geminiAdvancedApiKey: '',
-  geminiAdvancedAdditionalApiKeys: [], // Additional API keys for Gemini Advanced mode
-  selectedGeminiAdvancedModel: 'gemini-3-flash-preview',
-  geminiAdvancedEnableAutoFallback: true, // Enable auto-fallback for Advanced mode
-  geminiThinkingLevel: 'minimal', // 'minimal' | 'medium' | 'high' — for Basic mode
-  geminiAdvancedThinkingLevel: 'minimal', // 'minimal' | 'medium' | 'high' — for Advanced mode
+  geminiEnableAutoFallback: true, // Enable auto-fallback for both modes
+  geminiThinkingLevel: 'minimal', // 'minimal' | 'medium' | 'high'
   openaiCompatibleApiKey: '',
   openaiCompatibleBaseUrl: '',
   selectedOpenAICompatibleModel: '',
@@ -133,8 +130,6 @@ const DEFAULT_SETTINGS = {
 
   // Advanced Mode (from former stores)
   isAdvancedMode: false,
-  temperature: 0.7,
-  topP: 0.9,
 
   // Tools Configuration
   tools: {
@@ -149,6 +144,16 @@ const DEFAULT_SETTINGS = {
     cloudSync: {
       enabled: true, // Default enabled for backward compatibility
     },
+  },
+  summarize: {
+    provider: 'gemini',
+    model: 'gemini-3-flash-preview',
+  },
+  chat: {
+    provider: 'gemini',
+    model: 'gemini-3-flash-preview',
+    defaultReasoningLevel: 'provider-default',
+    quickModels: [],
   },
 
   // Metadata
@@ -274,6 +279,147 @@ function normalizeFabWhitelist(whitelist) {
   return ['youtube.com', 'coursera.org', 'udemy.com']
 }
 
+/**
+ * Migrates feature model settings if they are absent.
+ * If the incoming payload is full and missing `summarize`, it treats it as legacy data
+ * and derives the blocks from legacy keys.
+ *
+ * @param {Object} cleanStoredSettings - Clean settings object
+ * @param {boolean} isSummarizeAbsent - Whether the summarize block was absent before default-merging
+ * @param {boolean} isChatAbsent - Whether the chat block was absent before default-merging
+ * @returns {Object} - Migrated settings object
+ */
+function migrateFeatureModelSettings(cleanStoredSettings, isSummarizeAbsent, isChatAbsent) {
+  const settings = cleanStoredSettings
+
+  // If summarize block is absent, derive it from legacy keys
+  if (isSummarizeAbsent) {
+    let provider = 'gemini'
+    let model = settings.selectedGeminiModel || 'gemini-3-flash-preview'
+
+    if (settings.isAdvancedMode === true) {
+      if (settings.selectedProvider === 'gemini') {
+        provider = 'gemini'
+        model = settings.selectedGeminiModel || 'gemini-3-flash-preview'
+      } else {
+        provider = normalizeProviderId(settings.selectedProvider)
+        model = getLegacyModel(provider, settings) || getDefaultModel(provider) || 'gemini-3-flash-preview'
+      }
+    }
+
+    settings.summarize = {
+      provider,
+      model,
+    }
+    console.log('[settingsStore] Migration: Derived summarize block:', settings.summarize)
+  }
+
+  // If chat block is absent, derive it from the same logic (chat follows the global provider today)
+  if (isChatAbsent) {
+    let provider = 'gemini'
+    let model = settings.selectedGeminiModel || 'gemini-3-flash-preview'
+
+    if (settings.isAdvancedMode === true) {
+      if (settings.selectedProvider === 'gemini') {
+        provider = 'gemini'
+        model = settings.selectedGeminiModel || 'gemini-3-flash-preview'
+      } else {
+        provider = normalizeProviderId(settings.selectedProvider)
+        model = getLegacyModel(provider, settings) || getDefaultModel(provider) || 'gemini-3-flash-preview'
+      }
+    }
+
+    settings.chat = {
+      provider,
+      model,
+      defaultReasoningLevel: 'provider-default',
+      quickModels: [],
+    }
+    console.log('[settingsStore] Migration: Derived chat block:', settings.chat)
+  }
+
+  return settings
+}
+
+/**
+ * Normalizes and migrates raw settings objects entering the extension.
+ * Routes every full-object ingress path.
+ *
+ * @param {Object} rawSettings - Raw settings object
+ * @returns {Object} - Normalized and migrated settings object
+ */
+export function normalizeStoredSettings(rawSettings) {
+  if (!rawSettings || typeof rawSettings !== 'object') {
+    return { ...DEFAULT_SETTINGS }
+  }
+
+  // 0. Migrate legacy geminiAdvanced keys BEFORE sanitize strips them
+  const migratedSettings = migrateLegacyGeminiAdvanced(rawSettings)
+
+  // 1. Sanitize the settings object
+  let cleanSettings = sanitizeSettings(migratedSettings)
+
+  // 2. Determine if the summarize or chat blocks are absent *before* deep-merging defaults
+  const isSummarizeAbsent = cleanSettings.summarize === undefined
+  const isChatAbsent = cleanSettings.chat === undefined
+
+  // 3. Deep-merge of the summarize and chat blocks with defaults
+  if (!isSummarizeAbsent) {
+    cleanSettings.summarize = {
+      ...DEFAULT_SETTINGS.summarize,
+      ...cleanSettings.summarize,
+    }
+  }
+  if (!isChatAbsent) {
+    cleanSettings.chat = {
+      ...DEFAULT_SETTINGS.chat,
+      ...cleanSettings.chat,
+    }
+  }
+
+  // 4. Migrate feature model settings
+  cleanSettings = migrateFeatureModelSettings(cleanSettings, isSummarizeAbsent, isChatAbsent)
+
+  return cleanSettings
+}
+
+/**
+ * Applies mirrors from summarize settings block changes to legacy keys.
+ *
+ * @param {Object} patch - The settings patch to apply
+ * @returns {Object} - The extended patch containing mirrored values
+ */
+export function applyFeatureModelMirrors(patch) {
+  if (!patch || !patch.summarize) {
+    return patch
+  }
+
+  const { provider: providerId, model } = patch.summarize
+  const provider = getProvider(providerId)
+
+  if (provider) {
+    // Determine adapterId and legacyModelField
+    const adapterId = provider.adapterId
+    const legacyModelField = provider.legacyModelField
+
+    // Apply mirroring rules
+    if (providerId === 'gemini') {
+      patch.selectedProvider = 'gemini'
+      // leave isAdvancedMode untouched
+    } else {
+      patch.selectedProvider = adapterId
+      patch.isAdvancedMode = true
+      patch.isSummaryAdvancedMode = true
+    }
+
+    if (legacyModelField) {
+      patch[legacyModelField] = model
+    }
+  }
+
+  return patch
+}
+
 // --- Actions ---
 
 /**
@@ -301,8 +447,8 @@ export async function loadSettings() {
           }
         })
 
-        // ✅ MIGRATION: Sanitize to ensure only valid keys remain
-        const cleanStoredSettings = sanitizeSettings(storedSettings)
+        // ✅ MIGRATION: Normalize stored settings (including sanitize, merge, and feature block migration)
+        const cleanStoredSettings = normalizeStoredSettings(storedSettings)
 
         // ✅ MIGRATION: Migrate deprecated Gemini model names
         migrateDeprecatedGeminiModels(cleanStoredSettings)
@@ -484,14 +630,23 @@ export async function forceReloadSettings() {
  * Updates one or more settings and saves the entire settings object to storage.
  * @param {Partial<typeof DEFAULT_SETTINGS>} newSettings
  */
-export async function updateSettings(newSettings) {
+export async function updateSettings(newSettings, options = {}) {
   if (!_isInitializedPromise) {
     await loadSettings() // Ensure store is loaded before updating
   }
   await _isInitializedPromise
 
-  // ✅ FIX: Sanitize input để loại bỏ invalid keys (metadata, theme, nested settings)
-  const cleanNewSettings = sanitizeSettings(newSettings)
+  // Apply feature model mirrors if patch contains summarize
+  if (newSettings && newSettings.summarize) {
+    newSettings = applyFeatureModelMirrors(newSettings)
+  }
+
+  const isFullIngress = options.isFullIngress === true
+
+  // ✅ FIX: Sanitize input hoặc normalizeStoredSettings nếu là full ingress
+  const cleanNewSettings = isFullIngress
+    ? normalizeStoredSettings(newSettings)
+    : sanitizeSettings(newSettings)
 
   // Read current values from storage to compare (settings object may already be mutated by bind:value)
   const storedSettings = await settingsStorage.getValue()
@@ -563,7 +718,7 @@ export async function updateSettings(newSettings) {
 export async function updateSettingsFromCloud(newSettings) {
   _isSyncingFromCloud = true
   try {
-    await updateSettings(newSettings)
+    await updateSettings(newSettings, { isFullIngress: true })
   } finally {
     _isSyncingFromCloud = false
   }
@@ -614,9 +769,11 @@ export function subscribeToSettingsChanges() {
         }
       }
 
+      const normalized = normalizeStoredSettings(newValue)
+
       const mergedSettings = {
         ...DEFAULT_SETTINGS,
-        ...newValue,
+        ...normalized,
       }
       Object.assign(settings, mergedSettings)
       if (newValue.uiLang && newValue.uiLang !== get(locale)) {
@@ -745,4 +902,30 @@ export function getToolSettings(toolName) {
  */
 export function isToolEnabled(toolName) {
   return settings.tools?.[toolName]?.enabled || false
+}
+
+/**
+ * Updates a specific feature's settings block (e.g. summarize or chat).
+ * Spreads the current block, applies the patch, and writes the whole block.
+ *
+ * @param {string} feature - Name of the feature ('summarize' or 'chat')
+ * @param {Object} updates - Settings patch to apply to the feature block
+ */
+export async function updateFeatureSettings(feature, updates) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  if (!settings[feature]) {
+    console.error(`[settingsStore] Feature "${feature}" settings block not found`)
+    return
+  }
+
+  const updatedFeature = {
+    ...settings[feature],
+    ...updates,
+  }
+
+  await updateSettings({ [feature]: updatedFeature })
 }

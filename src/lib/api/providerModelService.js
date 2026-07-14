@@ -1,6 +1,6 @@
 import { registerModelCapability } from '@/lib/chat/providerCapabilities.js'
 
-const PROVIDER_CONFIG = {
+export const PROVIDER_CONFIG = {
   groq: {
     url: 'https://api.groq.com/openai/v1/models',
     requiresApiKey: true,
@@ -14,7 +14,7 @@ const PROVIDER_CONFIG = {
     url: 'https://api.deepseek.com/models',
     requiresApiKey: true,
   },
-  geminiAdvanced: {
+  gemini: {
     url: 'https://generativelanguage.googleapis.com/v1beta/models',
     requiresApiKey: true,
     usesApiKeyQueryParam: true,
@@ -34,7 +34,7 @@ export const FALLBACK_PROVIDER_MODELS = {
   ],
   cerebras: ['gpt-oss-120b', 'zai-glm-4.7'],
   deepseek: ['deepseek-chat', 'deepseek-reasoner'],
-  geminiAdvanced: [
+  gemini: [
     'gemini-3.5-flash',
     'gemini-3.1-flash-lite',
     'gemini-3.1-pro-preview',
@@ -42,6 +42,24 @@ export const FALLBACK_PROVIDER_MODELS = {
     'gemini-2.5-pro',
     'gemini-2.5-flash',
     'gemini-2.5-flash-lite',
+  ],
+  chatgpt: [
+    'gpt-5-mini',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'gpt-4-turbo',
+    'gpt-4',
+    'o1',
+    'o1-mini',
+    'o3-mini',
+  ],
+  openrouter: [
+    'deepseek/deepseek-r1-0528:free',
+    'google/gemini-2.5-pro',
+    'google/gemini-2.5-flash',
+    'anthropic/claude-3.5-sonnet',
+    'meta-llama/llama-3.3-70b-instruct',
+    'deepseek/deepseek-chat',
   ],
 }
 
@@ -90,7 +108,7 @@ function registerCapabilitiesFromBody(providerId, body) {
 }
 
 function normalizeModels(providerId, body) {
-  if (providerId === 'geminiAdvanced') {
+  if (providerId === 'gemini') {
     if (!Array.isArray(body?.models)) {
       throw new Error("Invalid API response: missing 'models' array")
     }

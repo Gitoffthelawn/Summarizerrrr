@@ -5,6 +5,8 @@ import { chatSourceService } from './chatSourceService.js'
 import { chatSessionService } from './chatSessionService.js'
 import { createPersonaSnapshot } from '@/lib/chat/skills/skillService.js'
 import { resolveAutoSourceKind } from './sourceResolution.js'
+import { resolveFeatureModel } from '@/lib/providers/featureModelResolver.js'
+import { normalizeProviderId, getLegacyModel } from '@/lib/providers/providerRegistry.js'
 
 async function* defaultStreamRequest(request) {
   const { generateContentStreamEnhancedRequest } = await import('@/lib/api/aiSdkAdapter.js')
@@ -36,18 +38,7 @@ function titleFrom(value, fallback = 'New conversation') {
 }
 
 export function getModelId(providerId, settings) {
-  const modelKeys = {
-    gemini: settings.isAdvancedMode ? 'selectedGeminiAdvancedModel' : 'selectedGeminiModel',
-    openai: 'selectedChatgptModel',
-    chatgpt: 'selectedChatgptModel',
-    ollama: 'selectedOllamaModel',
-    openrouter: 'selectedOpenrouterModel',
-    deepseek: 'selectedDeepseekModel',
-    groq: 'selectedGroqModel',
-    lmstudio: 'selectedLmStudioModel',
-    openaiCompatible: 'selectedOpenAICompatibleModel',
-  }
-  return settings[modelKeys[providerId]] || null
+  return getLegacyModel(normalizeProviderId(providerId), settings)
 }
 
 function sourceIdsFrom(messages) {
@@ -68,6 +59,7 @@ export function createChatService({
 } = {}) {
   async function startConversationForActiveTab({ settings, personaSnapshot } = {}) {
     const tab = await sourceService.getActiveTab()
+    const resolvedChat = resolveFeatureModel('chat', settings)
     const conversation = (
       await repository.createConversation({
         title: titleFrom(tab.title),
@@ -76,8 +68,8 @@ export function createChatService({
           createPersonaSnapshot(settings?.chatGlobalPersona, {
             language: settings?.summaryLang || null,
           }),
-        providerId: settings?.selectedProvider || 'gemini',
-        modelId: getModelId(settings?.selectedProvider || 'gemini', settings || {}),
+        providerId: resolvedChat.providerId,
+        modelId: resolvedChat.modelId,
       })
     ).conversation
     sessionService.setConversationId(tab.id, conversation.id)
@@ -133,6 +125,10 @@ export function createChatService({
     onWarnings,
     onDiagnostics,
   }) {
+    const resolvedChat = resolveFeatureModel('chat', settings)
+    const fallbackProviderId = resolvedChat.providerId
+    const fallbackModelId = resolvedChat.modelId
+
     const transient = {
       role: 'assistant',
       content: '',
@@ -167,8 +163,8 @@ export function createChatService({
       const streamingMessage = await repository.createStreamingAssistantMessage(conversation.id, {
         ...transient,
         content: '',
-        providerId: conversation.providerId || settings.selectedProvider,
-        modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
+        providerId: conversation.providerId || fallbackProviderId,
+        modelId: conversation.modelId || fallbackModelId,
       })
       streamingMessageId = streamingMessage.id
 
@@ -180,15 +176,15 @@ export function createChatService({
           skillInvocation: currentUserMessage.skillInvocation,
           conversationSourceRefs: sourceIdsFrom(history),
           newAttachmentRefs: attachmentRefs,
-          providerId: conversation.providerId || settings.selectedProvider,
-          modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
+          providerId: conversation.providerId || fallbackProviderId,
+          modelId: conversation.modelId || fallbackModelId,
         },
         { repository }
       )
       onWarnings?.(pipeline.warnings)
 
       for await (const event of streamRequest({
-        providerId: conversation.providerId || settings.selectedProvider,
+        providerId: conversation.providerId || fallbackProviderId,
         settings,
         system: pipeline.system,
         messages: pipeline.messages,
@@ -219,8 +215,8 @@ export function createChatService({
       const assistant = await repository.finalizeStreamingAssistantMessage(streamingMessageId, {
         content: transient.content,
         status: transient.status,
-        providerId: conversation.providerId || settings.selectedProvider,
-        modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
+        providerId: conversation.providerId || fallbackProviderId,
+        modelId: conversation.modelId || fallbackModelId,
         usage,
         groundingRefs: pipeline?.groundingRefs || [],
       })
@@ -234,8 +230,8 @@ export function createChatService({
           const assistant = await repository.finalizeStreamingAssistantMessage(streamingMessageId, {
             content: transient.content,
             status: 'aborted',
-            providerId: conversation.providerId || settings.selectedProvider,
-            modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
+            providerId: conversation.providerId || fallbackProviderId,
+            modelId: conversation.modelId || fallbackModelId,
             groundingRefs: pipeline?.groundingRefs || [],
           })
           return { assistant, transient, diagnostics: pipeline }
@@ -253,8 +249,8 @@ export function createChatService({
           content: transient.content,
           status: 'error',
           error: handledError,
-          providerId: conversation.providerId || settings.selectedProvider,
-          modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
+          providerId: conversation.providerId || fallbackProviderId,
+          modelId: conversation.modelId || fallbackModelId,
           usage,
           groundingRefs: pipeline?.groundingRefs || [],
         })
@@ -443,6 +439,10 @@ export function createChatService({
       await repository.markMessageStreaming(assistantMessageId)
 
       try {
+        const resolvedChat = resolveFeatureModel('chat', settings)
+        const fallbackProviderId = resolvedChat.providerId
+        const fallbackModelId = resolvedChat.modelId
+
         const attachmentRefs = currentUserMessage.attachmentRefs || []
         pipeline = await buildPipeline(
           {
@@ -452,15 +452,15 @@ export function createChatService({
             skillInvocation: currentUserMessage.skillInvocation,
             conversationSourceRefs: sourceIdsFrom(historyWithPartial),
             newAttachmentRefs: attachmentRefs,
-            providerId: conversation.providerId || settings.selectedProvider,
-            modelId: conversation.modelId || getModelId(settings.selectedProvider, settings),
+            providerId: conversation.providerId || fallbackProviderId,
+            modelId: conversation.modelId || fallbackModelId,
           },
           { repository }
         )
         onWarnings?.(pipeline.warnings)
 
         for await (const event of streamRequest({
-          providerId: conversation.providerId || settings.selectedProvider,
+          providerId: conversation.providerId || fallbackProviderId,
           settings,
           system: pipeline.system,
           messages: pipeline.messages,

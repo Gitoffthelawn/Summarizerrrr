@@ -10,6 +10,7 @@
     ariaLabel = '',
     id = '',
     noResultsText = 'No results found.',
+    allowCustomValue = false,
     onValueChangeCallback = () => {},
   } = $props()
 
@@ -27,6 +28,31 @@
 
   function handleInput(e) {
     searchValue = e.currentTarget.value
+  }
+
+  function commitCustomValue(val) {
+    if (!allowCustomValue) return
+    const trimmedVal = val?.trim()
+    if (!trimmedVal) return
+
+    // If it matches one of the items (case-insensitive), use the exact item value
+    const match = items.find((item) => item.value.toLowerCase() === trimmedVal.toLowerCase())
+    const finalVal = match ? match.value : trimmedVal
+
+    bindValue = finalVal
+    if (onValueChangeCallback) {
+      onValueChangeCallback(finalVal)
+    }
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') {
+      commitCustomValue(e.currentTarget.value)
+    }
+  }
+
+  function handleBlur(e) {
+    commitCustomValue(e.currentTarget.value)
   }
 
   function handleValueChange(newValue) {
@@ -60,6 +86,8 @@
       class="select-none font-mono w-full relative text-xs overflow-hidden flex flex-col gap-0 px-3 text-text-primary text-left py-2 bg-muted/5 dark:bg-muted/5 border border-border hover:border-blackwhite/15 focus:border-blackwhite/30 dark:border-blackwhite/10 dark:focus:border-blackwhite/20 focus:outline-none focus:ring-0 transition-colors duration-150 "
       {placeholder}
       oninput={handleInput}
+      onkeydown={handleKeyDown}
+      onblur={handleBlur}
       defaultValue={bindValue}
       aria-label={ariaLabel}
     />

@@ -197,7 +197,8 @@
         "override_note": "* カスタムプロンプトが基本設定より優先されます。"
       },
       "comment_limit": "YouTubeコメント制限",
-      "comment_limit_desc": "分析するコメントの最大数。"
+      "comment_limit_desc": "分析するコメントの最大数。",
+      "uses_gemini_basic": "Gemini Basicを使用"
     },
     "chatgpt_config": {
       "api_key_label": "APIキー",
@@ -306,8 +307,30 @@
         "generate_new_questions": "新しい質問を生成",
         "previous_questions": "前の質問",
         "next_questions": "次の質問",
-        "ask_own_question_in_chat": "チャットで独自の質問をする"
+        "ask_own_question_in_chat": "チャットで独自の質問をする",
+        "api_keys_info_restructured": "APIキーはグローバルで管理されています。",
+        "api_keys_link_text": "プロバイダーとAPIキー",
+        "api_keys_info_restructured_end": "タブで認証情報を設定してください。"
       }
+    },
+    "feature_model_picker": {
+      "provider_label": "モデルプロバイダー",
+      "model_label": "モデル名",
+      "model_placeholder": "モデルを検索または選択",
+      "unconfigured_suffix": "未設定",
+      "unconfigured_warning": "このプロバイダーは設定されていません。",
+      "configure_link": "APIキーを設定",
+      "free_text_placeholder": "モデルIDを入力"
+    },
+    "provider_key_config": {
+      "status_configured": "設定済み",
+      "status_unconfigured": "未設定",
+      "base_url_label": "ベースURL",
+      "endpoint_label": "エンドポイントURL",
+      "api_key_label": "APIキー",
+      "api_key_placeholder": "APIキーを入力",
+      "get_a_key": "APIキーを取得",
+      "api_keys_section_title": "APIキーとエンドポイント"
     }
   },
   "tab_navigation": {

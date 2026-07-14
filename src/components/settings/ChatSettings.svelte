@@ -3,8 +3,10 @@
 <script>
   // @ts-nocheck
   import ButtonSet from '../buttons/ButtonSet.svelte'
-  import { settings, updateSettings } from '../../stores/settingsStore.svelte.js'
+  import { settings, updateSettings, updateFeatureSettings } from '../../stores/settingsStore.svelte.js'
   import { CHAT_TONE_ROLES } from '@/lib/chat/chatToneRoles.js'
+  import FeatureModelPicker from '../inputs/FeatureModelPicker.svelte'
+  import { t } from 'svelte-i18n'
 
   // Chat's tone is independent from Settings > Summary and uses its own
   // chat-native tone roles (CHAT_TONE_ROLES) rather than the summarize-flow
@@ -57,6 +59,25 @@
       independent from Summary settings; response language always follows
       Summary's Language output.
     </p>
+
+    <!-- Chat Model Picker -->
+    <div class="flex flex-col gap-2">
+      {#if settings.isAdvancedMode}
+        <FeatureModelPicker
+          bind:provider={settings.chat.provider}
+          bind:model={settings.chat.model}
+          onchange={(p, m) => updateFeatureSettings('chat', { provider: p, model: m })}
+        />
+      {:else}
+        <div class="flex flex-col gap-1.5">
+          <!-- svelte-ignore a11y_label_has_associated_control -->
+          <label class="text-xs text-text-secondary">{$t('settings.feature_model_picker.model_label', { default: 'Model Name' })}</label>
+          <div class="text-xs font-mono text-text-secondary bg-muted/5 dark:bg-muted/5 border border-border px-3 py-2">
+            {$t('settings.summary.uses_gemini_basic', { default: 'Uses Gemini Basic' })}
+          </div>
+        </div>
+      {/if}
+    </div>
 
     <!-- Custom instructions -->
     <div class="flex flex-col gap-2">

@@ -3,35 +3,24 @@
   import { t } from 'svelte-i18n'
   import { settings, updateSettings } from '@/stores/settingsStore.svelte.js'
   import Icon from '@iconify/svelte'
-  import ToolProvidersSelect from '@/components/inputs/ToolProvidersSelect.svelte'
   import ButtonSet from '@/components/buttons/ButtonSet.svelte'
   import ToolIcon96 from '@/components/ui/ToolIcon96.svelte'
   import ToolEnableToggle from '@/components/inputs/ToolEnableToggle.svelte'
-
-  // Tool-specific provider configs
-  import ToolGeminiAdvancedConfig from '@/components/providerConfigs/tools/ToolGeminiAdvancedConfig.svelte'
-  import ToolChatGPTConfig from '@/components/providerConfigs/tools/ToolChatGPTConfig.svelte'
-  import ToolDeepseekConfig from '@/components/providerConfigs/tools/ToolDeepseekConfig.svelte'
-  import ToolGroqConfig from '@/components/providerConfigs/tools/ToolGroqConfig.svelte'
-  import ToolOllamaConfig from '@/components/providerConfigs/tools/ToolOllamaConfig.svelte'
-  import ToolLMStudioConfig from '@/components/providerConfigs/tools/ToolLMStudioConfig.svelte'
-  import ToolOpenrouterConfig from '@/components/providerConfigs/tools/ToolOpenrouterConfig.svelte'
-  import ToolOpenAICompatibleConfig from '@/components/providerConfigs/tools/ToolOpenAICompatibleConfig.svelte'
-  import ToolCerebrasConfig from '@/components/providerConfigs/tools/ToolCerebrasConfig.svelte'
+  import FeatureModelPicker from '@/components/inputs/FeatureModelPicker.svelte'
 
   // ✅ Computed value cho tool settings
   let toolSettings = $derived.by(() => settings.tools?.deepDive ?? {})
 
   /**
-   * Helper function để update tool setting
+   * Helper function để update tool settings với patch object
    */
-  function updateToolSetting(key, value) {
+  function updateToolSettings(patch) {
     updateSettings({
       tools: {
         ...settings.tools,
         deepDive: {
           ...settings.tools.deepDive,
-          [key]: value,
+          ...patch,
         },
       },
     })
@@ -49,60 +38,14 @@
       updates.customModel = 'gemma-4-26b-a4b-it'
     }
 
-    updateSettings({
-      tools: {
-        ...settings.tools,
-        deepDive: {
-          ...settings.tools.deepDive,
-          ...updates,
-        },
-      },
-    })
-  }
-
-  /**
-   * Handle provider change - reset model khi đổi provider
-   */
-  function handleProviderChange(event) {
-    const newProvider = event.detail
-
-    // Reset model về default của provider mới
-    const defaultModels = {
-      gemini: 'gemma-4-26b-a4b-it',
-      chatgpt: 'gpt-5-mini',
-      deepseek: 'deepseek-chat',
-      groq: 'llama-3.3-70b-versatile',
-      ollama: 'deepseek-r1:8b',
-      lmstudio: 'google/gemma-3-12b',
-      openrouter: 'google/gemma-4-26b-a4b-it:free',
-      openaiCompatible: '',
-      cerebras: 'gpt-oss-120b',
-    }
-
-    updateSettings({
-      tools: {
-        ...settings.tools,
-        deepDive: {
-          ...settings.tools.deepDive,
-          customProvider: newProvider,
-          customModel: defaultModels[newProvider] || 'gemma-4-26b-a4b-it',
-        },
-      },
-    })
-  }
-
-  /**
-   * Handle model change - update tool settings only
-   */
-  function handleModelChange(newModel) {
-    updateToolSetting('customModel', newModel)
+    updateToolSettings(updates)
   }
 
   /**
    * Toggle auto generate mode
    */
   function toggleAutoGenerate(value) {
-    updateToolSetting('autoGenerate', value)
+    updateToolSettings({ autoGenerate: value })
   }
 </script>
 
@@ -128,7 +71,7 @@
       <ToolEnableToggle
         id="deepdive-enabled"
         bind:checked={toolSettings.enabled}
-        onCheckedChange={(value) => updateToolSetting('enabled', value)}
+        onCheckedChange={(value) => updateToolSettings({ enabled: value })}
         icon="heroicons:cpu-chip-20-solid"
         enabledText={$t('settings.tools.deepdive.enabled')}
         disabledText={$t('settings.tools.deepdive.disabled')}
@@ -170,16 +113,11 @@
     {#if !toolSettings.useGeminiBasic}
       <!-- Custom Provider Configuration -->
       <div class="flex flex-col gap-4">
-        <!-- Provider Select -->
-        <div class="flex flex-col gap-2">
-          <label class="text-text-secondary"
-            >{$t('settings.tools.deepdive.select_provider_label')}</label
-          >
-          <ToolProvidersSelect
-            bind:value={toolSettings.customProvider}
-            onchange={handleProviderChange}
-          />
-        </div>
+        <FeatureModelPicker
+          bind:provider={toolSettings.customProvider}
+          bind:model={toolSettings.customModel}
+          onchange={(p, m) => updateToolSettings({ customProvider: p, customModel: m })}
+        />
 
         <!-- ✅ INFO: API keys editable and update global settings -->
         <div class="text-xs text-muted flex gap-1 -mt-2">
@@ -189,67 +127,14 @@
             width="16"
             height="16"
           />
-          <span>{$t('settings.tools.deepdive.api_keys_info')}</span>
+          <span>
+            {$t('settings.tools.deepdive.api_keys_info_restructured', { default: 'API Keys are managed globally. Go to the' })}
+            <a href="#/providers" class="text-primary hover:underline font-medium">
+              {$t('settings.tools.deepdive.api_keys_link_text', { default: 'Providers & API Keys' })}
+            </a>
+            {$t('settings.tools.deepdive.api_keys_info_restructured_end', { default: 'tab to configure credentials.' })}
+          </span>
         </div>
-
-        <!-- Dynamic Provider Config (tool-specific components) -->
-        <!-- ✅ API keys editable → update global, Models → update tool settings -->
-        {#key toolSettings.customProvider}
-          {#if toolSettings.customProvider === 'gemini'}
-            <ToolGeminiAdvancedConfig
-              bind:apiKey={settings.geminiAdvancedApiKey}
-              bind:additionalApiKeys={settings.geminiAdvancedAdditionalApiKeys}
-              selectedModel={toolSettings.customModel || ''}
-              onModelChange={handleModelChange}
-            />
-          {:else if toolSettings.customProvider === 'chatgpt'}
-            <ToolChatGPTConfig
-              bind:apiKey={settings.chatgptApiKey}
-              selectedModel={toolSettings.customModel || ''}
-              onModelChange={handleModelChange}
-            />
-          {:else if toolSettings.customProvider === 'deepseek'}
-            <ToolDeepseekConfig
-              bind:apiKey={settings.deepseekApiKey}
-              selectedModel={toolSettings.customModel || ''}
-              onModelChange={handleModelChange}
-            />
-          {:else if toolSettings.customProvider === 'groq'}
-            <ToolGroqConfig
-              bind:apiKey={settings.groqApiKey}
-              selectedModel={toolSettings.customModel || ''}
-              onModelChange={handleModelChange}
-            />
-          {:else if toolSettings.customProvider === 'ollama'}
-            <ToolOllamaConfig
-              selectedModel={toolSettings.customModel || ''}
-              onModelChange={handleModelChange}
-            />
-          {:else if toolSettings.customProvider === 'lmstudio'}
-            <ToolLMStudioConfig
-              selectedModel={toolSettings.customModel || ''}
-              onModelChange={handleModelChange}
-            />
-          {:else if toolSettings.customProvider === 'openrouter'}
-            <ToolOpenrouterConfig
-              bind:apiKey={settings.openrouterApiKey}
-              selectedModel={toolSettings.customModel || ''}
-              onModelChange={handleModelChange}
-            />
-          {:else if toolSettings.customProvider === 'openaiCompatible'}
-            <ToolOpenAICompatibleConfig
-              bind:apiKey={settings.openaiCompatibleApiKey}
-              selectedModel={toolSettings.customModel || ''}
-              onModelChange={handleModelChange}
-            />
-          {:else if toolSettings.customProvider === 'cerebras'}
-            <ToolCerebrasConfig
-              bind:apiKey={settings.cerebrasApiKey}
-              selectedModel={toolSettings.customModel || ''}
-              onModelChange={handleModelChange}
-            />
-          {/if}
-        {/key}
       </div>
     {/if}
 
