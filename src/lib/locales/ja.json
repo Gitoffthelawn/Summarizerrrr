@@ -25,13 +25,6 @@
         "system": "システム",
         "system_desc": "システムテーマ。"
       },
-      "responseMode": "応答モード (サイドパネルでのみ動作)",
-      "response_mode": {
-        "streaming": "ストリーミング",
-        "streaming_desc": "リアルタイム表示、より良い体験。",
-        "non_streaming": "非ストリーミング",
-        "non_streaming_desc": "低性能デバイス向け、遅延軽減。"
-      },
       "floatingButton": "フローティングボタン",
       "floating_button": {
         "show": "表示",
@@ -330,7 +323,9 @@
       "api_key_label": "APIキー",
       "api_key_placeholder": "APIキーを入力",
       "get_a_key": "APIキーを取得",
-      "api_keys_section_title": "APIキーとエンドポイント"
+      "api_keys_section_title": "APIキーとエンドポイント",
+      "add_provider": "プロバイダーを追加",
+      "remove_provider": "削除"
     }
   },
   "tab_navigation": {

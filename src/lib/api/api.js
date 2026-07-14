@@ -158,7 +158,6 @@ export async function summarizeContent(text, contentType, abortSignal = null) {
 
     // Kiểm tra nếu user đã bật custom prompt và có nội dung
     if (
-      userSettings.isSummaryAdvancedMode &&
       userSettings[selectionKey] &&
       userSettings[customPromptKey]
     ) {
@@ -252,12 +251,11 @@ export async function* summarizeContentStream(text, contentType, abortSignal = n
       `[DEBUG] Processing custom action type in stream: ${contentType}`
     )
     console.log(
-      `[DEBUG] Custom prompt enabled: ${userSettings[selectionKey]}, Advanced mode: ${userSettings.isSummaryAdvancedMode}`
+      `[DEBUG] Custom prompt enabled: ${userSettings[selectionKey]}`
     )
 
     // Kiểm tra nếu user đã bật custom prompt và có nội dung
     if (
-      userSettings.isSummaryAdvancedMode &&
       userSettings[selectionKey] &&
       userSettings[customPromptKey]
     ) {
@@ -524,12 +522,11 @@ export async function* summarizeContentStreamEnhanced(text, contentType) {
       `[DEBUG] Processing custom action type in enhanced stream: ${contentType}`
     )
     console.log(
-      `[DEBUG] Custom prompt enabled: ${userSettings[selectionKey]}, Advanced mode: ${userSettings.isSummaryAdvancedMode}`
+      `[DEBUG] Custom prompt enabled: ${userSettings[selectionKey]}`
     )
 
     // Kiểm tra nếu user đã bật custom prompt và có nội dung
     if (
-      userSettings.isSummaryAdvancedMode &&
       userSettings[selectionKey] &&
       userSettings[customPromptKey]
     ) {

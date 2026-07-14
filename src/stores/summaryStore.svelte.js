@@ -308,12 +308,6 @@ export async function fetchAndSummarize() {
   // Reset state before starting
   resetLocalState()
 
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
-
   // The legacy summary path remains blocking so background-tab results can be
   // committed atomically to their owning per-tab state.
   const shouldUseStreaming = false
@@ -500,16 +494,8 @@ export async function fetchChapterSummary() {
 
   const userSettings = settings
 
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
-
-  // Check if we should use streaming mode
-  const shouldUseStreaming =
-    userSettings.enableStreaming &&
-    providerSupportsStreaming(selectedProviderId)
+  // Summaries are committed as a complete result, rather than incrementally.
+  const shouldUseStreaming = false
 
   // Reset Deep Dive when starting chapter summary
   resetDeepDive()
@@ -636,16 +622,8 @@ export async function fetchCourseConcepts() {
 
   const userSettings = settings
 
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
-
-  // Check if we should use streaming mode
-  const shouldUseStreaming =
-    userSettings.enableStreaming &&
-    providerSupportsStreaming(selectedProviderId)
+  // Summaries are committed as a complete result, rather than incrementally.
+  const shouldUseStreaming = false
 
   // Reset Deep Dive when starting course concepts
   resetDeepDive()
@@ -1304,16 +1282,8 @@ export async function executeCustomAction(actionType) {
       throw new Error('No content found on this page.')
     }
 
-    // Determine the actual provider to use based on isAdvancedMode
-    let selectedProviderId = userSettings.selectedProvider || 'gemini'
-    if (!userSettings.isAdvancedMode) {
-      selectedProviderId = 'gemini' // Force Gemini in basic mode
-    }
-
-    // Check if we should use streaming mode
-    const shouldUseStreaming =
-      userSettings.enableStreaming &&
-      providerSupportsStreaming(selectedProviderId)
+    // Custom summary actions also return a complete result.
+    const shouldUseStreaming = false
 
     if (shouldUseStreaming) {
       // Use streaming mode
@@ -1493,16 +1463,8 @@ export async function fetchCommentSummary(
       formattedData.substring(0, 1000)
     )
 
-    // Determine the actual provider to use based on isAdvancedMode
-    let selectedProviderId = userSettings.selectedProvider || 'gemini'
-    if (!userSettings.isAdvancedMode) {
-      selectedProviderId = 'gemini' // Force Gemini in basic mode
-    }
-
-    // Check if we should use streaming mode
-    const shouldUseStreaming =
-      userSettings.enableStreaming &&
-      providerSupportsStreaming(selectedProviderId)
+    // Comment analysis is a summary action, so keep it blocking as well.
+    const shouldUseStreaming = false
 
     console.log('[fetchCommentSummary] Streaming mode:', shouldUseStreaming)
     console.log('[DEBUG] Formatted data length:', formattedData.length)

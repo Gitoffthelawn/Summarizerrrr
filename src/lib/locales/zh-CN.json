@@ -25,13 +25,6 @@
         "system": "跟随系统",
         "system_desc": "自动匹配您设备的主题。"
       },
-      "responseMode": "响应模式 (仅在侧边栏工作)",
-      "response_mode": {
-        "streaming": "流式",
-        "streaming_desc": "即时显示回答，推荐使用。",
-        "non_streaming": "普通",
-        "non_streaming_desc": "适用于网络较慢的情况，避免卡顿。"
-      },
       "floatingButton": "浮动按钮",
       "floating_button": {
         "show": "显示",
@@ -330,7 +323,9 @@
       "api_key_label": "API 密钥",
       "api_key_placeholder": "输入 API 密钥",
       "get_a_key": "获取 API 密钥",
-      "api_keys_section_title": "API 密钥与端点"
+      "api_keys_section_title": "API 密钥与端点",
+      "add_provider": "添加提供商",
+      "remove_provider": "移除"
     }
   },
   "tab_navigation": {

@@ -1,14 +1,12 @@
 <!-- @ts-nocheck -->
 <script>
   import { settings, updateSettings } from '@/stores/settingsStore.svelte.js'
-  import { isProviderConfigured } from '@/lib/providers/providerRegistry.js'
   import ApiKeyInputMulti from '../inputs/ApiKeyInputMulti.svelte'
+  import ButtonSet from '../buttons/ButtonSet.svelte'
   import { t } from 'svelte-i18n'
   import Icon from '@iconify/svelte'
 
-  let { entry, isExpanded = false, onToggle = () => {} } = $props()
-
-  const isConfigured = $derived(isProviderConfigured(entry.id, settings))
+  let { entry, isExpanded = false, onToggle = () => {}, showHeader = true } = $props()
 
   let additionalKeys = $state([])
 
@@ -54,20 +52,22 @@
 </script>
 
 <div class="overflow-hidden transition-colors duration-150 {isExpanded ? 'bg-muted/5 border border-border' : ''}">
-  <!-- Accordion Header - always visible -->
-  <button
-    type="button"
-    class="w-full flex items-center gap-3 px-3 py-2.5 cursor-pointer select-none transition-colors duration-150 hover:bg-muted/10 rounded-sm"
-    onclick={onToggle}
-  >
-    <Icon
-      icon={entry.iconifyIcon || 'heroicons:cube-20-solid'}
-      width="16"
-      height="16"
-      class="text-text-secondary shrink-0"
-    />
-    <span class="font-medium text-sm text-text-primary">{entry.label}</span>
-  </button>
+  {#if showHeader}
+    <!-- Accordion Header - always visible -->
+    <button
+      type="button"
+      class="w-full flex items-center gap-3 px-3 py-2.5 cursor-pointer select-none transition-colors duration-150 hover:bg-muted/10 rounded-sm"
+      onclick={onToggle}
+    >
+      <Icon
+        icon={entry.iconifyIcon || 'heroicons:cube-20-solid'}
+        width="16"
+        height="16"
+        class="text-text-secondary shrink-0"
+      />
+      <span class="font-medium text-sm text-text-primary">{entry.label}</span>
+    </button>
+  {/if}
 
   <!-- Accordion Content - only when expanded -->
   {#if isExpanded}
@@ -167,5 +167,30 @@
       {/if}
     </div>
   {/if}
-</div>
 
+  {#if isExpanded && entry.id === 'gemini'}
+    <div class="px-4 pb-4 flex flex-col gap-2">
+      <!-- svelte-ignore a11y_label_has_associated_control -->
+      <label class="text-xs text-text-secondary"
+        >{$t('settings.gemini_basic_config.thinking_level', { default: 'Thinking Level' })}</label
+      >
+      <div class="grid grid-cols-3 gap-1">
+        <ButtonSet
+          title={$t('settings.gemini_basic_config.thinking_levels.minimal', { default: 'Minimal' })}
+          class={settings.geminiThinkingLevel === 'minimal' ? 'active' : ''}
+          onclick={() => updateSettings({ geminiThinkingLevel: 'minimal' })}
+        />
+        <ButtonSet
+          title={$t('settings.gemini_basic_config.thinking_levels.medium', { default: 'Medium' })}
+          class={settings.geminiThinkingLevel === 'medium' ? 'active' : ''}
+          onclick={() => updateSettings({ geminiThinkingLevel: 'medium' })}
+        />
+        <ButtonSet
+          title={$t('settings.gemini_basic_config.thinking_levels.high', { default: 'High' })}
+          class={settings.geminiThinkingLevel === 'high' ? 'active' : ''}
+          onclick={() => updateSettings({ geminiThinkingLevel: 'high' })}
+        />
+      </div>
+    </div>
+  {/if}
+</div>

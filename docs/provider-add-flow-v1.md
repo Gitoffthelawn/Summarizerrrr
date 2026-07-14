@@ -31,8 +31,9 @@ The desired model is simpler:
 
 ### Goal & scope decision (confirmed with user)
 
-- **Custom Prompts** (currently gated by the Summary Advanced toggle) → move into an
-  always-available **collapsible** section (not gated by any advanced flag).
+- **Custom Prompts** (currently gated by the Summary Advanced toggle) → **always
+  visible** in the Summary panel, not gated by any advanced flag (each prompt keeps
+  its own per-item on/off switch).
 - **Deep Dive** → remove its own "Gemini Basic / Custom" toggle; it uses the same
   auto-collapsing `FeatureModelPicker` as Summary/Chat.
 - **Removing an added provider is non-destructive**: it drops the card but keeps the
@@ -145,9 +146,9 @@ provider dropdown appears.
    - Remove the `isSummaryAdvancedMode` `Switch` + its `TextScramble`.
    - Always render `FeatureModelPicker` bound to `settings.summarize`; delete the
      "Uses Gemini Basic" `{:else}` block.
-   - Wrap the **Custom Prompts** section in an always-available **collapsible**
-     disclosure (a local `$state` expanded flag or `<details>`), no longer gated by
-     `isSummaryAdvancedMode`.
+   - Move the **Custom Prompts** section out of the `{#if settings.isSummaryAdvancedMode}`
+     block so it renders **always** (no toggle/disclosure). Each prompt still has its own
+     per-item on/off switch.
 2. `src/components/settings/ChatSettings.svelte`: remove the `{#if settings.isAdvancedMode}`
    gate; always render `FeatureModelPicker` bound to `settings.chat`; delete the
    "Uses Gemini Basic" block.
@@ -201,8 +202,8 @@ non-Gemini configured provider is actually used for summarize (check the network
    `ja`, `ko`, `vi`, `zh-CN`), reusing existing `settings.*` keys where possible:
    - `settings.provider_key_config.add_provider` ("Add provider")
    - `settings.provider_key_config.remove_provider` ("Remove")
-   - a label for the collapsible Custom Prompts toggle (reuse
-     `settings.summary.custom_prompts.title`).
+   - (Custom Prompts reuses the existing `settings.summary.custom_prompts.*` keys — no
+     new strings needed.)
 
 **Verify:**
 
@@ -233,7 +234,7 @@ Switch UI language to `vi` and one more locale — no raw i18n ids in the settin
       pickers show the provider dropdown (≥2 configured).
 - [ ] Removing a provider is non-destructive; Gemini is not removable.
 - [ ] Gemini thinking-level control works from its provider card.
-- [ ] Custom Prompts live in a collapsible section and apply at runtime when enabled.
+- [ ] Custom Prompts are always visible and apply at runtime when enabled.
 - [ ] Deep Dive has no Basic/Custom toggle; picker auto-collapses with one provider.
 - [ ] Summarize actually uses the chosen non-Gemini provider (mirrors updated).
 - [ ] `grep` shows no `GeminiBasicConfig`/`ProvidersSelect` dead refs; no raw i18n ids.
@@ -250,8 +251,8 @@ Switch UI language to `vi` and one more locale — no raw i18n ids in the settin
   thinking-level block.
 - `src/components/inputs/FeatureModelPicker.svelte` — hide provider dropdown when ≤1
   configured.
-- `src/components/settings/SummarySettings.svelte` — drop advanced toggle; collapsible
-  Custom Prompts.
+- `src/components/settings/SummarySettings.svelte` — drop advanced toggle; Custom Prompts
+  always visible.
 - `src/components/settings/ChatSettings.svelte` — always show picker.
 - `src/components/settings/tools/DeepDiveToolSettings.svelte` — drop Basic/Custom toggle.
 - `src/lib/providers/featureModelResolver.js`, `src/stores/summaryStore.svelte.js`,

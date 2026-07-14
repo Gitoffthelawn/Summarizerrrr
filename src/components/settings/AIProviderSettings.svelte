@@ -4,147 +4,148 @@
   // @ts-nocheck
   import { t } from 'svelte-i18n'
   import Icon from '@iconify/svelte'
-  import ButtonSet from '../buttons/ButtonSet.svelte'
-  import TextScramble from '../../lib/ui/textScramble.js'
-  import GeminiBasicConfig from '../providerConfigs/GeminiBasicConfig.svelte'
   import ProviderKeyConfig from './ProviderKeyConfig.svelte'
-  import { PROVIDER_LIST } from '@/lib/providers/providerRegistry.js'
-  import { Label, Switch } from 'bits-ui'
+  import {
+    PROVIDER_LIST,
+    getProvider,
+  } from '@/lib/providers/providerRegistry.js'
   import {
     settings,
-    updateSettings,
+    addProvider,
+    removeProvider,
   } from '../../stores/settingsStore.svelte.js'
 
-  function handleUpdateSetting(key, value) {
-    updateSettings({ [key]: value })
+  let selectedProviderId = $state(null)
+
+  function selectProvider(id) {
+    selectedProviderId = id
   }
 
-  // Đồng bộ logic: khi toggle switch, cập nhật cả isAdvancedMode và isSummaryAdvancedMode
-  function handleAdvancedModeToggle(value) {
-    handleUpdateSetting('isAdvancedMode', value)
-    handleUpdateSetting('isSummaryAdvancedMode', value)
+  // "Add provider" menu state
+  let showAddMenu = $state(false)
+
+  const availableToAdd = $derived(
+    PROVIDER_LIST.filter(p => !(settings.addedProviders || []).includes(p.id))
+  )
+  const addedProviders = $derived(
+    (settings.addedProviders || ['gemini'])
+      .map(getProvider)
+      .filter(Boolean)
+  )
+  const selectedProvider = $derived(getProvider(selectedProviderId))
+
+  async function handleAddProvider(id) {
+    await addProvider(id)
+    selectedProviderId = id
+    showAddMenu = false
   }
 
-  let expandedProviderId = $state(null)
-
-  function toggleProvider(id) {
-    expandedProviderId = expandedProviderId === id ? null : id
-  }
-
-  let textElement
-  let textScramble
-
-  $effect(() => {
-    if (!textScramble && textElement) {
-        textScramble = new TextScramble(textElement)
+  async function handleRemoveProvider(id) {
+    const remainingProviders = (settings.addedProviders || ['gemini']).filter(
+      (providerId) => providerId !== id,
+    )
+    if (selectedProviderId === id) {
+      selectedProviderId = remainingProviders[0] || null
     }
-    if (textScramble) {
-        textScramble.setText(
-            settings.isAdvancedMode
-                ? $t('settings.ai_model.mode.advanced')
-                : $t('settings.ai_model.mode.basic'),
-        )
-    }
-  })
+    await removeProvider(id)
+  }
 </script>
 
 <!-- AI Provider Section -->
-<div class="setting-block flex gap-5 pb-6 pt-5 flex-col">
+  <div class="setting-block flex gap-5 pb-6 pt-5 flex-col">
   <div class="flex items-center h-6 justify-between px-5">
-    <label for="advanced-mode-toggle" class="block font-bold text-text-primary"
-      >Model AI</label
-    >
-    <div class="flex items-center">
-      <Label.Root
-        class="cursor-pointer pr-2 py-2 w-20 text-right font-bold select-none transition-colors duration-1000 {settings.isAdvancedMode
-          ? 'text-primary'
-          : 'text-text-primary'}"
-        for="provider-toggle"
-      >
-        <span bind:this={textElement}>
-          {settings.isAdvancedMode
-            ? $t('settings.ai_model.mode.advanced')
-            : $t('settings.ai_model.mode.basic')}
-        </span>
-      </Label.Root>
-      <Switch.Root
-        id="provider-toggle"
-        name="Advanced Mode"
-        checked={settings.isAdvancedMode}
-        onCheckedChange={handleAdvancedModeToggle}
-        class="focus-visible:ring-primary border border-blackwhite/5 text-text-secondary flex justify-center items-center focus-visible:ring-offset-background bg-blackwhite/5 hover:bg-blackwhite/10 transition-colors rounded-full focus-visible:outline-hidden size-7.5 shrink-0 cursor-pointer focus-visible:ring-1 focus-visible:ring-offset-1 disabled:cursor-not-allowed data-[state=checked]:text-white disabled:opacity50"
-      >
-        <Switch.Thumb
-          class="bg-primary rounded-full pointer-events-none block shrink-0 size-7.5 transition-all duration-300 data-[state=checked]:scale-100 data-[state=unchecked]:scale-60 data-[state=checked]:opacity-100 data-[state=unchecked]:opacity-0"
-        />
-        <Icon
-          icon="heroicons:wrench-16-solid"
-          width="20"
-          height="20"
-          class="origin-[75%_25%] animate-wiggle absolute z-10"
-        />
-      </Switch.Root>
-    </div>
+    <label class="block font-bold text-text-primary">Model AI</label>
+    {#if availableToAdd.length > 0}
+      <div class="relative">
+        <button
+          type="button"
+          class="flex items-center gap-1.5 font-medium text-xs text-primary hover:text-primary/80 transition-colors w-fit px-1"
+          onclick={() => showAddMenu = !showAddMenu}
+        >
+          <Icon icon="heroicons:plus-circle-20-solid" width="16" height="16" />
+          {$t('settings.provider_key_config.add_provider', { default: 'Add provider' })}
+        </button>
+
+        {#if showAddMenu}
+          <!-- Backdrop to close menu -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="fixed inset-0 z-40"
+            onclick={() => showAddMenu = false}
+            onkeydown={(e) => e.key === 'Escape' && (showAddMenu = false)}
+          ></div>
+
+          <div class="absolute right-0 top-full mt-1 z-50 bg-bg-primary border border-border rounded-lg shadow-lg min-w-48 py-1 max-h-64 overflow-y-auto">
+            {#each availableToAdd as provider (provider.id)}
+              <button
+                type="button"
+                class="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-text-primary hover:bg-muted/10 transition-colors cursor-pointer"
+                onclick={() => handleAddProvider(provider.id)}
+              >
+                <Icon
+                  icon={provider.iconifyIcon || 'heroicons:cube-20-solid'}
+                  width="14"
+                  height="14"
+                  class="text-text-secondary shrink-0"
+                />
+                <span>{provider.label}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
   </div>
 
-  <div class="setting-secsion flex flex-col gap-6 px-5">
-    {#if settings.isAdvancedMode}
-      <!-- Advanced Mode Content -->
-      <div class="flex flex-col gap-4">
-        <label class="block font-bold text-text-primary"
-          >{$t('settings.provider_key_config.api_keys_section_title', { default: 'API Keys & Endpoints' })}</label
-        >
-
-        <div class="flex flex-col">
-          {#each PROVIDER_LIST as entry (entry.id)}
-            <ProviderKeyConfig
-              {entry}
-              isExpanded={expandedProviderId === entry.id}
-              onToggle={() => toggleProvider(entry.id)}
-            />
-          {/each}
-        </div>
-      </div>
-
-      <div class="flex flex-col gap-2">
-        <label class="block text-text-secondary"
-          >{$t('settings.general.responseMode')}</label
-        >
-        <div class="grid grid-cols-2 w-full gap-1">
-          <ButtonSet
-            title={$t('settings.general.response_mode.streaming')}
-            class="setting-btn {settings.enableStreaming ? 'active' : ''}"
-            onclick={() => handleUpdateSetting('enableStreaming', true)}
-            Description={$t('settings.general.response_mode.streaming_desc')}
+  <div class="setting-secsion flex flex-col gap-4 px-5">
+    <div class="grid gap-2 md:grid-cols-2">
+      {#each addedProviders as provider (provider.id)}
+        <div class="flex items-center gap-0.5">
+          <button
+            type="button"
+            class="focus-visible:ring-primary group relative flex h-9 flex-1 items-center gap-2 overflow-hidden px-6 pr-2 text-left text-sm text-text-secondary transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-offset-1 {selectedProviderId === provider.id ? 'text-text-primary' : ''}"
+            aria-pressed={selectedProviderId === provider.id}
+            onclick={() => selectProvider(provider.id)}
           >
-            <Icon icon="heroicons:bolt-20-solid" width="20" height="20" />
-          </ButtonSet>
-          <ButtonSet
-            title={$t('settings.general.response_mode.non_streaming')}
-            class="setting-btn {!settings.enableStreaming ? 'active' : ''}"
-            onclick={() => handleUpdateSetting('enableStreaming', false)}
-            Description={$t(
-              'settings.general.response_mode.non_streaming_desc',
-            )}
-          >
+            <div
+              class="absolute inset-0 border border-transparent bg-muted/5 transition-colors hover:border-blackwhite/15 {selectedProviderId === provider.id ? '!border-border !bg-blackwhite/5 hover:!border-blackwhite/15' : ''}"
+            ></div>
+            <div
+              class="absolute z-10 -bottom-2 -left-2 size-4 rotate-45 border bg-surface-1 transition-colors group-hover:border-blackwhite/15 {selectedProviderId === provider.id ? '!border-border hover:!border-blackwhite/15' : 'border-transparent'}"
+            ></div>
+            <span
+              class="absolute left-3 z-0 size-1 rounded-full transition-all {selectedProviderId === provider.id ? '!bg-white !shadow-[0_0_6px_rgba(255,255,255,1),0_0_3px_rgba(255,255,255,0.647)]' : '!bg-blackwhite/10 shadow-[0_0_0_rgba(255,255,255,0),0_0_0_rgba(255,255,255,0)]'}"
+            ></span>
             <Icon
-              icon="heroicons:device-phone-mobile-20-solid"
-              width="20"
-              height="20"
+              icon={provider.iconifyIcon || 'heroicons:cube-20-solid'}
+              width="16"
+              height="16"
+              class="shrink-0"
             />
-          </ButtonSet>
+            <span class="line-clamp-1 font-medium">{provider.label}</span>
+          </button>
+
+          {#if provider.id !== 'gemini'}
+            <button
+              type="button"
+              class="flex h-9 w-9 items-center justify-center border border-transparent bg-muted/5 text-text-secondary transition-colors hover:border-blackwhite/15 hover:text-red-500 {selectedProviderId === provider.id ? 'border-border' : ''}"
+              onclick={() => handleRemoveProvider(provider.id)}
+              title={$t('settings.provider_key_config.remove_provider', { default: 'Remove' })}
+              aria-label={$t('settings.provider_key_config.remove_provider', { default: 'Remove' })}
+            >
+              <Icon icon="heroicons:x-mark-20-solid" width="14" height="14" />
+            </button>
+          {/if}
         </div>
-      </div>
+      {/each}
+    </div>
 
-
-    {:else}
-      <!-- Basic Mode Content -->
-      <div class="setting-block flex gap-5 pb-2 flex-col">
-        <GeminiBasicConfig
-          bind:geminiApiKey={settings.geminiApiKey}
-          bind:selectedGeminiModel={settings.selectedGeminiModel}
-        />
-      </div>
+    {#if selectedProvider}
+      <ProviderKeyConfig
+        entry={selectedProvider}
+        isExpanded={true}
+        showHeader={false}
+      />
     {/if}
 
     <a

@@ -62,21 +62,11 @@
 
     <!-- Chat Model Picker -->
     <div class="flex flex-col gap-2">
-      {#if settings.isAdvancedMode}
-        <FeatureModelPicker
-          bind:provider={settings.chat.provider}
-          bind:model={settings.chat.model}
-          onchange={(p, m) => updateFeatureSettings('chat', { provider: p, model: m })}
-        />
-      {:else}
-        <div class="flex flex-col gap-1.5">
-          <!-- svelte-ignore a11y_label_has_associated_control -->
-          <label class="text-xs text-text-secondary">{$t('settings.feature_model_picker.model_label', { default: 'Model Name' })}</label>
-          <div class="text-xs font-mono text-text-secondary bg-muted/5 dark:bg-muted/5 border border-border px-3 py-2">
-            {$t('settings.summary.uses_gemini_basic', { default: 'Uses Gemini Basic' })}
-          </div>
-        </div>
-      {/if}
+      <FeatureModelPicker
+        bind:provider={settings.chat.provider}
+        bind:model={settings.chat.model}
+        onchange={(p, m) => updateFeatureSettings('chat', { provider: p, model: m })}
+      />
     </div>
 
     <!-- Custom instructions -->

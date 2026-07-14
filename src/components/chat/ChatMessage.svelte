@@ -182,7 +182,7 @@
     >
       <StreamingMarkdownV2
         sourceMarkdown={message.content}
-        enableCursor={isStreaming && settings.enableStreaming}
+        enableCursor={isStreaming}
         enableHighlight={true}
         summaryLang={settings.summaryLang}
         isLoading={isStreaming}

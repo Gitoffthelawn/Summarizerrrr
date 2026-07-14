@@ -3,7 +3,6 @@
   import { settings } from '@/stores/settingsStore.svelte.js'
   import {
     PROVIDER_LIST,
-    listConfiguredProviders,
     getProvider,
     getApiKey,
     getDefaultModel,
@@ -23,12 +22,36 @@
     disabled = false
   } = $props()
 
-  // Build the list of providers to show in the dropdown.
-  const configuredProviders = $derived(listConfiguredProviders(settings))
-  
+  // Added providers that are also configured (have a key / endpoint set)
+  const addedProviders = $derived(
+    (settings.addedProviders || ['gemini']).map(id => getProvider(id)).filter(Boolean)
+  )
+  const configuredAddedProviders = $derived(
+    addedProviders.filter(p => isProviderConfigured(p.id, settings))
+  )
+
+  // Auto-collapse: hide provider dropdown when ≤1 added provider is configured
+  const showProviderDropdown = $derived(configuredAddedProviders.length >= 2)
+
+  // The effective provider when collapsed (single or zero configured)
+  const effectiveProvider = $derived(
+    showProviderDropdown ? provider : (configuredAddedProviders[0]?.id ?? 'gemini')
+  )
+
+  // When collapsed, sync the bound provider/model if it drifts from
+  // the sole configured provider (e.g. user removed a second provider key).
+  $effect(() => {
+    if (!showProviderDropdown && provider !== effectiveProvider) {
+      provider = effectiveProvider
+      model = getDefaultModel(effectiveProvider) || ''
+      onchange(provider, model)
+    }
+  })
+
+  // Build the list of providers to show in the dropdown — only added providers.
   const providerOptions = $derived.by(() => {
-    const list = [...configuredProviders]
-    // If current provider is not configured, add it to the list
+    const list = [...addedProviders]
+    // If current provider is not in added list, include it so the user sees their selection
     if (provider && !list.some(p => p.id === provider)) {
       const current = getProvider(provider)
       if (current) {
@@ -53,16 +76,18 @@
     onchange(provider, model)
   }
 
-  // Get current provider registry entry
-  const currentProviderEntry = $derived(getProvider(provider))
+  // Get current provider registry entry (uses effectiveProvider for collapsed state)
+  const currentProviderEntry = $derived(getProvider(effectiveProvider))
 
   // Warning check if the provider is unconfigured
-  const isCurrentUnconfigured = $derived(provider && !isProviderConfigured(provider, settings))
+  const isCurrentUnconfigured = $derived(
+    effectiveProvider && !isProviderConfigured(effectiveProvider, settings)
+  )
 
   // For static provider combobox options
   const staticItems = $derived.by(() => {
     if (!currentProviderEntry || currentProviderEntry.modelSource !== 'static') return []
-    const fallbackList = FALLBACK_PROVIDER_MODELS[provider] || []
+    const fallbackList = FALLBACK_PROVIDER_MODELS[effectiveProvider] || []
     return fallbackList.map(m => ({ value: m, label: m }))
   })
 
@@ -74,34 +99,36 @@
 </script>
 
 <div class="flex flex-col gap-3">
-  <!-- Provider Select -->
-  <div class="flex flex-col gap-1.5">
-    <!-- svelte-ignore a11y_label_has_associated_control -->
-    <label class="text-xs text-text-secondary">
-      {$t('settings.feature_model_picker.provider_label', { default: 'Model Provider' })}
-    </label>
-    <div class="relative">
-      <ReusableSelect
-        items={providerOptions}
-        bindValue={provider}
-        {disabled}
-        ariaLabel="Select Provider"
-        onValueChangeCallback={handleProviderChange}
-      />
-    </div>
-    
-    {#if isCurrentUnconfigured}
-      <div class="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500 mt-1">
-        <Icon icon="heroicons:exclamation-triangle-16-solid" class="size-4 shrink-0" />
-        <span>
-          {$t('settings.feature_model_picker.unconfigured_warning', { default: 'This provider is not configured.' })}
-          <a href="#/providers" class="text-primary hover:underline font-medium">
-            {$t('settings.feature_model_picker.configure_link', { default: 'Configure API Key' })}
-          </a>
-        </span>
+  <!-- Provider Select — only shown when ≥2 providers are configured -->
+  {#if showProviderDropdown}
+    <div class="flex flex-col gap-1.5">
+      <!-- svelte-ignore a11y_label_has_associated_control -->
+      <label class="text-xs text-text-secondary">
+        {$t('settings.feature_model_picker.provider_label', { default: 'Model Provider' })}
+      </label>
+      <div class="relative">
+        <ReusableSelect
+          items={providerOptions}
+          bindValue={provider}
+          {disabled}
+          ariaLabel="Select Provider"
+          onValueChangeCallback={handleProviderChange}
+        />
       </div>
-    {/if}
-  </div>
+
+      {#if isCurrentUnconfigured}
+        <div class="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500 mt-1">
+          <Icon icon="heroicons:exclamation-triangle-16-solid" class="size-4 shrink-0" />
+          <span>
+            {$t('settings.feature_model_picker.unconfigured_warning', { default: 'This provider is not configured.' })}
+            <a href="#/providers" class="text-primary hover:underline font-medium">
+              {$t('settings.feature_model_picker.configure_link', { default: 'Configure API Key' })}
+            </a>
+          </span>
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Model Select / Input based on modelSource -->
   {#if currentProviderEntry}
@@ -123,7 +150,7 @@
         <label class="text-xs text-text-secondary font-medium">
           {$t('settings.feature_model_picker.model_label', { default: 'Model Name' })}
         </label>
-        
+
         {#if currentProviderEntry.modelSource === 'static'}
           <ReusableCombobox
             items={staticItems}

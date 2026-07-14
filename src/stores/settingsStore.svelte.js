@@ -3,7 +3,7 @@ import { get } from 'svelte/store'
 import { locale } from 'svelte-i18n'
 import { settingsStorage } from '@/services/wxtStorageService.js'
 import { sanitizeSettings, migrateLegacyGeminiAdvanced } from '@/lib/config/settingsSchema.js'
-import { normalizeProviderId, getLegacyModel, getProvider, getDefaultModel } from '@/lib/providers/providerRegistry.js'
+import { normalizeProviderId, getLegacyModel, getProvider, getDefaultModel, listConfiguredProviders } from '@/lib/providers/providerRegistry.js'
 
 // --- Default Settings (Merged) ---
 const DEFAULT_SETTINGS = {
@@ -39,7 +39,6 @@ const DEFAULT_SETTINGS = {
   cerebrasApiKey: '',
   selectedCerebrasModel: 'gpt-oss-120b',
   selectedFont: 'default',
-  enableStreaming: true,
   uiLang: 'en',
   mobileSheetHeight: 80, // Chiều cao MobileSheet (40-100 svh)
   mobileSheetBackdropOpacity: false, // Enable backdrop opacity for MobileSheet
@@ -155,6 +154,9 @@ const DEFAULT_SETTINGS = {
     defaultReasoningLevel: 'provider-default',
     quickModels: [],
   },
+
+  // Added Providers ("Add provider" flow)
+  addedProviders: ['gemini'],
 
   // Metadata
   lastModified: 0,
@@ -379,6 +381,14 @@ export function normalizeStoredSettings(rawSettings) {
 
   // 4. Migrate feature model settings
   cleanSettings = migrateFeatureModelSettings(cleanSettings, isSummarizeAbsent, isChatAbsent)
+
+  // 5. Seed addedProviders if absent (migration for existing users)
+  if (cleanSettings.addedProviders === undefined) {
+    const configuredIds = listConfiguredProviders(cleanSettings).map(p => p.id)
+    const seeded = ['gemini', ...configuredIds.filter(id => id !== 'gemini')]
+    cleanSettings.addedProviders = seeded
+    console.log('[settingsStore] Migration: Seeded addedProviders:', seeded)
+  }
 
   return cleanSettings
 }
@@ -928,4 +938,39 @@ export async function updateFeatureSettings(feature, updates) {
   }
 
   await updateSettings({ [feature]: updatedFeature })
+}
+
+// --- Added Provider Management ---
+
+/**
+ * Adds a provider to the addedProviders list (dedupe-append).
+ * @param {string} id - Provider ID to add
+ */
+export async function addProvider(id) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  const current = settings.addedProviders || ['gemini']
+  if (current.includes(id)) return // Already added
+
+  await updateSettings({ addedProviders: [...current, id] })
+}
+
+/**
+ * Removes a provider from the addedProviders list.
+ * Gemini cannot be removed. Does NOT clear the provider's API key (non-destructive).
+ * @param {string} id - Provider ID to remove
+ */
+export async function removeProvider(id) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  if (id === 'gemini') return // Never remove Gemini
+
+  const current = settings.addedProviders || ['gemini']
+  await updateSettings({ addedProviders: current.filter(p => p !== id) })
 }

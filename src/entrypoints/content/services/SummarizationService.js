@@ -22,19 +22,9 @@ export class SummarizationService {
    * @returns {boolean}
    */
   shouldUseStreaming(settings) {
-    // FORCE BLOCKING MODE cho tất cả content scripts
-    // Content scripts có security restrictions làm streaming bị lỗi "Permission denied to access property flush"
+    // Content scripts commit a complete result because streaming can fail under
+    // their security restrictions (for example, a denied `flush` property).
     return false
-
-    // Logic cũ đã được disable:
-    // const selectedProvider = settings.selectedProvider || 'gemini'
-    // const browserCompatibility = getBrowserCompatibility()
-    // if (!browserCompatibility.supportsAdvancedStreaming) {
-    //   return false
-    // }
-    // return (
-    //   settings.enableStreaming && providerSupportsStreaming(selectedProvider)
-    // )
   }
 
   /**

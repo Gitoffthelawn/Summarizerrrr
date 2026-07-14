@@ -25,13 +25,6 @@
         "system": "System",
         "system_desc": "System theme."
       },
-      "responseMode": "Response Mode (Just work on the Sidepanel)",
-      "response_mode": {
-        "streaming": "Streaming",
-        "streaming_desc": "Real-time response display, better experience.",
-        "non_streaming": "Blocking",
-        "non_streaming_desc": "Suitable for low-end devices, reduce lag."
-      },
       "floatingButton": "Floating Button",
       "floating_button": {
         "show": "Show",
@@ -336,7 +329,9 @@
       "api_key_label": "API Key",
       "api_key_placeholder": "Enter API Key",
       "get_a_key": "Get API Key",
-      "api_keys_section_title": "API Keys & Endpoints"
+      "api_keys_section_title": "API Keys & Endpoints",
+      "add_provider": "Add provider",
+      "remove_provider": "Remove"
     }
   },
   "tab_navigation": {

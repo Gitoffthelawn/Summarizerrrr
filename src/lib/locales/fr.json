@@ -25,13 +25,6 @@
         "system": "Système",
         "system_desc": "Utilise le thème de votre appareil."
       },
-      "responseMode": "Mode de réponse (Fonctionne uniquement dans le panneau latéral)",
-      "response_mode": {
-        "streaming": "Streaming",
-        "streaming_desc": "Réponses instantanées. Recommandé.",
-        "non_streaming": "Blocking",
-        "non_streaming_desc": "Pour les connexions lentes. Évite les pauses."
-      },
       "floatingButton": "Bouton flottant",
       "floating_button": {
         "show": "Afficher",
@@ -330,7 +323,9 @@
       "api_key_label": "Clé API",
       "api_key_placeholder": "Saisir la clé API",
       "get_a_key": "Obtenir une clé API",
-      "api_keys_section_title": "Clés API et points de terminaison"
+      "api_keys_section_title": "Clés API et points de terminaison",
+      "add_provider": "Ajouter un fournisseur",
+      "remove_provider": "Supprimer"
     }
   },
   "tab_navigation": {

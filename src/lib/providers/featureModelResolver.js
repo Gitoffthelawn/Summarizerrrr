@@ -27,33 +27,27 @@ export function resolveFeatureModel(feature, settings) {
   let providerId;
   let modelId;
 
-  // 1. isAdvancedMode === false -> force Gemini Basic
-  if (settings.isAdvancedMode === false) {
-    providerId = 'gemini';
-    modelId = settings.selectedGeminiModel || getDefaultModel('gemini');
+  // 1. Read settings[feature].provider/model if block is present
+  const featureBlock = settings[feature];
+  if (featureBlock && featureBlock.provider && featureBlock.model) {
+    providerId = featureBlock.provider;
+    modelId = featureBlock.model;
   } else {
-    // 2. Read settings[feature].provider/model if block is present
-    const featureBlock = settings[feature];
-    if (featureBlock && featureBlock.provider && featureBlock.model) {
-      providerId = featureBlock.provider;
-      modelId = featureBlock.model;
+    // Fallback to legacy derivation
+    const legacyProvider = settings.selectedProvider || 'gemini';
+    if (legacyProvider === 'gemini') {
+      providerId = 'gemini';
     } else {
-      // Fallback to legacy derivation
-      const legacyProvider = settings.selectedProvider || 'gemini';
-      if (legacyProvider === 'gemini') {
-        providerId = 'gemini';
-      } else {
-        providerId = normalizeProviderId(legacyProvider);
-      }
-      modelId = getLegacyModel(providerId, settings) || getDefaultModel(providerId);
+      providerId = normalizeProviderId(legacyProvider);
     }
+    modelId = getLegacyModel(providerId, settings) || getDefaultModel(providerId);
+  }
 
-    // 3. Fallback to Gemini Basic if chosen provider is not configured
-    if (!isProviderConfigured(providerId, settings)) {
-      if (isProviderConfigured('gemini', settings)) {
-        providerId = 'gemini';
-        modelId = settings.selectedGeminiModel || getDefaultModel('gemini');
-      }
+  // 2. Fallback to Gemini Basic if chosen provider is not configured
+  if (!isProviderConfigured(providerId, settings)) {
+    if (isProviderConfigured('gemini', settings)) {
+      providerId = 'gemini';
+      modelId = settings.selectedGeminiModel || getDefaultModel('gemini');
     }
   }
 

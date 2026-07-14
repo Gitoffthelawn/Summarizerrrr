@@ -25,13 +25,6 @@
         "system": "System",
         "system_desc": "System-Design verwenden."
       },
-      "responseMode": "Antwortmodus (Funktioniert nur in der Seitenleiste)",
-      "response_mode": {
-        "streaming": "Streaming",
-        "streaming_desc": "Echtzeitanzeige, bessere Erfahrung.",
-        "non_streaming": "Blocking",
-        "non_streaming_desc": "Für schwächere Geräte, weniger Verzögerung."
-      },
       "floatingButton": "Schwebender Button",
       "floating_button": {
         "show": "Anzeigen",
@@ -330,7 +323,9 @@
       "api_key_label": "API-Schlüssel",
       "api_key_placeholder": "API-Schlüssel eingeben",
       "get_a_key": "API-Schlüssel erhalten",
-      "api_keys_section_title": "API-Schlüssel & Endpunkte"
+      "api_keys_section_title": "API-Schlüssel & Endpunkte",
+      "add_provider": "Anbieter hinzufügen",
+      "remove_provider": "Entfernen"
     }
   },
   "tab_navigation": {

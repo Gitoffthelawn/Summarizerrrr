@@ -25,13 +25,6 @@
         "system": "Hệ thống",
         "system_desc": "Sử dụng giao diện hệ thống."
       },
-      "responseMode": "Chế độ phản hồi (Chỉ làm việc trên Thanh bên)",
-      "response_mode": {
-        "streaming": "Streaming",
-        "streaming_desc": "Hiển thị phản hồi thời gian thực, trải nghiệm tốt hơn.",
-        "non_streaming": "Blocking",
-        "non_streaming_desc": "Phù hợp cho thiết bị yếu, giảm giật lag."
-      },
       "floatingButton": "Nút nổi",
       "floating_button": {
         "show": "Hiển thị",
@@ -336,7 +329,9 @@
       "api_key_label": "API Key",
       "api_key_placeholder": "Nhập API Key",
       "get_a_key": "Lấy API Key",
-      "api_keys_section_title": "API Keys & Endpoints"
+      "api_keys_section_title": "API Keys & Endpoints",
+      "add_provider": "Thêm nhà cung cấp",
+      "remove_provider": "Xóa"
     }
   },
   "tab_navigation": {

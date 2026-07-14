@@ -36,6 +36,7 @@ export const VALID_SETTING_KEYS = [
   'selectedGroqModel',
   'cerebrasApiKey',
   'selectedCerebrasModel',
+  'addedProviders',
 
   // UI Configuration
   'floatButton',
@@ -44,7 +45,6 @@ export const VALID_SETTING_KEYS = [
   'floatingPanelLeft',
   'closePanelOnOutsideClick',
   'selectedFont',
-  'enableStreaming',
   'uiLang',
   'mobileSheetHeight',
   'mobileSheetBackdropOpacity',
@@ -320,6 +320,6 @@ export const SETTING_CATEGORIES = {
   summary: VALID_SETTING_KEYS.filter(
     (key) => key.startsWith('summary') || key === 'isSummaryAdvancedMode'
   ),
-  advanced: ['isAdvancedMode', 'enableStreaming'],
+  advanced: ['isAdvancedMode'],
   tools: ['tools'],
 }

@@ -33,11 +33,8 @@ export function useApiKeyValidation() {
   const needsApiKeySetup = $derived(() => {
     const rawProvider = settings.selectedProvider
 
-    // Determine the actual provider based on isAdvancedMode (like in api.js)
+    // Determine the actual provider (mirrors keep this in sync with feature blocks)
     let actualProvider = rawProvider
-    if (!settings.isAdvancedMode) {
-      actualProvider = 'gemini' // Force Gemini in basic mode
-    }
 
     const keyField = providerApiKeyMap[actualProvider]
 

@@ -19,7 +19,7 @@
   <StreamingMarkdownV2
     sourceMarkdown={summary}
     onFinishTyping={handleMarkdownFinishTyping}
-    enableCursor={settings.enableStreaming}
+    enableCursor={false}
     enableHighlight={true}
     summaryLang={settings.summaryLang}
     {isLoading}

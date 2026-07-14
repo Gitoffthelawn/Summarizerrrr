@@ -26,20 +26,20 @@
     })
   }
 
-  /**
-   * Toggle provider mode với proper initialization
-   */
-  function toggleProviderMode(useBasic) {
-    const updates = { useGeminiBasic: useBasic }
-
-    // Initialize custom provider if switching to custom mode
-    if (!useBasic && !settings.tools.deepDive.customProvider) {
-      updates.customProvider = settings.selectedProvider || 'gemini'
-      updates.customModel = 'gemma-4-26b-a4b-it'
+  // Force useGeminiBasic = false so toolProviderService always resolves
+  // the custom provider path. Initialize customProvider/customModel if absent.
+  $effect(() => {
+    const dd = settings.tools?.deepDive
+    if (!dd) return
+    if (dd.useGeminiBasic) {
+      const updates = { useGeminiBasic: false }
+      if (!dd.customProvider) {
+        updates.customProvider = settings.selectedProvider || 'gemini'
+        updates.customModel = 'gemma-4-26b-a4b-it'
+      }
+      updateToolSettings(updates)
     }
-
-    updateToolSettings(updates)
-  }
+  })
 
   /**
    * Toggle auto generate mode
@@ -80,63 +80,31 @@
   </div>
 
   {#if toolSettings.enabled}
-    <!-- Provider Mode Selection -->
-    <div>
-      <label class="text-text-primary"
-        >{$t('settings.tools.deepdive.provider_label')}</label
-      >
-      <p class="mt-2 text-muted">
-        {$t('settings.tools.deepdive.provider_description')}
-      </p>
-      <div class="grid mt-3 grid-cols-2 gap-2">
-        <ButtonSet
-          title={$t('settings.tools.deepdive.gemini_basic')}
-          class="setting-btn {toolSettings.useGeminiBasic ? 'active' : ''}"
-          onclick={() => toggleProviderMode(true)}
-          Description={$t('settings.tools.deepdive.gemini_basic_description')}
-        >
-          <Icon icon="heroicons:sparkles" width="16" height="16" />
-        </ButtonSet>
-        <ButtonSet
-          title={$t('settings.tools.deepdive.custom_provider')}
-          class="setting-btn {!toolSettings.useGeminiBasic ? 'active' : ''}"
-          onclick={() => toggleProviderMode(false)}
-          Description={$t(
-            'settings.tools.deepdive.custom_provider_description',
-          )}
-        >
-          <Icon icon="heroicons:cog-6-tooth" width="16" height="16" />
-        </ButtonSet>
+    <!-- Custom Provider Configuration -->
+    <div class="flex flex-col gap-4">
+      <FeatureModelPicker
+        bind:provider={toolSettings.customProvider}
+        bind:model={toolSettings.customModel}
+        onchange={(p, m) => updateToolSettings({ customProvider: p, customModel: m })}
+      />
+
+      <!-- ✅ INFO: API keys editable and update global settings -->
+      <div class="text-xs text-muted flex gap-1 -mt-2">
+        <Icon
+          class=" shrink-0"
+          icon="heroicons:information-circle"
+          width="16"
+          height="16"
+        />
+        <span>
+          {$t('settings.tools.deepdive.api_keys_info_restructured', { default: 'API Keys are managed globally. Go to the' })}
+          <a href="#/providers" class="text-primary hover:underline font-medium">
+            {$t('settings.tools.deepdive.api_keys_link_text', { default: 'Providers & API Keys' })}
+          </a>
+          {$t('settings.tools.deepdive.api_keys_info_restructured_end', { default: 'tab to configure credentials.' })}
+        </span>
       </div>
     </div>
-
-    {#if !toolSettings.useGeminiBasic}
-      <!-- Custom Provider Configuration -->
-      <div class="flex flex-col gap-4">
-        <FeatureModelPicker
-          bind:provider={toolSettings.customProvider}
-          bind:model={toolSettings.customModel}
-          onchange={(p, m) => updateToolSettings({ customProvider: p, customModel: m })}
-        />
-
-        <!-- ✅ INFO: API keys editable and update global settings -->
-        <div class="text-xs text-muted flex gap-1 -mt-2">
-          <Icon
-            class=" shrink-0"
-            icon="heroicons:information-circle"
-            width="16"
-            height="16"
-          />
-          <span>
-            {$t('settings.tools.deepdive.api_keys_info_restructured', { default: 'API Keys are managed globally. Go to the' })}
-            <a href="#/providers" class="text-primary hover:underline font-medium">
-              {$t('settings.tools.deepdive.api_keys_link_text', { default: 'Providers & API Keys' })}
-            </a>
-            {$t('settings.tools.deepdive.api_keys_info_restructured_end', { default: 'tab to configure credentials.' })}
-          </span>
-        </div>
-      </div>
-    {/if}
 
     <!-- Auto Generate Mode -->
     <div>

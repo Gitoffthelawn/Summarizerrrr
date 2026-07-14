@@ -6,9 +6,7 @@
   import Icon from '@iconify/svelte'
   import ButtonSet from '../buttons/ButtonSet.svelte'
   import LanguageSelect from '../inputs/LanguageSelect.svelte'
-  import TextScramble from '../../lib/ui/textScramble.js'
   import SwitchButton from '../inputs/Switch.svelte'
-  import { Label, Switch } from 'bits-ui'
   import {
     settings,
     updateSettings,
@@ -42,22 +40,6 @@
     handleUpdateSetting('summaryTone', tone)
     wittyClickCount = 0
   }
-
-  let textElement
-  let textScramble
-
-  $effect(() => {
-    if (!textScramble && textElement) {
-      textScramble = new TextScramble(textElement)
-    }
-    if (textScramble) {
-      textScramble.setText(
-        settings.isSummaryAdvancedMode
-          ? $t('settings.ai_model.mode.advanced')
-          : $t('settings.ai_model.mode.basic'),
-      )
-    }
-  })
 
   const customPrompts = [
     {
@@ -103,62 +85,19 @@
 <!-- Summmary Section -->
 <div class="setting-block flex flex-col gap-5 pb-6 pt-5">
   <div class="flex items-center h-6 justify-between px-5">
-    <label for="isSummaryAdvancedMode" class="block font-bold text-text-primary"
+    <label class="block font-bold text-text-primary"
       >{$t('settings.summary.title')}</label
     >
-    <div class="flex items-center">
-      <Label.Root
-        class="cursor-pointer pr-2 py-2 w-20 !text-right font-bold select-none transition-colors duration-1000 {settings.isSummaryAdvancedMode
-          ? 'text-primary'
-          : 'text-text-primary'}"
-        for="isSummaryAdvancedMode-toggle"
-      >
-        <span bind:this={textElement}>
-          {settings.isSummaryAdvancedMode
-            ? $t('settings.ai_model.mode.advanced')
-            : $t('settings.ai_model.mode.basic')}
-        </span>
-      </Label.Root>
-
-      <Switch.Root
-        id="isSummaryAdvancedMode-toggle"
-        name="Summary Advanced Mode"
-        checked={settings.isSummaryAdvancedMode}
-        onCheckedChange={(value) =>
-          handleUpdateSetting('isSummaryAdvancedMode', value)}
-        class="focus-visible:ring-primary border border-blackwhite/5 text-text-secondary flex justify-center items-center focus-visible:ring-offset-background  bg-blackwhite/5 hover:bg-blackwhite/10 transition-colors rounded-full  focus-visible:outline-hidden  size-7.5  shrink-0 cursor-pointer  focus-visible:ring-1 focus-visible:ring-offset-1 disabled:cursor-not-allowed data-[state=checked]:text-white disabled:opacity50"
-      >
-        <Switch.Thumb
-          class="bg-primary rounded-full pointer-events-none block shrink-0 size-7.5 transition-all duration-300 data-[state=checked]:scale-100 data-[state=unchecked]:scale-60  data-[state=checked]:opacity-100 data-[state=unchecked]:opacity-0"
-        />
-        <Icon
-          icon="heroicons:wrench-16-solid"
-          width="20"
-          height="20"
-          class="origin-[75%_25%] animate-wiggle absolute z-10"
-        />
-      </Switch.Root>
-    </div>
   </div>
 
   <div class="setting-secsion flex flex-col gap-6 px-5">
     <!-- Summarize Model Picker -->
     <div class="flex flex-col gap-2">
-      {#if settings.isSummaryAdvancedMode}
-        <FeatureModelPicker
-          bind:provider={settings.summarize.provider}
-          bind:model={settings.summarize.model}
-          onchange={(p, m) => updateFeatureSettings('summarize', { provider: p, model: m })}
-        />
-      {:else}
-        <div class="flex flex-col gap-1.5">
-          <!-- svelte-ignore a11y_label_has_associated_control -->
-          <label class="text-xs text-text-secondary">{$t('settings.feature_model_picker.model_label', { default: 'Model Name' })}</label>
-          <div class="text-xs font-mono text-text-secondary bg-muted/5 dark:bg-muted/5 border border-border px-3 py-2">
-            {$t('settings.summary.uses_gemini_basic', { default: 'Uses Gemini Basic' })}
-          </div>
-        </div>
-      {/if}
+      <FeatureModelPicker
+        bind:provider={settings.summarize.provider}
+        bind:model={settings.summarize.model}
+        onchange={(p, m) => updateFeatureSettings('summarize', { provider: p, model: m })}
+      />
     </div>
 
     <!-- Summary Language Section -->
@@ -275,43 +214,42 @@
     </div>
   </div>
 
-  {#if settings.isSummaryAdvancedMode}
-    <div class="@container setting-secsion flex flex-col gap-4 px-5">
-      <!-- Prompt settings -->
-      <div class="flex items-center gap-1 text-text-primary justify-between">
-        <span class=" font-bold">
-          {$t('settings.summary.custom_prompts.title')}</span
-        >
-        <a
-          href={browser.runtime.getURL(
-            'prompt.html?promptKey=youtubeCustomPromptContent',
-          )}
-          target="_blank"
-          class="text-xs flex items-center gap-0.5 text-primary outline-gray-500 hover:underline"
-        >
-          {$t('settings.summary.custom_prompts.editor_button')}
-          <Icon width={12} icon="heroicons:arrow-up-right-16-solid" />
-        </a>
-      </div>
-
-      <div class="grid @min-[23rem]:grid-cols-2 gap-2">
-        {#each customPrompts as prompt}
-          <SwitchButton
-            id={prompt.id}
-            name={prompt.name}
-            checked={settings[prompt.settingKey]}
-            onCheckedChange={(value) =>
-              handleUpdateSetting(prompt.settingKey, value)}
-            onEdit={() =>
-              browser.tabs.create({
-                url: browser.runtime.getURL(
-                  `prompt.html?promptKey=${prompt.promptKey}`,
-                ),
-              })}
-          />
-        {/each}
-      </div>
-      <p>{$t('settings.summary.custom_prompts.override_note')}</p>
+  <div class="@container setting-secsion flex flex-col gap-4 px-5">
+    <!-- Prompt settings -->
+    <div class="flex items-center gap-1 text-text-primary justify-between">
+      <span class=" font-bold">
+        {$t('settings.summary.custom_prompts.title')}</span
+      >
+      <a
+        href={browser.runtime.getURL(
+          'prompt.html?promptKey=youtubeCustomPromptContent',
+        )}
+        target="_blank"
+        class="text-xs flex items-center gap-0.5 text-primary outline-gray-500 hover:underline"
+      >
+        {$t('settings.summary.custom_prompts.editor_button')}
+        <Icon width={12} icon="heroicons:arrow-up-right-16-solid" />
+      </a>
     </div>
-  {/if}
+
+    <div class="grid @min-[23rem]:grid-cols-2 gap-2">
+      {#each customPrompts as prompt}
+        <SwitchButton
+          id={prompt.id}
+          name={prompt.name}
+          checked={settings[prompt.settingKey]}
+          onCheckedChange={(value) =>
+            handleUpdateSetting(prompt.settingKey, value)}
+          onEdit={() =>
+            browser.tabs.create({
+              url: browser.runtime.getURL(
+                `prompt.html?promptKey=${prompt.promptKey}`,
+              ),
+            })}
+        />
+      {/each}
+    </div>
+    <p>{$t('settings.summary.custom_prompts.override_note')}</p>
+  </div>
 </div>
+

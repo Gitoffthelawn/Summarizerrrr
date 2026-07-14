@@ -9,8 +9,38 @@ import { resolveFeatureModel } from '@/lib/providers/featureModelResolver.js'
 import { normalizeProviderId, getLegacyModel } from '@/lib/providers/providerRegistry.js'
 
 async function* defaultStreamRequest(request) {
-  const { generateContentStreamEnhancedRequest } = await import('@/lib/api/aiSdkAdapter.js')
-  yield* generateContentStreamEnhancedRequest(request)
+  const {
+    generateContentRequest,
+    generateContentStreamEnhancedRequest,
+  } = await import('@/lib/api/aiSdkAdapter.js')
+  const { getBrowserCompatibility } = await import('@/lib/utils/browserDetection.js')
+
+  async function* generateBlockingResponse() {
+    const fullText = await generateContentRequest(request)
+    yield { chunk: fullText, fullText, isComplete: false }
+    yield { chunk: '', fullText, isComplete: true, usage: null }
+  }
+
+  const compatibility = getBrowserCompatibility()
+  if (!compatibility.supportsAdvancedStreaming) {
+    yield* generateBlockingResponse()
+    return
+  }
+
+  try {
+    yield* generateContentStreamEnhancedRequest(request)
+  } catch (error) {
+    // Firefox mobile can reject the stream writer's `flush` property. Retry
+    // once with a blocking request so chat still completes on that platform.
+    if (
+      compatibility.isFirefoxMobile &&
+      (error?.isFirefoxMobileStreamingError || error?.message?.includes('flush'))
+    ) {
+      yield* generateBlockingResponse()
+      return
+    }
+    throw error
+  }
 }
 
 /**

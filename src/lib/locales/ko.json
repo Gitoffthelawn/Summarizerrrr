@@ -25,13 +25,6 @@
         "system": "시스템",
         "system_desc": "시스템 테마"
       },
-      "responseMode": "응답 모드 (사이드패널에서만 작동)",
-      "response_mode": {
-        "streaming": "스트리밍",
-        "streaming_desc": "실시간 응답 표시, 더 나은 경험",
-        "non_streaming": "비스트리밍",
-        "non_streaming_desc": "저사양 기기에 적합, 지연 감소"
-      },
       "floatingButton": "플로팅 버튼",
       "floating_button": {
         "show": "표시",
@@ -330,7 +323,9 @@
       "api_key_label": "API 키",
       "api_key_placeholder": "API 키 입력",
       "get_a_key": "API 키 받기",
-      "api_keys_section_title": "API 키 및 엔드포인트"
+      "api_keys_section_title": "API 키 및 엔드포인트",
+      "add_provider": "공급자 추가",
+      "remove_provider": "제거"
     }
   },
   "tab_navigation": {
