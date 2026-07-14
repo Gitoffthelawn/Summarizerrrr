@@ -326,6 +326,17 @@
       "api_keys_section_title": "API-Schlüssel & Endpunkte",
       "add_provider": "Anbieter hinzufügen",
       "remove_provider": "Entfernen"
+    },
+    "openai_profile_config": {
+      "name_label": "Profilname",
+      "name_required": "Name ist erforderlich",
+      "base_url_label": "Basis-URL",
+      "base_url_invalid": "Muss eine gültige HTTP/HTTPS-URL sein",
+      "api_key_label": "API-Schlüssel",
+      "api_key_required": "API-Schlüssel ist erforderlich",
+      "default_model_label": "Standard-Modell-ID",
+      "default_model_required": "Standard-Modell-ID ist erforderlich",
+      "delete_profile": "Profil löschen"
     }
   },
   "tab_navigation": {

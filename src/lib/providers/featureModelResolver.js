@@ -1,9 +1,9 @@
 import {
-  getProvider,
   normalizeProviderId,
   isProviderConfigured,
   getLegacyModel,
-  getDefaultModel
+  getDefaultModel,
+  resolveProviderEntry
 } from './providerRegistry.js';
 
 /**
@@ -15,7 +15,7 @@ import {
  */
 export function resolveFeatureModel(feature, settings) {
   if (!settings) {
-    const defaultGemini = getProvider('gemini');
+    const defaultGemini = resolveProviderEntry('gemini', null);
     return {
       providerId: 'gemini',
       modelId: defaultGemini.defaultModel,
@@ -40,23 +40,23 @@ export function resolveFeatureModel(feature, settings) {
     } else {
       providerId = normalizeProviderId(legacyProvider);
     }
-    modelId = getLegacyModel(providerId, settings) || getDefaultModel(providerId);
+    modelId = getLegacyModel(providerId, settings) || getDefaultModel(providerId, settings);
   }
 
   // 2. Fallback to Gemini Basic if chosen provider is not configured
   if (!isProviderConfigured(providerId, settings)) {
     if (isProviderConfigured('gemini', settings)) {
       providerId = 'gemini';
-      modelId = settings.selectedGeminiModel || getDefaultModel('gemini');
+      modelId = settings.selectedGeminiModel || getDefaultModel('gemini', settings);
     }
   }
 
   // Ensure modelId is not empty
   if (!modelId) {
-    modelId = getDefaultModel(providerId) || '';
+    modelId = getDefaultModel(providerId, settings) || '';
   }
 
-  const provider = getProvider(providerId);
+  const provider = resolveProviderEntry(providerId, settings);
   if (!provider) {
     throw new Error(`Resolved to unknown provider: ${providerId}`);
   }

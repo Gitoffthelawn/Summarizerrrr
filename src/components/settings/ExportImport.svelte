@@ -4,7 +4,9 @@
     settings,
     updateSettings,
     forceReloadSettings,
+    normalizeStoredSettings,
   } from '../../stores/settingsStore.svelte.js'
+  import { mergeProfiles } from '@/lib/providers/openAICompatibleProfiles.js'
   import { archiveStore } from '../../stores/archiveStore.svelte.js'
   import {
     invalidateTagsCache,
@@ -276,7 +278,7 @@
 
           // New format (Cloud Sync compatible)
           if (parsedSettingsFile.data) {
-            data.settings = sanitizeSettings(migrateLegacyGeminiAdvanced(parsedSettingsFile.data))
+            data.settings = normalizeStoredSettings(migrateLegacyGeminiAdvanced(parsedSettingsFile.data))
             if (parsedSettingsFile._backup) {
               data.metadata = parsedSettingsFile._backup
             }
@@ -284,11 +286,11 @@
           // Old format (metadata + settings)
           else if (parsedSettingsFile.metadata && parsedSettingsFile.settings) {
             data.metadata = parsedSettingsFile.metadata
-            data.settings = sanitizeSettings(migrateLegacyGeminiAdvanced(parsedSettingsFile.settings))
+            data.settings = normalizeStoredSettings(migrateLegacyGeminiAdvanced(parsedSettingsFile.settings))
           }
           // Legacy format (just settings object)
           else {
-            data.settings = sanitizeSettings(migrateLegacyGeminiAdvanced(parsedSettingsFile))
+            data.settings = normalizeStoredSettings(migrateLegacyGeminiAdvanced(parsedSettingsFile))
           }
         } catch (error) {
           console.error(`Failed to parse settings: ${error.message}`)
@@ -525,7 +527,7 @@
   async function performSimpleImport(importedData) {
     // Handle Settings
     if (importedData.settings) {
-      const cleanImportedSettings = sanitizeSettings(migrateLegacyGeminiAdvanced(importedData.settings))
+      const cleanImportedSettings = normalizeStoredSettings(migrateLegacyGeminiAdvanced(importedData.settings))
 
       // ✅ MIGRATION: Migrate 'alien' tone to 'witty' on import
       if (cleanImportedSettings.summaryTone === 'alien') {
@@ -538,11 +540,18 @@
         await updateSettings(cleanImportedSettings, { isFullIngress: true })
       } else {
         // Merge: Combine settings
-        // ✅ FIX: Sanitize current settings trước khi merge để loại bỏ invalid keys
-        const cleanCurrentSettings = sanitizeSettings(settings)
+        const cleanCurrentSettings = normalizeStoredSettings(settings)
+
+        // Merge profiles by stable ID using mergeProfiles helper
+        const mergedProfiles = mergeProfiles(
+          cleanCurrentSettings.openaiCompatibleProfiles || [],
+          cleanImportedSettings.openaiCompatibleProfiles || []
+        )
+
         const mergedSettings = {
           ...cleanCurrentSettings,
           ...cleanImportedSettings,
+          openaiCompatibleProfiles: mergedProfiles,
         }
         await updateSettings(mergedSettings, { isFullIngress: true })
       }

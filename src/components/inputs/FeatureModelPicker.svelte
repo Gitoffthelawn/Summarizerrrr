@@ -2,8 +2,8 @@
 <script>
   import { settings } from '@/stores/settingsStore.svelte.js'
   import {
-    PROVIDER_LIST,
-    getProvider,
+    listAddedProviderEntries,
+    resolveProviderEntry,
     getApiKey,
     getDefaultModel,
     isProviderConfigured
@@ -22,10 +22,8 @@
     disabled = false
   } = $props()
 
-  // Added providers that are also configured (have a key / endpoint set)
-  const addedProviders = $derived(
-    (settings.addedProviders || ['gemini']).map(id => getProvider(id)).filter(Boolean)
-  )
+  // Added providers + dynamic profiles
+  const addedProviders = $derived(listAddedProviderEntries(settings))
   const configuredAddedProviders = $derived(
     addedProviders.filter(p => isProviderConfigured(p.id, settings))
   )
@@ -43,7 +41,7 @@
   $effect(() => {
     if (!showProviderDropdown && provider !== effectiveProvider) {
       provider = effectiveProvider
-      model = getDefaultModel(effectiveProvider) || ''
+      model = getDefaultModel(effectiveProvider, settings) || ''
       onchange(provider, model)
     }
   })
@@ -53,7 +51,7 @@
     const list = [...addedProviders]
     // If current provider is not in added list, include it so the user sees their selection
     if (provider && !list.some(p => p.id === provider)) {
-      const current = getProvider(provider)
+      const current = resolveProviderEntry(provider, settings)
       if (current) {
         list.push(current)
       }
@@ -72,12 +70,12 @@
   function handleProviderChange(newProviderId) {
     if (newProviderId === provider) return
     provider = newProviderId
-    model = getDefaultModel(newProviderId) || ''
+    model = getDefaultModel(newProviderId, settings) || ''
     onchange(provider, model)
   }
 
   // Get current provider registry entry (uses effectiveProvider for collapsed state)
-  const currentProviderEntry = $derived(getProvider(effectiveProvider))
+  const currentProviderEntry = $derived(resolveProviderEntry(effectiveProvider, settings))
 
   // Warning check if the provider is unconfigured
   const isCurrentUnconfigured = $derived(

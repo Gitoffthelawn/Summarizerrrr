@@ -21,12 +21,19 @@
       'groqApiKey',
       'cerebrasApiKey',
       'openrouterApiKey',
-      'openaiCompatibleApiKey',
     ]
 
-    const keyCount = apiKeyFields.filter(
+    let keyCount = apiKeyFields.filter(
       (field) => settings[field] && settings[field].trim() !== '',
     ).length
+
+    // Add profile API keys
+    const profiles = settings.openaiCompatibleProfiles || []
+    const profileKeysCount = profiles.filter(
+      (p) => p.apiKey && p.apiKey.trim() !== ''
+    ).length
+
+    keyCount += profileKeysCount
 
     if (keyCount === 0) return $t('cloudSync.conflict.noApiKeys')
     return keyCount === 1

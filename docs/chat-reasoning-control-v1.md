@@ -28,10 +28,14 @@ The repository is close to supporting this already:
   request properties through `...generationOptions`, so a top-level
   `reasoning` value can reach AI SDK without redesigning the adapter contract.
 - The same adapter currently injects Gemini-specific
-  `providerOptions.google.thinkingConfig` from `geminiThinkingLevel` or
-  `geminiAdvancedThinkingLevel`. Per AI SDK precedence rules, that provider
-  option would override a chat-level portable `reasoning` setting unless the
-  adapter explicitly suppresses the old Gemini setting for chat requests.
+  `providerOptions.google.thinkingConfig` from `geminiThinkingLevel`. *(Amended
+  2026-07-14: the legacy `geminiAdvancedThinkingLevel` has since been folded
+  into `geminiThinkingLevel` and deleted in `settingsSchema.js`, so only
+  `geminiThinkingLevel` remains at runtime — the Phase 1 step 4 suppression
+  guard only needs to touch that one field.)* Per AI SDK precedence rules, that
+  provider option would override a chat-level portable `reasoning` setting
+  unless the adapter explicitly suppresses the old Gemini setting for chat
+  requests.
 - [`src/lib/api/aiSdkAdapter.js`](../src/lib/api/aiSdkAdapter.js) imports the
   official OpenRouter provider but currently builds OpenRouter, Groq, and
   Cerebras models through the generic OpenAI-compatible provider even though
@@ -47,6 +51,19 @@ The repository is close to supporting this already:
   preserves additional message properties through object spread.
 - [`src/components/chat/ChatComposer.svelte`](../src/components/chat/ChatComposer.svelte)
   has room beside the Send button for a compact selector.
+- **Amended 2026-07-14:** the OpenAI-compatible provider is no longer a single
+  static id. After `docs/openai-compatible-multi-profile-v1.md` landed,
+  `openaiCompatible` is a repeatable **template** and real conversations /
+  `settings.chat.provider` carry dynamic profile ids such as
+  `openai-compatible-<uuid>` or `openai-compatible-legacy`. Every provider-id
+  branch in this plan must therefore treat any
+  `isOpenAICompatibleProfileId(id)` (from
+  [`src/lib/providers/openAICompatibleProfiles.js`](../src/lib/providers/openAICompatibleProfiles.js))
+  — and the bare `openaiCompatible` template — as the `openaiCompatible` row
+  (Auto-only, no override). Note that the registry's `normalizeProviderId`
+  returns profile ids **unchanged**, so it is *not* sufficient on its own for
+  this collapse; use `isOpenAICompatibleProfileId` (or an entry's
+  `capabilityProviderId`) explicitly.
 - Streaming currently consumes only `result.textStream`, and
   [`src/lib/chat/contextPipeline/contextAssembler.js`](../src/lib/chat/contextPipeline/contextAssembler.js)
   reconstructs history as plain `{ role, content }` messages. Therefore the
@@ -71,8 +88,11 @@ The repository is close to supporting this already:
   sessions store a `null` sentinel and resolve the effective level from the
   setting **at read time**, never at session-creation time — the chat store is
   evaluated at module import, before `loadSettings()` completes. See Phase 3
-  step 1. Read the setting with optional chaining so this plan works whether
-  or not that block exists yet.
+  step 1. *(Amended 2026-07-14: `settings.chat.defaultReasoningLevel` now exists
+  in `DEFAULT_SETTINGS` with value `'provider-default'`, so this dependency is
+  satisfied — the optional-chaining reads are now defensive rather than a
+  compatibility requirement. The `null`-sentinel + read-time resolution design
+  must still ship, because the cold-start ordering issue is unchanged.)*
 - Snapshot the selected level on each persisted user message. Retry,
   Regenerate, and Continue must reuse the originating turn's snapshot. Edited
   user messages form a new branch and snapshot the selector's current value.
@@ -105,6 +125,13 @@ scatter provider checks through Svelte components and the service layer.
 | `cerebras` | `providerOptions.cerebras.reasoningEffort` | Auto/Low/Medium/High |
 | `openaiCompatible`, `lmstudio` | Do not send a reasoning override in V1 | Auto only |
 
+*(Amended 2026-07-14)* The `openaiCompatible` row covers **all dynamic profile
+ids** — any `isOpenAICompatibleProfileId(id)` (e.g. `openai-compatible-legacy`,
+`openai-compatible-<uuid>`) as well as the bare `openaiCompatible` template.
+Map them to this row explicitly; do not rely on the unknown-provider fallback,
+so the selector deterministically shows Auto for profiles and future model
+metadata can refine it safely.
+
 OpenRouter model metadata may eventually provide `supported_efforts`,
 `default_effort`, and `mandatory`; using that metadata to narrow the selector is
 useful follow-up work but is not required for this basic V1.
@@ -119,6 +146,11 @@ useful follow-up work but is not required for this basic V1.
      `@ai-sdk/cerebras`.
    - Keep the same provider ids, base URLs where configurable, API keys, and
      selected-model settings so no caller or stored setting changes shape.
+   - **Note** *(amended 2026-07-14)*: `getAISDKModel()` is shared by **Summary
+     and Chat**, so switching Groq/OpenRouter/Cerebras to their official
+     providers changes request construction for Summary too. This is a routing
+     refactor bundled into the reasoning feature — treat it as a regression
+     surface and cover it in Phase 4 verification (not just Gemini).
 2. Create `src/lib/chat/reasoningConfig.js` with pure, unit-testable helpers:
    - A constant list of UI choices (`provider-default`, `low`, `medium`,
      `high`) with labels and short descriptions.
@@ -131,10 +163,16 @@ useful follow-up work but is not required for this basic V1.
      and feature settings may carry `geminiAdvanced` (and legacy records may
      carry `openai`) — map `geminiAdvanced` → the `gemini` row and `openai` →
      `chatgpt` before the table lookup (via the provider registry's
-     `normalizeProviderId`/`adapterId` if the provider-settings-restructure
-     plan has landed, else a local two-entry map). Without this, a Gemini
-     Advanced chat would fall through to the unsupported-provider branch and
-     the selector would wrongly become Auto-only.
+     `normalizeProviderId`/`adapterId`, else a local two-entry map). Without
+     this, a Gemini Advanced chat would fall through to the unsupported-provider
+     branch and the selector would wrongly become Auto-only. **Also collapse
+     dynamic OpenAI-compatible profile ids** *(amended 2026-07-14)*: any
+     `isOpenAICompatibleProfileId(id)` (from
+     [`src/lib/providers/openAICompatibleProfiles.js`](../src/lib/providers/openAICompatibleProfiles.js))
+     must map to the `openaiCompatible` row. Do **not** use `normalizeProviderId`
+     for this collapse — it returns profile ids unchanged; check
+     `isOpenAICompatibleProfileId` explicitly (or resolve the entry's
+     `capabilityProviderId`).
    - `buildReasoningRequestOptions(providerId, level)` returning one of:
      - `{ reasoning: level }` for portable providers;
      - `{ providerOptions: { openrouter: { reasoning: { effort: level } } } }`
@@ -142,8 +180,9 @@ useful follow-up work but is not required for this basic V1.
      - `{ providerOptions: { cerebras: { reasoningEffort: level } } }` for
        non-Auto Cerebras choices;
      - `{}` for Auto on provider-specific paths and for unsupported providers.
-     Apply the same `geminiAdvanced`/`openai` normalization here as in
-     `getChatReasoningOptions`.
+     Apply the same `geminiAdvanced`/`openai` **and dynamic OpenAI-compatible
+     profile-id** normalization here as in `getChatReasoningOptions`, so a
+     profile id resolves to the `openaiCompatible` (Auto-only, `{}`) branch.
 3. Ensure provider options produced by the mapper merge with any unrelated
    caller options rather than replacing them. Reasoning-specific values should
    be the only keys controlled by this module.
@@ -181,7 +220,13 @@ npx vitest run tests/chat/reasoningConfig.test.js tests/chat/aiSdkAdapter.test.j
    - In `runGeneration`, read `currentUserMessage.reasoningLevel`, fall back to
      `provider-default` for old records, call
      `buildReasoningRequestOptions`, and merge the result into the normalized
-     stream request.
+     stream request. *(Amended 2026-07-14)* Key `buildReasoningRequestOptions`
+     on the **`resolvedAdapterId` returned by `resolveAdapterCall(...)`** (the
+     value already passed to `streamRequest`), not the raw
+     `conversation.providerId` — `resolveAdapterCall` has already collapsed a
+     dynamic OpenAI-compatible profile id to the base `openaiCompatible` adapter
+     id, which correctly resolves to the Auto-only (`{}`) branch. Merge the
+     mapped options into the same `streamRequest({...})` object.
    - Because Retry and Regenerate already recover `currentUserMessage` from the
      repository, they should automatically reuse the original snapshot rather
      than accepting a new level.
@@ -300,6 +345,9 @@ its own value.
    metadata and lands in `contextWarnings`.
 3. Confirm Summary generation remains unchanged for both Gemini Basic and
    Advanced settings, including streaming, fallback models, and API-key retry.
+   **Also regression-test Summary through Groq, OpenRouter, and Cerebras**
+   *(amended 2026-07-14)*, since Phase 1 swaps their model construction to the
+   official providers and `getAISDKModel()` is shared with Summary.
 4. Confirm the control does not alter temperature/top-p handling for GPT-5/o*
    models and does not break Firefox mobile's existing streaming fallback.
 
@@ -323,7 +371,12 @@ Manual provider smoke test matrix:
 - OpenRouter: inspect the request body and confirm
   `reasoning: { effort: "high" }`, not `reasoning_effort`.
 - Ollama: a supported model maps Low/Medium/High to its native `think` option;
-  unsupported models continue to respond normally.
+  unsupported models continue to respond normally. **Verify first** *(amended
+  2026-07-14)* that the reasoning/`think` option actually propagates through the
+  background CORS proxy wrapper (`ollamaProxyModel.js`) rather than being
+  dropped with the rest of `generationOptions`. If the proxy does not forward
+  it, downgrade Ollama to **Auto-only** for V1 (update the provider table and
+  `getChatReasoningOptions`) instead of silently sending an ignored override.
 - Cerebras: a reasoning-capable model receives `reasoningEffort` through the
   official provider.
 - LM Studio/custom compatible: selector is Auto-only and no reasoning override
@@ -357,7 +410,11 @@ policy, and preserve signed reasoning details where providers require them.
       the Gemini row, not Auto-only).
 - [ ] Cold start with a persisted non-Auto default: selector shows it and the
       first send snapshots it (null-sentinel resolution, not import-time seed).
-- [ ] LM Studio and generic OpenAI-compatible providers remain Auto-only.
+- [ ] LM Studio and every OpenAI-compatible profile (dynamic
+      `openai-compatible-*` ids and the `openaiCompatible` template) remain
+      Auto-only.
+- [ ] Summary still works through Groq/OpenRouter/Cerebras after the official-
+      provider swap (shared `getAISDKModel()`).
 - [ ] Reasoning selection is isolated per browser tab.
 - [ ] New user messages persist a normalized `reasoningLevel` snapshot.
 - [ ] Retry, Regenerate, and Continue reuse the original user-turn snapshot.

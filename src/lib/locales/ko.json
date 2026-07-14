@@ -326,6 +326,17 @@
       "api_keys_section_title": "API 키 및 엔드포인트",
       "add_provider": "공급자 추가",
       "remove_provider": "제거"
+    },
+    "openai_profile_config": {
+      "name_label": "프로필 이름",
+      "name_required": "이름은 필수입니다",
+      "base_url_label": "기본 URL",
+      "base_url_invalid": "유효한 HTTP/HTTPS URL이어야 합니다",
+      "api_key_label": "API 키",
+      "api_key_required": "API 키는 필수입니다",
+      "default_model_label": "기본 모델 ID",
+      "default_model_required": "기본 모델 ID는 필수입니다",
+      "delete_profile": "프로필 삭제"
     }
   },
   "tab_navigation": {

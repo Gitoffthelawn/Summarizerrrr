@@ -37,6 +37,7 @@ export const VALID_SETTING_KEYS = [
   'cerebrasApiKey',
   'selectedCerebrasModel',
   'addedProviders',
+  'openaiCompatibleProfiles',
 
   // UI Configuration
   'floatButton',
@@ -296,14 +297,17 @@ export function isValidSettingKey(key) {
  * Useful for conditional exports or imports
  */
 export const SETTING_CATEGORIES = {
-  providers: VALID_SETTING_KEYS.filter(
-    (key) =>
-      key.includes('ApiKey') ||
-      key.includes('Model') ||
-      key.includes('Endpoint') ||
-      key.includes('BaseUrl') ||
-      key === 'selectedProvider'
-  ),
+  providers: [
+    ...VALID_SETTING_KEYS.filter(
+      (key) =>
+        key.includes('ApiKey') ||
+        key.includes('Model') ||
+        key.includes('Endpoint') ||
+        key.includes('BaseUrl') ||
+        key === 'selectedProvider'
+    ),
+    'openaiCompatibleProfiles'
+  ],
   ui: VALID_SETTING_KEYS.filter(
     (key) =>
       key.includes('float') ||

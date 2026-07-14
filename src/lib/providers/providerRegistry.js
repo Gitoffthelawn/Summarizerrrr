@@ -1,4 +1,9 @@
 // Canonical provider registry for Summarizerrrr
+import {
+  isOpenAICompatibleProfileId,
+  findProfileById,
+  validateProfile,
+} from './openAICompatibleProfiles.js';
 
 export const PROVIDER_LIST = [
   {
@@ -29,7 +34,8 @@ export const PROVIDER_LIST = [
     adapterOverlay: {},
     apiKeyField: 'chatgptApiKey',
     additionalKeysField: null,
-    baseUrlField: 'chatgptBaseUrl',
+    // baseUrlField hidden from UI; adapter still reads settings.chatgptBaseUrl (default endpoint)
+    baseUrlField: null,
     endpointField: null,
     legacyModelField: 'selectedChatgptModel',
     defaultModel: 'gpt-5-mini',
@@ -67,7 +73,8 @@ export const PROVIDER_LIST = [
     adapterOverlay: {},
     apiKeyField: 'deepseekApiKey',
     additionalKeysField: null,
-    baseUrlField: 'deepseekBaseUrl',
+    // baseUrlField hidden from UI; adapter still reads settings.deepseekBaseUrl (default endpoint)
+    baseUrlField: null,
     endpointField: null,
     legacyModelField: 'selectedDeepseekModel',
     defaultModel: 'deepseek-chat',
@@ -171,6 +178,7 @@ export const PROVIDER_LIST = [
     modelSource: 'freeText',
     capabilityProviderId: 'openaiCompatible',
     icon: 'openaiCompatible',
+    isTemplate: true,
   },
 ];
 
@@ -178,14 +186,62 @@ export function getProvider(id) {
   return PROVIDER_LIST.find((p) => p.id === id) || null;
 }
 
+export function resolveProviderEntry(id, settings) {
+  if (isOpenAICompatibleProfileId(id)) {
+    const profile = findProfileById(settings?.openaiCompatibleProfiles, id);
+    if (profile) {
+      return {
+        id: profile.id,
+        label: profile.name,
+        description: 'Custom OpenAI Compatible profile',
+        iconifyIcon: 'heroicons:link-20-solid',
+        adapterId: 'openaiCompatible',
+        adapterOverlay: {},
+        apiKeyField: null,
+        additionalKeysField: null,
+        baseUrlField: null,
+        endpointField: null,
+        legacyModelField: null,
+        defaultModel: profile.defaultModel,
+        requiresKey: true,
+        discoveryId: null,
+        modelSource: 'freeText',
+        capabilityProviderId: 'openaiCompatible',
+        icon: 'openaiCompatible',
+      };
+    }
+    return null;
+  }
+  return getProvider(id);
+}
+
+export function listAddedProviderEntries(settings) {
+  if (!settings) return [];
+  const addedIds = settings.addedProviders || [];
+  const singletons = addedIds
+    .filter(id => id !== 'openaiCompatible')
+    .map(id => getProvider(id))
+    .filter(Boolean);
+  const profiles = settings.openaiCompatibleProfiles || [];
+  const dynamicDescriptors = profiles
+    .map(p => resolveProviderEntry(p.id, settings))
+    .filter(Boolean);
+  return [...singletons, ...dynamicDescriptors];
+}
+
 export function normalizeProviderId(id) {
   if (id === 'openai') return 'chatgpt';
   if (id === 'geminiAdvanced') return 'gemini';
+  if (isOpenAICompatibleProfileId(id)) return id;
   const provider = getProvider(id);
   return provider ? provider.id : 'gemini';
 }
 
 export function getApiKey(id, settings) {
+  if (isOpenAICompatibleProfileId(id)) {
+    const profile = findProfileById(settings?.openaiCompatibleProfiles, id);
+    return profile ? profile.apiKey : null;
+  }
   const provider = getProvider(id);
   if (!provider || !settings) return null;
   if (provider.apiKeyField) {
@@ -195,6 +251,10 @@ export function getApiKey(id, settings) {
 }
 
 export function isProviderConfigured(id, settings) {
+  if (isOpenAICompatibleProfileId(id)) {
+    const profile = findProfileById(settings?.openaiCompatibleProfiles, id);
+    return profile ? validateProfile(profile) : false;
+  }
   const provider = getProvider(id);
   if (!provider || !settings) return false;
   if (provider.requiresKey === false) {
@@ -210,7 +270,7 @@ export function isProviderConfigured(id, settings) {
 
 export function listConfiguredProviders(settings) {
   if (!settings) return [];
-  return PROVIDER_LIST.filter((p) => isProviderConfigured(p.id, settings));
+  return PROVIDER_LIST.filter((p) => !p.isTemplate && isProviderConfigured(p.id, settings));
 }
 
 export function getLegacyModel(id, settings) {
@@ -219,23 +279,40 @@ export function getLegacyModel(id, settings) {
   return settings[provider.legacyModelField] || null;
 }
 
-export function getDefaultModel(id) {
+export function getDefaultModel(id, settings) {
+  if (isOpenAICompatibleProfileId(id)) {
+    const profile = findProfileById(settings?.openaiCompatibleProfiles, id);
+    return profile ? profile.defaultModel : null;
+  }
   const provider = getProvider(id);
   return provider ? provider.defaultModel : null;
 }
 
-export function getModelSource(id) {
+export function getModelSource(id, settings) {
+  if (isOpenAICompatibleProfileId(id)) return 'freeText';
   const provider = getProvider(id);
   return provider ? provider.modelSource : null;
 }
 
 export function resolveAdapterCall(featureProviderId, modelId, settings) {
-  const provider = getProvider(featureProviderId);
+  let provider;
+  let isProfile = false;
+  let profile = null;
+
+  if (isOpenAICompatibleProfileId(featureProviderId)) {
+    isProfile = true;
+    profile = findProfileById(settings?.openaiCompatibleProfiles, featureProviderId);
+    provider = getProvider('openaiCompatible');
+  } else {
+    provider = getProvider(featureProviderId);
+  }
+
   if (!provider) {
     throw new Error(`Unknown provider: ${featureProviderId}`);
   }
+
   const adapterId = provider.adapterId;
-  const overlay = provider.adapterOverlay || {};
+  const overlay = { ...(provider.adapterOverlay || {}) };
   const legacyModelField = provider.legacyModelField;
 
   const updatedSettings = {
@@ -243,7 +320,11 @@ export function resolveAdapterCall(featureProviderId, modelId, settings) {
     ...overlay,
   };
 
-  if (legacyModelField) {
+  if (isProfile && profile) {
+    updatedSettings.openaiCompatibleApiKey = profile.apiKey;
+    updatedSettings.openaiCompatibleBaseUrl = profile.baseUrl;
+    updatedSettings.selectedOpenAICompatibleModel = modelId;
+  } else if (legacyModelField) {
     updatedSettings[legacyModelField] = modelId;
   }
 

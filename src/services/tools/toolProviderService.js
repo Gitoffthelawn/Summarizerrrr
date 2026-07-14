@@ -8,6 +8,7 @@ import {
   isProviderConfigured,
   getApiKey,
   resolveAdapterCall,
+  resolveProviderEntry,
 } from '@/lib/providers/providerRegistry.js'
 
 /**
@@ -98,7 +99,7 @@ export function resolveToolProvider(toolName) {
  */
 function getProviderApiKey(providerId) {
   const normalizedId = normalizeProviderId(providerId)
-  const provider = getProvider(normalizedId)
+  const provider = resolveProviderEntry(normalizedId, settings)
   if (!provider) return null
 
   if (provider.requiresKey === false) {
@@ -172,8 +173,8 @@ export function buildModelSettings(providerConfig, globalSettings) {
   const plainSettings = JSON.parse(JSON.stringify(globalSettings))
 
   const normalizedId = normalizeProviderId(provider)
-  const p = getProvider(normalizedId)
-  const modelKey = p ? p.legacyModelField : 'selectedGeminiModel'
+  const p = resolveProviderEntry(normalizedId, globalSettings)
+  const modelKey = (p && p.legacyModelField) ? p.legacyModelField : 'selectedGeminiModel'
 
   // ✅ Dùng lại toàn bộ global settings, chỉ override những gì cần thiết
   return {

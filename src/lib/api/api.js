@@ -15,6 +15,7 @@ import {
   normalizeProviderId,
   isProviderConfigured,
   resolveAdapterCall,
+  resolveProviderEntry,
 } from '@/lib/providers/providerRegistry.js'
 
 /**
@@ -25,7 +26,7 @@ import {
  */
 export function providerSupportsStreaming(selectedProviderId) {
   const normalizedId = normalizeProviderId(selectedProviderId)
-  const provider = getProvider(normalizedId)
+  const provider = resolveProviderEntry(normalizedId, settings)
   const isProviderSupported = !!provider
 
   // Check browser compatibility
@@ -44,7 +45,7 @@ export function providerSupportsStreaming(selectedProviderId) {
 export function resolveSummarizeProvider(userSettings) {
   const { providerId, modelId } = resolveFeatureModel('summarize', userSettings)
 
-  const provider = getProvider(providerId)
+  const provider = resolveProviderEntry(providerId, userSettings)
   if (!provider) {
     throw new Error(`Unknown provider: ${providerId}`)
   }
@@ -67,63 +68,7 @@ export function resolveSummarizeProvider(userSettings) {
   return resolveAdapterCall(providerId, modelId, userSettings)
 }
 
-/**
- * Validates API key for the selected provider
- * @param {object} userSettings - The current settings object
- * @param {string} selectedProviderId - The ID of the selected provider
- * @throws {Error} If API key is not configured
- */
-function validateApiKey(userSettings, selectedProviderId) {
-  let apiKey
-  let providerName
 
-  switch (selectedProviderId) {
-    case 'gemini':
-      {
-        // Check if there are any valid keys in the additional array
-        const hasAdditionalKeys =
-          userSettings.geminiAdditionalApiKeys?.some((k) => k && k.trim() !== '')
-        
-        // Valid if main key exists OR additional keys exist
-        const hasMainKey = userSettings.geminiApiKey && userSettings.geminiApiKey.trim() !== ''
-        
-        apiKey = (hasMainKey || hasAdditionalKeys) ? 'valid' : ''
-      }
-      providerName = 'Google Gemini'
-      break
-    case 'openrouter':
-      apiKey = userSettings.openrouterApiKey
-      providerName = 'OpenRouter'
-      break
-    case 'ollama':
-      // Ollama doesn't require API key, but needs endpoint
-      return // Skip validation for Ollama
-    case 'lmstudio':
-      // LM Studio doesn't require API key, but needs endpoint
-      return // Skip validation for LM Studio
-    case 'openaiCompatible':
-      apiKey = userSettings.openaiCompatibleApiKey
-      providerName = 'OpenAI Compatible'
-      break
-    case 'chatgpt':
-      apiKey = userSettings.chatgptApiKey
-      providerName = 'ChatGPT'
-      break
-    case 'deepseek':
-      apiKey = userSettings.deepseekApiKey
-      providerName = 'DeepSeek'
-      break
-    default:
-      apiKey = userSettings[`${selectedProviderId}ApiKey`]
-      providerName = selectedProviderId
-  }
-
-  if (!apiKey) {
-    throw new Error(
-      `${providerName} API key is not configured. Click the settings icon on the right to add your API key.`
-    )
-  }
-}
 
 /**
  * Summarizes content using the selected AI provider.

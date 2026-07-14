@@ -224,4 +224,92 @@ describe('chat orchestration', () => {
     expect(sessionService.getConversationId(23)).toBe(conversation.id)
     await expect(service.openConversation(conversation.id)).resolves.toMatchObject({ conversation })
   })
+
+  it('resolves dynamic profile identities and falls back correctly when deleted', async () => {
+    const repository = createRepository()
+    const probe = createPipelineProbe()
+    const streamRequestCalls = []
+    const service = createChatService({
+      repository,
+      sourceService: { getActiveTab: async () => ({ id: 1, title: 'Example' }) },
+      buildPipeline: probe.build,
+      streamRequest: async function* (req) {
+        streamRequestCalls.push(req)
+        yield { chunk: 'Response', fullText: 'Response', isComplete: false }
+        yield { chunk: '', fullText: 'Response', isComplete: true }
+      },
+    })
+
+    const customSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-test',
+      chat: {
+        provider: 'openai-compatible-profile-1',
+        model: 'model-1-overridden',
+      },
+      openaiCompatibleProfiles: [
+        {
+          id: 'openai-compatible-profile-1',
+          name: 'My Profile',
+          baseUrl: 'https://api.my-profile.com/v1',
+          apiKey: 'my-key',
+          defaultModel: 'model-1',
+        }
+      ]
+    }
+
+    // 1. Start conversation (should store dynamic profile id)
+    const { conversation } = await service.startConversationForActiveTab({ settings: customSettings })
+    expect(conversation.providerId).toBe('openai-compatible-profile-1')
+    expect(conversation.modelId).toBe('model-1-overridden')
+
+    // 2. Send message (should resolve overlay and convert adapter ID)
+    const warnings = []
+    const diagnostics = []
+    await service.send({
+      conversation,
+      content: 'Hello',
+      settings: customSettings,
+      sourceRequired: false,
+      onWarnings: (w) => warnings.push(...w),
+      onDiagnostics: (d) => diagnostics.push(d),
+    })
+
+    expect(streamRequestCalls).toHaveLength(1)
+    // The request passed to streamRequest should use 'openaiCompatible' adapter id
+    expect(streamRequestCalls[0].providerId).toBe('openaiCompatible')
+    expect(streamRequestCalls[0].settings.openaiCompatibleApiKey).toBe('my-key')
+    expect(streamRequestCalls[0].settings.openaiCompatibleBaseUrl).toBe('https://api.my-profile.com/v1')
+    expect(streamRequestCalls[0].settings.selectedOpenAICompatibleModel).toBe('model-1-overridden')
+
+    // 3. Fallback when profile is deleted
+    const deletedSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-test',
+      chat: {
+        provider: 'gemini',
+        model: 'gemini-3-flash-preview',
+      },
+      openaiCompatibleProfiles: [] // profile-1 is now deleted!
+    }
+
+    const fallbackWarnings = []
+    await service.send({
+      conversation,
+      content: 'Hello after delete',
+      settings: deletedSettings,
+      sourceRequired: false,
+      onWarnings: (w) => fallbackWarnings.push(...w),
+    })
+
+    // The conversation metadata should be updated in the repository to 'gemini' fallback
+    const updatedConversation = await repository.getConversation(conversation.id)
+    expect(updatedConversation.providerId).toBe('gemini')
+    expect(updatedConversation.modelId).toBe('gemini-3-flash-preview')
+
+    // We should receive a warning in onWarnings
+    expect(fallbackWarnings).toContain(
+      'The selected OpenAI Compatible profile was deleted. Falling back to the current Chat provider: Google Gemini.'
+    )
+  })
 })

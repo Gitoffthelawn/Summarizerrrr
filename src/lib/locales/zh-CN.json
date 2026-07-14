@@ -326,6 +326,17 @@
       "api_keys_section_title": "API 密钥与端点",
       "add_provider": "添加提供商",
       "remove_provider": "移除"
+    },
+    "openai_profile_config": {
+      "name_label": "配置名称",
+      "name_required": "名称是必填项",
+      "base_url_label": "接口地址 (Base URL)",
+      "base_url_invalid": "必须是有效的 HTTP/HTTPS 链接",
+      "api_key_label": "API 密钥 (API Key)",
+      "api_key_required": "API 密钥是必填项",
+      "default_model_label": "默认模型 ID",
+      "default_model_required": "默认模型 ID 是必填项",
+      "delete_profile": "删除配置"
     }
   },
   "tab_navigation": {

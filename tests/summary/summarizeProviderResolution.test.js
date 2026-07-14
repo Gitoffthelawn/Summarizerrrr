@@ -61,6 +61,7 @@ describe('Summarize Provider/Model Resolution', () => {
     }
     mockSettings.deepseekApiKey = 'test-deepseek-key'
     mockSettings.geminiApiKey = 'test-gemini-key'
+    delete mockSettings.openaiCompatibleProfiles
   })
 
   it('providerSupportsStreaming returns true for groq, cerebras, and lmstudio', () => {
@@ -81,17 +82,16 @@ describe('Summarize Provider/Model Resolution', () => {
     expect(mockGenerateContent.mock.calls[0][1].selectedDeepseekModel).toBe('deepseek-chat')
   })
 
-  it('summarizeContent forces Gemini Basic in basic mode', async () => {
+  it('summarizeContent honors the configured provider in basic mode', async () => {
     mockSettings.isAdvancedMode = false
-    mockSettings.selectedGeminiModel = 'gemini-basic-model'
     mockGenerateContent.mockResolvedValue('Basic Result')
 
     const result = await summarizeContent('content-to-summarize', 'general')
 
     expect(result).toBe('Basic Result')
     expect(mockGenerateContent).toHaveBeenCalledTimes(1)
-    expect(mockGenerateContent.mock.calls[0][0]).toBe('gemini')
-    expect(mockGenerateContent.mock.calls[0][1].selectedGeminiModel).toBe('gemini-basic-model')
+    expect(mockGenerateContent.mock.calls[0][0]).toBe('deepseek')
+    expect(mockGenerateContent.mock.calls[0][1].selectedDeepseekModel).toBe('deepseek-chat')
     expect(mockGenerateContent.mock.calls[0][1].isAdvancedMode).toBe(false)
   })
 
@@ -155,5 +155,61 @@ describe('Summarize Provider/Model Resolution', () => {
     expect(mockGenerateContentStreamEnhanced).toHaveBeenCalledTimes(1)
     expect(mockGenerateContentStreamEnhanced.mock.calls[0][0]).toBe('deepseek')
     expect(mockGenerateContentStreamEnhanced.mock.calls[0][1].selectedDeepseekModel).toBe('deepseek-chat')
+  })
+
+  it('summarizeContent resolves and uses dynamic OpenAI Compatible profiles correctly', async () => {
+    // 1. Set up two dynamic profiles in mock settings
+    mockSettings.openaiCompatibleProfiles = [
+      {
+        id: 'openai-compatible-profile-a',
+        name: 'Profile A',
+        baseUrl: 'https://api.profile-a.com/v1',
+        apiKey: 'key-a',
+        defaultModel: 'model-a',
+      },
+      {
+        id: 'openai-compatible-profile-b',
+        name: 'Profile B',
+        baseUrl: 'https://api.profile-b.com/v1',
+        apiKey: 'key-b',
+        defaultModel: 'model-b',
+      },
+    ]
+
+    // 2. Select Profile A for Summarize
+    mockSettings.summarize = {
+      provider: 'openai-compatible-profile-a',
+      model: 'model-a-overridden',
+    }
+
+    mockGenerateContent.mockResolvedValue('Summary Result A')
+    let result = await summarizeContent('content', 'general')
+    expect(result).toBe('Summary Result A')
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+    // The adapter ID should be 'openaiCompatible'
+    expect(mockGenerateContent.mock.calls[0][0]).toBe('openaiCompatible')
+    // The settings overlay should have A's credentials and custom model
+    const settingsA = mockGenerateContent.mock.calls[0][1]
+    expect(settingsA.openaiCompatibleApiKey).toBe('key-a')
+    expect(settingsA.openaiCompatibleBaseUrl).toBe('https://api.profile-a.com/v1')
+    expect(settingsA.selectedOpenAICompatibleModel).toBe('model-a-overridden')
+
+    // 3. Select Profile B for Summarize, without overriding model (use default)
+    mockSettings.summarize = {
+      provider: 'openai-compatible-profile-b',
+      model: 'model-b',
+    }
+
+    mockGenerateContent.mockClear()
+    mockGenerateContent.mockResolvedValue('Summary Result B')
+    result = await summarizeContent('content', 'general')
+    expect(result).toBe('Summary Result B')
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1)
+    expect(mockGenerateContent.mock.calls[0][0]).toBe('openaiCompatible')
+
+    const settingsB = mockGenerateContent.mock.calls[0][1]
+    expect(settingsB.openaiCompatibleApiKey).toBe('key-b')
+    expect(settingsB.openaiCompatibleBaseUrl).toBe('https://api.profile-b.com/v1')
+    expect(settingsB.selectedOpenAICompatibleModel).toBe('model-b')
   })
 })

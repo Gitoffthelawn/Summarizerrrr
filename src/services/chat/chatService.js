@@ -6,7 +6,14 @@ import { chatSessionService } from './chatSessionService.js'
 import { createPersonaSnapshot } from '@/lib/chat/skills/skillService.js'
 import { resolveAutoSourceKind } from './sourceResolution.js'
 import { resolveFeatureModel } from '@/lib/providers/featureModelResolver.js'
-import { normalizeProviderId, getLegacyModel } from '@/lib/providers/providerRegistry.js'
+import {
+  normalizeProviderId,
+  getLegacyModel,
+  resolveProviderEntry,
+  resolveAdapterCall,
+  getProvider,
+} from '@/lib/providers/providerRegistry.js'
+import { isOpenAICompatibleProfileId } from '@/lib/providers/openAICompatibleProfiles.js'
 
 async function* defaultStreamRequest(request) {
   const {
@@ -159,6 +166,35 @@ export function createChatService({
     const fallbackProviderId = resolvedChat.providerId
     const fallbackModelId = resolvedChat.modelId
 
+    let conversationProviderId = conversation.providerId || fallbackProviderId
+    let conversationModelId = conversation.modelId || fallbackModelId
+
+    // Check if the provider ID is a dynamic profile ID and if it is missing/deleted
+    if (isOpenAICompatibleProfileId(conversationProviderId)) {
+      const resolved = resolveProviderEntry(conversationProviderId, settings)
+      if (!resolved) {
+        const fallbackChat = resolveFeatureModel('chat', settings)
+        conversationProviderId = fallbackChat.providerId
+        conversationModelId = fallbackChat.modelId
+
+        await repository.updateConversationMetadata(conversation.id, {
+          providerId: conversationProviderId,
+          modelId: conversationModelId,
+        })
+
+        conversation.providerId = conversationProviderId
+        conversation.modelId = conversationModelId
+
+        const providerLabel = resolveProviderEntry(conversationProviderId, settings)?.label || conversationProviderId
+        onWarnings?.([
+          `The selected OpenAI Compatible profile was deleted. Falling back to the current Chat provider: ${providerLabel}.`
+        ])
+      }
+    }
+
+    const resolvedEntry = resolveProviderEntry(conversationProviderId, settings)
+    const capabilityProviderId = resolvedEntry ? resolvedEntry.capabilityProviderId : conversationProviderId
+
     const transient = {
       role: 'assistant',
       content: '',
@@ -193,8 +229,8 @@ export function createChatService({
       const streamingMessage = await repository.createStreamingAssistantMessage(conversation.id, {
         ...transient,
         content: '',
-        providerId: conversation.providerId || fallbackProviderId,
-        modelId: conversation.modelId || fallbackModelId,
+        providerId: conversationProviderId,
+        modelId: conversationModelId,
       })
       streamingMessageId = streamingMessage.id
 
@@ -206,16 +242,22 @@ export function createChatService({
           skillInvocation: currentUserMessage.skillInvocation,
           conversationSourceRefs: sourceIdsFrom(history),
           newAttachmentRefs: attachmentRefs,
-          providerId: conversation.providerId || fallbackProviderId,
-          modelId: conversation.modelId || fallbackModelId,
+          providerId: capabilityProviderId,
+          modelId: conversationModelId,
         },
         { repository }
       )
       onWarnings?.(pipeline.warnings)
 
+      const { providerId: resolvedAdapterId, settings: resolvedSettings } = resolveAdapterCall(
+        conversationProviderId,
+        conversationModelId,
+        settings
+      )
+
       for await (const event of streamRequest({
-        providerId: conversation.providerId || fallbackProviderId,
-        settings,
+        providerId: resolvedAdapterId,
+        settings: resolvedSettings,
         system: pipeline.system,
         messages: pipeline.messages,
         abortSignal: abortController.signal,
@@ -245,8 +287,8 @@ export function createChatService({
       const assistant = await repository.finalizeStreamingAssistantMessage(streamingMessageId, {
         content: transient.content,
         status: transient.status,
-        providerId: conversation.providerId || fallbackProviderId,
-        modelId: conversation.modelId || fallbackModelId,
+        providerId: conversationProviderId,
+        modelId: conversationModelId,
         usage,
         groundingRefs: pipeline?.groundingRefs || [],
       })
@@ -260,8 +302,8 @@ export function createChatService({
           const assistant = await repository.finalizeStreamingAssistantMessage(streamingMessageId, {
             content: transient.content,
             status: 'aborted',
-            providerId: conversation.providerId || fallbackProviderId,
-            modelId: conversation.modelId || fallbackModelId,
+            providerId: conversationProviderId,
+            modelId: conversationModelId,
             groundingRefs: pipeline?.groundingRefs || [],
           })
           return { assistant, transient, diagnostics: pipeline }
@@ -279,8 +321,8 @@ export function createChatService({
           content: transient.content,
           status: 'error',
           error: handledError,
-          providerId: conversation.providerId || fallbackProviderId,
-          modelId: conversation.modelId || fallbackModelId,
+          providerId: conversationProviderId,
+          modelId: conversationModelId,
           usage,
           groundingRefs: pipeline?.groundingRefs || [],
         })
@@ -473,6 +515,35 @@ export function createChatService({
         const fallbackProviderId = resolvedChat.providerId
         const fallbackModelId = resolvedChat.modelId
 
+        let conversationProviderId = conversation.providerId || fallbackProviderId
+        let conversationModelId = conversation.modelId || fallbackModelId
+
+        // Check if the provider ID is a dynamic profile ID and if it is missing/deleted
+        if (isOpenAICompatibleProfileId(conversationProviderId)) {
+          const resolved = resolveProviderEntry(conversationProviderId, settings)
+          if (!resolved) {
+            const fallbackChat = resolveFeatureModel('chat', settings)
+            conversationProviderId = fallbackChat.providerId
+            conversationModelId = fallbackChat.modelId
+
+            await repository.updateConversationMetadata(conversation.id, {
+              providerId: conversationProviderId,
+              modelId: conversationModelId,
+            })
+
+            conversation.providerId = conversationProviderId
+            conversation.modelId = conversationModelId
+
+            const providerLabel = resolveProviderEntry(conversationProviderId, settings)?.label || conversationProviderId
+            onWarnings?.([
+              `The selected OpenAI Compatible profile was deleted. Falling back to the current Chat provider: ${providerLabel}.`
+            ])
+          }
+        }
+
+        const resolvedEntry = resolveProviderEntry(conversationProviderId, settings)
+        const capabilityProviderId = resolvedEntry ? resolvedEntry.capabilityProviderId : conversationProviderId
+
         const attachmentRefs = currentUserMessage.attachmentRefs || []
         pipeline = await buildPipeline(
           {
@@ -482,16 +553,22 @@ export function createChatService({
             skillInvocation: currentUserMessage.skillInvocation,
             conversationSourceRefs: sourceIdsFrom(historyWithPartial),
             newAttachmentRefs: attachmentRefs,
-            providerId: conversation.providerId || fallbackProviderId,
-            modelId: conversation.modelId || fallbackModelId,
+            providerId: capabilityProviderId,
+            modelId: conversationModelId,
           },
           { repository }
         )
         onWarnings?.(pipeline.warnings)
 
+        const { providerId: resolvedAdapterId, settings: resolvedSettings } = resolveAdapterCall(
+          conversationProviderId,
+          conversationModelId,
+          settings
+        )
+
         for await (const event of streamRequest({
-          providerId: conversation.providerId || fallbackProviderId,
-          settings,
+          providerId: resolvedAdapterId,
+          settings: resolvedSettings,
           system: pipeline.system,
           messages: pipeline.messages,
           abortSignal: controller.signal,

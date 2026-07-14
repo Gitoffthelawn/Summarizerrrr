@@ -326,6 +326,17 @@
       "api_keys_section_title": "Claves API y endpoints",
       "add_provider": "Añadir proveedor",
       "remove_provider": "Eliminar"
+    },
+    "openai_profile_config": {
+      "name_label": "Nombre del perfil",
+      "name_required": "El nombre es obligatorio",
+      "base_url_label": "URL base",
+      "base_url_invalid": "Debe ser una URL HTTP/HTTPS válida",
+      "api_key_label": "Clave API",
+      "api_key_required": "La clave API es obligatoria",
+      "default_model_label": "ID de modelo predeterminado",
+      "default_model_required": "El ID de modelo predeterminado es obligatorio",
+      "delete_profile": "Eliminar perfil"
     }
   },
   "tab_navigation": {

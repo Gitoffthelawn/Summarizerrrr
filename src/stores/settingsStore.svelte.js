@@ -3,7 +3,15 @@ import { get } from 'svelte/store'
 import { locale } from 'svelte-i18n'
 import { settingsStorage } from '@/services/wxtStorageService.js'
 import { sanitizeSettings, migrateLegacyGeminiAdvanced } from '@/lib/config/settingsSchema.js'
-import { normalizeProviderId, getLegacyModel, getProvider, getDefaultModel, listConfiguredProviders } from '@/lib/providers/providerRegistry.js'
+import { normalizeProviderId, getLegacyModel, getProvider, getDefaultModel, listConfiguredProviders, isProviderConfigured } from '@/lib/providers/providerRegistry.js'
+import {
+  normalizeProfiles,
+  isOpenAICompatibleProfileId,
+  findProfileById,
+  validateProfile,
+  generateProfileId,
+  getNextDefaultName
+} from '@/lib/providers/openAICompatibleProfiles.js'
 
 // --- Default Settings (Merged) ---
 const DEFAULT_SETTINGS = {
@@ -158,6 +166,8 @@ const DEFAULT_SETTINGS = {
   // Added Providers ("Add provider" flow)
   addedProviders: ['gemini'],
 
+  openaiCompatibleProfiles: [],
+
   // Metadata
   lastModified: 0,
 }
@@ -305,7 +315,7 @@ function migrateFeatureModelSettings(cleanStoredSettings, isSummarizeAbsent, isC
         model = settings.selectedGeminiModel || 'gemini-3-flash-preview'
       } else {
         provider = normalizeProviderId(settings.selectedProvider)
-        model = getLegacyModel(provider, settings) || getDefaultModel(provider) || 'gemini-3-flash-preview'
+        model = getLegacyModel(provider, settings) || getDefaultModel(provider, settings) || 'gemini-3-flash-preview'
       }
     }
 
@@ -327,7 +337,7 @@ function migrateFeatureModelSettings(cleanStoredSettings, isSummarizeAbsent, isC
         model = settings.selectedGeminiModel || 'gemini-3-flash-preview'
       } else {
         provider = normalizeProviderId(settings.selectedProvider)
-        model = getLegacyModel(provider, settings) || getDefaultModel(provider) || 'gemini-3-flash-preview'
+        model = getLegacyModel(provider, settings) || getDefaultModel(provider, settings) || 'gemini-3-flash-preview'
       }
     }
 
@@ -390,6 +400,71 @@ export function normalizeStoredSettings(rawSettings) {
     console.log('[settingsStore] Migration: Seeded addedProviders:', seeded)
   }
 
+  // 6. Migrate and normalize openaiCompatibleProfiles
+  let profiles = cleanSettings.openaiCompatibleProfiles;
+  if (profiles === undefined) {
+    const legacyKey = cleanSettings.openaiCompatibleApiKey || '';
+    const legacyUrl = cleanSettings.openaiCompatibleBaseUrl || '';
+    const legacyModel = cleanSettings.selectedOpenAICompatibleModel || '';
+    const hasAddedLegacy = Array.isArray(cleanSettings.addedProviders) && cleanSettings.addedProviders.includes('openaiCompatible');
+
+    if (legacyKey.trim() || legacyUrl.trim() || legacyModel.trim() || hasAddedLegacy) {
+      profiles = [{
+        id: 'openai-compatible-legacy',
+        name: 'OpenAI Compatible',
+        baseUrl: legacyUrl.trim(),
+        apiKey: legacyKey.trim(),
+        defaultModel: legacyModel.trim()
+      }];
+      console.log('[settingsStore] Migration: Created legacy OpenAI Compatible profile from flat fields');
+    } else {
+      profiles = [];
+    }
+  }
+  cleanSettings.openaiCompatibleProfiles = normalizeProfiles(profiles);
+
+  // 7. Reference Migration: Replace 'openaiCompatible' with 'openai-compatible-legacy' if it exists in profiles
+  const hasLegacyProfile = (cleanSettings.openaiCompatibleProfiles || []).some(p => p.id === 'openai-compatible-legacy')
+  if (hasLegacyProfile) {
+    // 7.1. Repair summarize
+    if (cleanSettings.summarize?.provider === 'openaiCompatible') {
+      cleanSettings.summarize.provider = 'openai-compatible-legacy'
+      if (!cleanSettings.summarize.model && cleanSettings.selectedOpenAICompatibleModel) {
+        cleanSettings.summarize.model = cleanSettings.selectedOpenAICompatibleModel
+      }
+    }
+
+    // 7.2. Repair chat
+    if (cleanSettings.chat?.provider === 'openaiCompatible') {
+      cleanSettings.chat.provider = 'openai-compatible-legacy'
+      if (!cleanSettings.chat.model && cleanSettings.selectedOpenAICompatibleModel) {
+        cleanSettings.chat.model = cleanSettings.selectedOpenAICompatibleModel
+      }
+    }
+    // 7.3. Repair deepDive
+    if (cleanSettings.tools?.deepDive?.customProvider === 'openaiCompatible') {
+      cleanSettings.tools.deepDive.customProvider = 'openai-compatible-legacy'
+      if (!cleanSettings.tools.deepDive.customModel && cleanSettings.selectedOpenAICompatibleModel) {
+        cleanSettings.tools.deepDive.customModel = cleanSettings.selectedOpenAICompatibleModel
+      }
+    }
+
+    // 7.4. Repair quickModels
+    if (Array.isArray(cleanSettings.chat?.quickModels)) {
+      cleanSettings.chat.quickModels = cleanSettings.chat.quickModels.map(qm => {
+        if (qm.provider === 'openaiCompatible') {
+          return { ...qm, provider: 'openai-compatible-legacy' }
+        }
+        return qm
+      })
+    }
+
+    // 7.5. Remove static 'openaiCompatible' from addedProviders
+    if (Array.isArray(cleanSettings.addedProviders)) {
+      cleanSettings.addedProviders = cleanSettings.addedProviders.filter(id => id !== 'openaiCompatible')
+    }
+  }
+
   return cleanSettings
 }
 
@@ -405,25 +480,37 @@ export function applyFeatureModelMirrors(patch) {
   }
 
   const { provider: providerId, model } = patch.summarize
-  const provider = getProvider(providerId)
 
-  if (provider) {
-    // Determine adapterId and legacyModelField
-    const adapterId = provider.adapterId
-    const legacyModelField = provider.legacyModelField
-
-    // Apply mirroring rules
-    if (providerId === 'gemini') {
-      patch.selectedProvider = 'gemini'
-      // leave isAdvancedMode untouched
-    } else {
-      patch.selectedProvider = adapterId
+  if (isOpenAICompatibleProfileId(providerId)) {
+    const profile = findProfileById(patch.openaiCompatibleProfiles || settings.openaiCompatibleProfiles, providerId)
+    if (profile) {
+      patch.openaiCompatibleApiKey = profile.apiKey
+      patch.openaiCompatibleBaseUrl = profile.baseUrl
+      patch.selectedOpenAICompatibleModel = model
+      patch.selectedProvider = 'openaiCompatible'
       patch.isAdvancedMode = true
       patch.isSummaryAdvancedMode = true
     }
+  } else {
+    const provider = getProvider(providerId)
+    if (provider) {
+      // Determine adapterId and legacyModelField
+      const adapterId = provider.adapterId
+      const legacyModelField = provider.legacyModelField
 
-    if (legacyModelField) {
-      patch[legacyModelField] = model
+      // Apply mirroring rules
+      if (providerId === 'gemini') {
+        patch.selectedProvider = 'gemini'
+        // leave isAdvancedMode untouched
+      } else {
+        patch.selectedProvider = adapterId
+        patch.isAdvancedMode = true
+        patch.isSummaryAdvancedMode = true
+      }
+
+      if (legacyModelField) {
+        patch[legacyModelField] = model
+      }
     }
   }
 
@@ -973,4 +1060,153 @@ export async function removeProvider(id) {
 
   const current = settings.addedProviders || ['gemini']
   await updateSettings({ addedProviders: current.filter(p => p !== id) })
+}
+
+export function getFallbackProviderSelection() {
+  const configured = (settings.addedProviders || [])
+    .filter(pId => pId !== 'openaiCompatible')
+    .filter(pId => isProviderConfigured(pId, settings))
+  if (configured.length > 0) {
+    const fallbackId = configured[0]
+    const fallbackModel = getDefaultModel(fallbackId, settings) || 'gemini-3-flash-preview'
+    return { provider: fallbackId, model: fallbackModel }
+  }
+  return { provider: 'gemini', model: 'gemini-3-flash-preview' }
+}
+
+/**
+ * Adds a new OpenAI-compatible profile.
+ * @param {Object} [initialValues] - Optional initial profile values
+ * @returns {Promise<string>} - The created profile ID
+ */
+export async function addOpenAICompatibleProfile(initialValues = {}) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  const id = generateProfileId()
+  const name = initialValues.name && initialValues.name.trim().length > 0
+    ? initialValues.name.trim()
+    : getNextDefaultName(settings.openaiCompatibleProfiles || [])
+
+  const newProfile = {
+    id,
+    name,
+    baseUrl: typeof initialValues.baseUrl === 'string' ? initialValues.baseUrl.trim() : '',
+    apiKey: typeof initialValues.apiKey === 'string' ? initialValues.apiKey.trim() : '',
+    defaultModel: typeof initialValues.defaultModel === 'string' ? initialValues.defaultModel.trim() : '',
+  }
+
+  const updatedProfiles = [...(settings.openaiCompatibleProfiles || []), newProfile]
+  await updateSettings({ openaiCompatibleProfiles: updatedProfiles })
+  return id
+}
+
+/**
+ * Updates an OpenAI-compatible profile.
+ * @param {string} id - Profile ID to update
+ * @param {Object} patch - Profile patch containing allowed fields
+ */
+export async function updateOpenAICompatibleProfile(id, patch) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  const currentProfiles = settings.openaiCompatibleProfiles || []
+  const updatedProfiles = currentProfiles.map(p => {
+    if (p.id === id) {
+      const updated = { ...p }
+      if (patch.name !== undefined) updated.name = patch.name.trim()
+      if (patch.baseUrl !== undefined) updated.baseUrl = patch.baseUrl.trim()
+      if (patch.apiKey !== undefined) updated.apiKey = patch.apiKey.trim()
+      if (patch.defaultModel !== undefined) updated.defaultModel = patch.defaultModel.trim()
+      return updated
+    }
+    return p
+  })
+
+  const updates = { openaiCompatibleProfiles: updatedProfiles }
+
+  // If this profile is selected by Summary, refresh mirrors atomically
+  if (settings.summarize?.provider === id) {
+    const profile = updatedProfiles.find(p => p.id === id)
+    if (profile) {
+      updates.openaiCompatibleApiKey = profile.apiKey
+      updates.openaiCompatibleBaseUrl = profile.baseUrl
+      updates.selectedOpenAICompatibleModel = settings.summarize.model
+    }
+  }
+
+  await updateSettings(updates)
+}
+
+/**
+ * Removes an OpenAI-compatible profile and repairs references.
+ * @param {string} id - Profile ID to remove
+ */
+export async function removeOpenAICompatibleProfile(id) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  const currentProfiles = settings.openaiCompatibleProfiles || []
+  const updatedProfiles = currentProfiles.filter(p => p.id !== id)
+
+  const updates = { openaiCompatibleProfiles: updatedProfiles }
+
+  if (id === 'openai-compatible-legacy') {
+    updates.openaiCompatibleApiKey = ''
+    updates.openaiCompatibleBaseUrl = ''
+    updates.selectedOpenAICompatibleModel = ''
+  }
+
+  let fallback = null
+  const getFallback = () => {
+    if (!fallback) fallback = getFallbackProviderSelection()
+    return fallback
+  }
+
+  // Repair summarize
+  if (settings.summarize?.provider === id) {
+    updates.summarize = getFallback()
+  }
+
+  // Repair chat
+  if (settings.chat?.provider === id) {
+    const f = getFallback()
+    updates.chat = {
+      ...settings.chat,
+      provider: f.provider,
+      model: f.model,
+    }
+  }
+
+  // Repair tools.deepDive
+  if (settings.tools?.deepDive?.customProvider === id) {
+    const f = getFallback()
+    updates.tools = {
+      ...settings.tools,
+      deepDive: {
+        ...settings.tools.deepDive,
+        customProvider: f.provider,
+        customModel: f.model,
+      },
+    }
+  }
+
+  // Repair quickModels
+  if (Array.isArray(settings.chat?.quickModels)) {
+    const updatedQuickModels = settings.chat.quickModels.filter(qm => qm.provider !== id)
+    if (JSON.stringify(updatedQuickModels) !== JSON.stringify(settings.chat.quickModels)) {
+      if (!updates.chat) {
+        updates.chat = { ...settings.chat }
+      }
+      updates.chat.quickModels = updatedQuickModels
+    }
+  }
+
+  await updateSettings(updates)
 }

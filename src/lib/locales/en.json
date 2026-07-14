@@ -332,6 +332,17 @@
       "api_keys_section_title": "API Keys & Endpoints",
       "add_provider": "Add provider",
       "remove_provider": "Remove"
+    },
+    "openai_profile_config": {
+      "name_label": "Profile Name",
+      "name_required": "Name is required",
+      "base_url_label": "Base URL",
+      "base_url_invalid": "Must be a valid HTTP/HTTPS URL",
+      "api_key_label": "API Key",
+      "api_key_required": "API Key is required",
+      "default_model_label": "Default Model ID",
+      "default_model_required": "Default model ID is required",
+      "delete_profile": "Delete Profile"
     }
   },
   "tab_navigation": {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushSync } from 'svelte'
+import { mount, unmount, flushSync } from 'svelte'
 
 // Mock svelte-i18n
 vi.mock('svelte-i18n', () => {
@@ -47,6 +47,7 @@ vi.mock('@/lib/api/providerModelService.js', async (importOriginal) => {
 
 // Import dependencies after mocking
 import { PROVIDER_LIST } from '@/lib/providers/providerRegistry.js'
+import { settings } from '@/stores/settingsStore.svelte.js'
 import FeatureModelPicker from '@/components/inputs/FeatureModelPicker.svelte'
 
 describe('FeatureModelPicker Component', () => {
@@ -62,11 +63,21 @@ describe('FeatureModelPicker Component', () => {
 
   it('renders a usable model control for all 10 registry entries', async () => {
     for (const entry of PROVIDER_LIST) {
+      if (entry.isTemplate) continue
       const onchange = vi.fn()
       let currentProvider = entry.id
       let currentModel = entry.defaultModel
 
-      mount(FeatureModelPicker, {
+      settings.addedProviders = [entry.id]
+      if (entry.apiKeyField) {
+        settings[entry.apiKeyField] = `test-${entry.id}-key`
+      }
+      if (entry.endpointField) {
+        settings[entry.endpointField] = 'http://localhost:1234'
+      }
+      flushSync()
+
+      const component = mount(FeatureModelPicker, {
         target: host,
         props: {
           provider: currentProvider,
@@ -91,7 +102,7 @@ describe('FeatureModelPicker Component', () => {
       }
 
       // Cleanup for next iteration
-      host.innerHTML = ''
+      await unmount(component)
     }
   })
 
@@ -100,7 +111,11 @@ describe('FeatureModelPicker Component', () => {
     let currentProvider = 'chatgpt'
     let currentModel = 'gpt-5-mini'
 
-    mount(FeatureModelPicker, {
+    settings.addedProviders = ['chatgpt']
+    settings.chatgptApiKey = 'test-chatgpt-key'
+    flushSync()
+
+    const component = mount(FeatureModelPicker, {
       target: host,
       props: {
         provider: currentProvider,
@@ -123,5 +138,69 @@ describe('FeatureModelPicker Component', () => {
     flushSync()
 
     expect(onchange).toHaveBeenCalledWith('chatgpt', 'my-custom-gpt-model')
+    unmount(component)
+  })
+
+  it('handles dynamic profiles correctly (dropdown, selection, auto-collapse, fallback)', async () => {
+    // 1. Configure settings with two dynamic profiles
+    settings.openaiCompatibleProfiles = [
+      {
+        id: 'openai-compatible-profile-1',
+        name: 'Profile A',
+        baseUrl: 'https://api.profile-a.com/v1',
+        apiKey: 'key-a',
+        defaultModel: 'model-a',
+      },
+      {
+        id: 'openai-compatible-profile-2',
+        name: 'Profile B',
+        baseUrl: 'https://api.profile-b.com/v1',
+        apiKey: 'key-b',
+        defaultModel: 'model-b',
+      },
+    ]
+    settings.geminiApiKey = 'test-gemini-key'
+    settings.addedProviders = ['gemini']
+    flushSync()
+
+    let boundProvider = 'openai-compatible-profile-1'
+    let boundModel = 'model-a'
+    const onchange = vi.fn((p, m) => {
+      boundProvider = p
+      boundModel = m
+    })
+
+    const component = mount(FeatureModelPicker, {
+      target: host,
+      props: {
+        provider: boundProvider,
+        model: boundModel,
+        onchange,
+      }
+    })
+    flushSync()
+
+    // 2. Trigger should render since we have >=2 configured providers (Gemini and both dynamic profiles)
+    const trigger = host.querySelector('[aria-label="Select Provider"]')
+    expect(trigger).not.toBeNull()
+    expect(trigger.textContent).toContain('Profile A')
+
+    // Rename profile-1 in settings
+    settings.openaiCompatibleProfiles[0].name = 'Profile A Renamed'
+    flushSync()
+
+    // Select label should update
+    expect(trigger.textContent).toContain('Profile A Renamed')
+
+    // 3. Auto-collapse: remove Gemini key and Profile B key, so only Profile A is configured
+    settings.geminiApiKey = ''
+    settings.openaiCompatibleProfiles[1].apiKey = ''
+    flushSync()
+
+    // Now only Profile A is configured. Dropdown should disappear due to auto-collapse!
+    const triggerAfterCollapse = host.querySelector('[aria-label="Select Provider"]')
+    expect(triggerAfterCollapse).toBeNull()
+
+    unmount(component)
   })
 })

@@ -5,15 +5,20 @@
   import { t } from 'svelte-i18n'
   import Icon from '@iconify/svelte'
   import ProviderKeyConfig from './ProviderKeyConfig.svelte'
+  import OpenAICompatibleProfileConfig from './OpenAICompatibleProfileConfig.svelte'
   import {
     PROVIDER_LIST,
-    getProvider,
+    resolveProviderEntry,
+    listAddedProviderEntries,
   } from '@/lib/providers/providerRegistry.js'
   import {
     settings,
     addProvider,
     removeProvider,
+    addOpenAICompatibleProfile,
+    removeOpenAICompatibleProfile,
   } from '../../stores/settingsStore.svelte.js'
+  import { isOpenAICompatibleProfileId } from '@/lib/providers/openAICompatibleProfiles.js'
 
   let selectedProviderId = $state(null)
 
@@ -25,29 +30,37 @@
   let showAddMenu = $state(false)
 
   const availableToAdd = $derived(
-    PROVIDER_LIST.filter(p => !(settings.addedProviders || []).includes(p.id))
+    PROVIDER_LIST.filter(p => {
+      if (p.isTemplate) return true
+      return !(settings.addedProviders || []).includes(p.id)
+    })
   )
-  const addedProviders = $derived(
-    (settings.addedProviders || ['gemini'])
-      .map(getProvider)
-      .filter(Boolean)
-  )
-  const selectedProvider = $derived(getProvider(selectedProviderId))
+  const addedProviders = $derived(listAddedProviderEntries(settings))
+  const selectedProvider = $derived(resolveProviderEntry(selectedProviderId, settings))
 
   async function handleAddProvider(id) {
-    await addProvider(id)
-    selectedProviderId = id
+    if (id === 'openaiCompatible') {
+      const newId = await addOpenAICompatibleProfile()
+      selectedProviderId = newId
+    } else {
+      await addProvider(id)
+      selectedProviderId = id
+    }
     showAddMenu = false
   }
 
   async function handleRemoveProvider(id) {
-    const remainingProviders = (settings.addedProviders || ['gemini']).filter(
-      (providerId) => providerId !== id,
-    )
+    const allAdded = listAddedProviderEntries(settings)
+    const remaining = allAdded.filter(p => p.id !== id)
     if (selectedProviderId === id) {
-      selectedProviderId = remainingProviders[0] || null
+      selectedProviderId = remaining[0]?.id || null
     }
-    await removeProvider(id)
+
+    if (isOpenAICompatibleProfileId(id)) {
+      await removeOpenAICompatibleProfile(id)
+    } else {
+      await removeProvider(id)
+    }
   }
 </script>
 
@@ -141,11 +154,18 @@
     </div>
 
     {#if selectedProvider}
-      <ProviderKeyConfig
-        entry={selectedProvider}
-        isExpanded={true}
-        showHeader={false}
-      />
+      {#if isOpenAICompatibleProfileId(selectedProvider.id)}
+        <OpenAICompatibleProfileConfig
+          profileId={selectedProvider.id}
+          onRemove={() => handleRemoveProvider(selectedProvider.id)}
+        />
+      {:else}
+        <ProviderKeyConfig
+          entry={selectedProvider}
+          isExpanded={true}
+          showHeader={false}
+        />
+      {/if}
     {/if}
 
     <a

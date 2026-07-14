@@ -326,6 +326,17 @@
       "api_keys_section_title": "APIキーとエンドポイント",
       "add_provider": "プロバイダーを追加",
       "remove_provider": "削除"
+    },
+    "openai_profile_config": {
+      "name_label": "プロファイル名",
+      "name_required": "名前は必須です",
+      "base_url_label": "ベースURL",
+      "base_url_invalid": "有効なHTTP/HTTPS URLである必要があります",
+      "api_key_label": "APIキー",
+      "api_key_required": "APIキーは必須です",
+      "default_model_label": "デフォルトモデルID",
+      "default_model_required": "デフォルトモデルIDは必須です",
+      "delete_profile": "プロファイルを削除"
     }
   },
   "tab_navigation": {

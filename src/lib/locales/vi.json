@@ -332,6 +332,17 @@
       "api_keys_section_title": "API Keys & Endpoints",
       "add_provider": "Thêm nhà cung cấp",
       "remove_provider": "Xóa"
+    },
+    "openai_profile_config": {
+      "name_label": "Tên cấu hình",
+      "name_required": "Vui lòng nhập tên",
+      "base_url_label": "Base URL",
+      "base_url_invalid": "URL không hợp lệ (phải bắt đầu bằng http/https)",
+      "api_key_label": "API Key",
+      "api_key_required": "Vui lòng nhập API Key",
+      "default_model_label": "Model ID mặc định",
+      "default_model_required": "Vui lòng nhập Model ID mặc định",
+      "delete_profile": "Xóa cấu hình"
     }
   },
   "tab_navigation": {

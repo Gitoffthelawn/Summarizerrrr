@@ -12,6 +12,8 @@ import {
   getDefaultModel,
   getModelSource,
   resolveAdapterCall,
+  resolveProviderEntry,
+  listAddedProviderEntries,
 } from '@/lib/providers/providerRegistry.js'
 import { resolveFeatureModel } from '@/lib/providers/featureModelResolver.js'
 
@@ -66,6 +68,85 @@ describe('Provider Registry', () => {
     expect(normalizeProviderId('groq')).toBe('groq')
     expect(normalizeProviderId('invalid')).toBe('gemini')
     expect(normalizeProviderId(null)).toBe('gemini')
+  })
+
+  describe('Dynamic Profiles Support', () => {
+    const settings = {
+      addedProviders: ['gemini', 'chatgpt'],
+      openaiCompatibleProfiles: [
+        {
+          id: 'openai-compatible-p1',
+          name: 'SiliconFlow',
+          baseUrl: 'https://api.siliconflow.cn/v1',
+          apiKey: 'sk-siliconflow-key',
+          defaultModel: 'deepseek-chat',
+        },
+        {
+          id: 'openai-compatible-p2',
+          name: 'TogetherAI',
+          baseUrl: 'https://api.together.xyz',
+          apiKey: '', // unconfigured
+          defaultModel: 'meta-llama/Llama-3-70b',
+        }
+      ],
+      geminiApiKey: 'gemini-key',
+      chatgptApiKey: 'chatgpt-key',
+    }
+
+    it('resolveProviderEntry returns dynamic descriptor or static entry', () => {
+      const descriptor = resolveProviderEntry('openai-compatible-p1', settings)
+      expect(descriptor).not.toBeNull()
+      expect(descriptor.id).toBe('openai-compatible-p1')
+      expect(descriptor.label).toBe('SiliconFlow')
+      expect(descriptor.defaultModel).toBe('deepseek-chat')
+      expect(descriptor.modelSource).toBe('freeText')
+
+      const staticEntry = resolveProviderEntry('gemini', settings)
+      expect(staticEntry.id).toBe('gemini')
+
+      const missing = resolveProviderEntry('openai-compatible-nonexistent', settings)
+      expect(missing).toBeNull()
+    })
+
+    it('listAddedProviderEntries combines addedProviders (excluding template) and dynamic profiles', () => {
+      const list = listAddedProviderEntries(settings)
+      // gemini and chatgpt are singletons, plus 2 profiles
+      expect(list.length).toBe(4)
+      expect(list[0].id).toBe('gemini')
+      expect(list[1].id).toBe('chatgpt')
+      expect(list[2].id).toBe('openai-compatible-p1')
+      expect(list[3].id).toBe('openai-compatible-p2')
+    })
+
+    it('normalizeProviderId preserves profile ID', () => {
+      expect(normalizeProviderId('openai-compatible-p1')).toBe('openai-compatible-p1')
+    })
+
+    it('getApiKey resolves dynamic api keys', () => {
+      expect(getApiKey('openai-compatible-p1', settings)).toBe('sk-siliconflow-key')
+      expect(getApiKey('openai-compatible-p2', settings)).toBe('')
+    })
+
+    it('isProviderConfigured checks validation rules for profile', () => {
+      expect(isProviderConfigured('openai-compatible-p1', settings)).toBe(true)
+      expect(isProviderConfigured('openai-compatible-p2', settings)).toBe(false) // key is empty
+    })
+
+    it('getDefaultModel returns profile default model', () => {
+      expect(getDefaultModel('openai-compatible-p1', settings)).toBe('deepseek-chat')
+    })
+
+    it('getModelSource returns freeText for profiles', () => {
+      expect(getModelSource('openai-compatible-p1', settings)).toBe('freeText')
+    })
+
+    it('resolveAdapterCall creates correct overlay with dynamic settings', () => {
+      const call = resolveAdapterCall('openai-compatible-p1', 'custom-model-abc', settings)
+      expect(call.providerId).toBe('openaiCompatible')
+      expect(call.settings.openaiCompatibleApiKey).toBe('sk-siliconflow-key')
+      expect(call.settings.openaiCompatibleBaseUrl).toBe('https://api.siliconflow.cn/v1')
+      expect(call.settings.selectedOpenAICompatibleModel).toBe('custom-model-abc')
+    })
   })
 })
 

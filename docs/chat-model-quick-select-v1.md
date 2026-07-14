@@ -4,47 +4,71 @@
 > a fresh session. Start at Phase 1 and go in order. Each phase ends with a
 > **Verify** step — do not move on until it passes.
 >
-> **Dependency:** requires
-> [`docs/provider-settings-restructure-v1.md`](provider-settings-restructure-v1.md)
-> to be implemented first (this doc uses `settings.chat.{provider,model,quickModels,defaultReasoningLevel}`,
-> `src/lib/providers/providerRegistry.js`, and
-> `src/components/inputs/FeatureModelPicker.svelte` from it).
-> Soft dependency on
-> [`docs/chat-reasoning-control-v1.md`](chat-reasoning-control-v1.md): if the
-> reasoning selector already exists, mount the model switcher to its left; if
-> not, mount the switcher alone — nothing here blocks on it.
+> **Dependencies (already landed):** the provider-settings restructure and the
+> OpenAI-compatible multi-profile work are both merged. This plan builds on the
+> shipped primitives — do **not** re-implement them:
+> - `settings.chat.{provider,model,quickModels,defaultReasoningLevel}` exist in
+>   `DEFAULT_SETTINGS`.
+> - `src/lib/providers/providerRegistry.js` exposes `resolveProviderEntry`,
+>   `resolveAdapterCall(featureProviderId, modelId, settings)`,
+>   `getDefaultModel(id, settings)`, `getLegacyModel(id, settings)`,
+>   `normalizeProviderId`, and `capabilityProviderId` on entries.
+> - `src/lib/providers/featureModelResolver.js` exposes
+>   `resolveFeatureModel(feature, settings)`.
+> - `settingsStore` exposes `updateFeatureSettings(feature, patch)`.
+> - `conversationRepository.updateConversationMetadata(id, { providerId, modelId })`.
+> - OpenAI-compatible providers are **dynamic profiles**: real conversations and
+>   `settings.chat.provider` carry ids such as `openai-compatible-<uuid>` /
+>   `openai-compatible-legacy`, not the static `openaiCompatible`.
+>
+> **Soft dependency on** [`docs/chat-reasoning-control-v1.md`](chat-reasoning-control-v1.md):
+> if the reasoning selector already exists, mount the model switcher to its
+> left; if not, mount the switcher alone — nothing here blocks on it.
 
 ## Context
 
-After the provider-settings restructure, chat has a default provider/model in
-`settings.chat`, but switching models still means a round-trip to the settings
-page, and there is a latent bug-shaped gap:
+Chat already has a default provider/model in `settings.chat`, and the request
+pipeline already honors a per-conversation model. What is missing is the
+**switching UX** and one **fallback-correctness gap**:
 
-- **`conversation.modelId` is persisted but ignored at request time.**
-  `runGeneration` in
-  [`src/services/chat/chatService.js`](../src/services/chat/chatService.js)
-  passes only `{ providerId, settings }` to `streamRequest` →
-  `generateContentStreamEnhancedRequest` in
-  [`src/lib/api/aiSdkAdapter.js`](../src/lib/api/aiSdkAdapter.js), and the
-  adapter re-derives the model from `settings.selected*Model`. Any real
-  per-conversation model switch must make the adapter accept an explicit
-  `modelId`.
-- The composer ([`src/components/chat/ChatComposer.svelte`](../src/components/chat/ChatComposer.svelte))
-  has no model display; the only bottom-right control is the round Send/Stop
-  button.
+- **The per-conversation model is already honored at request time.**
+  [`chatService.js`](../src/services/chat/chatService.js) computes
+  `conversationModelId = conversation.modelId || fallbackModelId` and passes it
+  to `resolveAdapterCall(conversationProviderId, conversationModelId, settings)`,
+  which injects the model into a request-local settings overlay
+  (`selectedChatgptModel`, `selectedOpenAICompatibleModel`, etc.). `getAISDKModel`
+  then reads it. **No new adapter `modelId` parameter is needed** — routing goes
+  through the existing overlay. *(This supersedes older drafts that treated
+  "adapter ignores `conversation.modelId`" as a live bug; it was fixed by the
+  restructure.)*
+- **But the model fallback is not provider-independent.** `fallbackModelId`
+  comes from `resolveFeatureModel('chat', settings)`, i.e. `settings.chat`'s
+  model. So a conversation with `providerId: 'cerebras'`, `modelId: null` (e.g.
+  created before a model was ever stamped) falls back to **`settings.chat`'s
+  model**, which may belong to a *different* provider (say Gemini). The stored
+  provider must instead fall back to **its own** legacy/default model.
+- **There is no Gemini "Advanced" runtime split anymore.** The registry has a
+  single `gemini` entry (`legacyModelField: 'selectedGeminiModel'`); the adapter
+  has no `isAdvancedMode` branch and no `selectedGeminiAdvancedModel`/
+  `geminiAdvancedApiKey`. `geminiAdvanced` survives only as a legacy id that
+  `normalizeProviderId` maps to `gemini`. This plan therefore needs **no**
+  Basic-vs-Advanced collapse handling.
+- The composer
+  ([`ChatComposer.svelte`](../src/components/chat/ChatComposer.svelte)) has no
+  model display; the only bottom-right control is the round Send/Stop button.
 - Per-tab chat state lives in
-  [`src/stores/chatStore.svelte.js`](../src/stores/chatStore.svelte.js) —
+  [`chatStore.svelte.js`](../src/stores/chatStore.svelte.js) —
   `createChatSessionState()` + `SESSION_KEYS` + `stashViewInto`/
   `projectSessionToView` automatically carry any new session key between the
   active reactive view and inactive-tab snapshots.
-- `conversationRepository.updateConversationMetadata(id, metadata)`
-  ([`src/lib/db/conversationRepository.js`](../src/lib/db/conversationRepository.js))
-  already supports patching `providerId`/`modelId` on a conversation.
+- `settings.chat.quickModels` and `settings.chat.defaultReasoningLevel` already
+  exist as **data** (defaults `[]` and `'provider-default'`); no management UI
+  exists yet.
 
-This plan delivers: (1) the adapter honoring an explicit model, (2) a compact
-model switcher in the composer fed by a user-curated **quick models** list,
-(3) the quick-models manager and a **default reasoning level** control in Chat
-settings.
+This plan delivers: (1) provider-independent conversation-model resolution,
+(2) a compact model switcher in the composer fed by a user-curated **quick
+models** list, (3) the quick-models manager and a **default reasoning level**
+control in Chat settings.
 
 ### Goal & scope decision (confirmed with user)
 
@@ -58,112 +82,96 @@ settings.
 - Default reasoning level is a Chat setting (`chat.defaultReasoningLevel`) that
   seeds the per-tab reasoning selector from the reasoning-control plan; it does
   not affect Summary.
+- Provider ids (including dynamic `openai-compatible-*` profile ids) are stored
+  as-is on conversations and quick-model records; only the adapter call collapses
+  them, via the existing `resolveAdapterCall`.
 - No new dependencies; no IndexedDB version bump (`providerId`/`modelId` fields
   already exist on conversation records).
 
-## Phase 1 — Adapter honors an explicit modelId
+## Phase 1 — Lock the model-routing foundation (verification, no adapter contract change)
 
-1. In [`src/lib/chat/contracts.js`](../src/lib/chat/contracts.js): document
-   two optional `GenerationRequest` fields: `modelId` and `featureProviderId`.
-   `featureProviderId` is the **un-collapsed registry id** (may be
-   `'geminiAdvanced'`); the existing `providerId` stays the adapter id (for
-   Gemini Advanced that is `'gemini'`).
+The adapter already honors an explicit per-conversation model through the
+`resolveAdapterCall` settings overlay, so **do not** add a `modelId`/
+`featureProviderId` parameter to the adapter request contract. Instead, prove
+and lock the existing behavior so later phases and future refactors cannot
+regress it.
 
-   > **Why both ids:** chatService sends the adapter
-   > `providerId: 'gemini'` for a Gemini Advanced conversation. If the
-   > explicit-model overlay were keyed on that normalized id, the registry
-   > would pick the **Basic** entry — applying `{ isAdvancedMode: false }`
-   > and writing `selectedGeminiModel` — while the adapter's Gemini branch
-   > ([aiSdkAdapter.js:105](../src/lib/api/aiSdkAdapter.js)) selects
-   > key/model by `settings.isAdvancedMode`. The explicit model must be
-   > applied with the *feature* id before any collapse to the adapter id.
-2. In `src/lib/providers/providerRegistry.js`: add
-   `applyExplicitModel(featureProviderId, modelId, settings)` → returns a
-   settings copy with
-   `{ ...settings, ...adapterOverlay, [legacyModelField]: modelId }` for the
-   **feature** provider entry (`'geminiAdvanced'` keeps
-   `isAdvancedMode: true` + `selectedGeminiAdvancedModel`; only the legacy
-   `'openai'` alias is normalized to `'chatgpt'`). This is `resolveAdapterCall`
-   minus the provider-id mapping; reuse internals.
-3. In [`src/lib/api/aiSdkAdapter.js`](../src/lib/api/aiSdkAdapter.js), in
-   **both** the blocking and streaming request paths
-   (`generateContentRequest` / `generateContentStreamRequest` and the
-   enhanced-request variants):
-   - Accept `modelId` and `featureProviderId` through
-     `normalizeGenerationRequest`, and **destructure both out of the
-     normalized request before `...generationOptions` is spread into the AI
-     SDK call** — they are routing metadata and must never reach
-     `generateText`/`streamText` as unknown options.
-   - When `modelId` is present, build the per-request settings via
-     `applyExplicitModel(featureProviderId ?? providerId, modelId, settings)`
-     **before** calling `getAISDKModel` / `getDisplayModelName` /
-     `mapGenerationConfig`. The overlay approach means none of those switches
-     change, and the GPT-5/o* temperature-skip sniffing in
-     `mapGenerationConfig` (which reads `settings.selectedChatgptModel` etc.)
-     keeps working. Do **not** pass `modelId` "beside" settings without the
-     overlay.
-   - Gemini auto-fallback: when `modelId` is explicit, seed the fallback chain
-     with `modelId` instead of `getCurrentGeminiModel(settings)`.
-   - A request **without** `modelId` must behave byte-for-byte as before —
-     Summary and legacy callers are unaffected.
+1. Confirm in [`aiSdkAdapter.js`](../src/lib/api/aiSdkAdapter.js) that
+   `getAISDKModel` / `getDisplayModelName` derive the model from
+   `settings.selected*Model` (or, for profiles, `selectedOpenAICompatibleModel`),
+   which `resolveAdapterCall` sets from the passed `modelId`. No code change is
+   expected here; if a change *is* needed, keep it to reading the overlaid
+   settings — never bypass the overlay.
+2. Confirm Gemini auto-fallback seeds its chain from the overlaid
+   `selectedGeminiModel` (already the case). No change expected.
 
 **Verify:** extend
-[`tests/chat/aiSdkAdapter.test.js`](../tests/chat/aiSdkAdapter.test.js):
+[`tests/chat/aiSdkAdapter.test.js`](../tests/chat/aiSdkAdapter.test.js) to lock
+the contract:
 
-- explicit `modelId` reaches `streamText` as the constructed model (and
-  `getDisplayModelName` reflects it);
-- **`gemini` case:** `providerId: 'gemini'`, `featureProviderId: 'gemini'`,
-  explicit `modelId` → overlaid settings have `isAdvancedMode: false` and
-  `selectedGeminiModel === modelId`;
-- **`geminiAdvanced` case:** `providerId: 'gemini'`,
-  `featureProviderId: 'geminiAdvanced'`, explicit `modelId` → overlaid
-  settings keep `isAdvancedMode: true` and
-  `selectedGeminiAdvancedModel === modelId` (the Basic-collapse regression);
-- neither `modelId` nor `featureProviderId` appears in the options object
-  passed to `streamText`/`generateText`;
-- explicit `modelId` for a chatgpt reasoning model still triggers the
-  temperature-skip path;
-- a request without `modelId` produces the identical model/config as before
-  (Summary regression guard).
+- an explicit model, supplied via `resolveAdapterCall(providerId, modelId,
+  settings)`, reaches `streamText`/`generateText` as the constructed model and
+  is reflected by `getDisplayModelName`;
+- for a dynamic `openai-compatible-*` profile id, `resolveAdapterCall` collapses
+  to the `openaiCompatible` adapter and the overlay carries the profile's key,
+  base URL, and `selectedOpenAICompatibleModel === modelId`;
+- an explicit reasoning-capable chatgpt model still triggers the GPT-5/o*
+  temperature-skip path in `mapGenerationConfig`;
+- a call **without** an explicit model (Summary path) produces byte-for-byte the
+  same model/config as before.
 
 ```bash
 npx vitest run tests/chat/aiSdkAdapter.test.js
 ```
 
-## Phase 2 — chatService resolves and forwards the conversation model
+## Phase 2 — Provider-independent conversation-model resolution
 
-1. In [`src/services/chat/chatService.js`](../src/services/chat/chatService.js)
-   add `resolveConversationModel(conversation, settings)`. Provider and model
-   fall back **independently** — a stored provider must never be swapped out
-   just because the model snapshot is missing:
+1. In [`chatService.js`](../src/services/chat/chatService.js) add
+   `resolveConversationModel(conversation, settings)`. Provider and model fall
+   back **independently** — a stored provider must never be swapped out just
+   because the model snapshot is missing, and a stored provider's missing model
+   must resolve to *that provider's* default, not `settings.chat`'s model:
 
    ```js
-   const providerId = conversation?.providerId ?? settings.chat.provider
-   const modelId =
-     conversation?.modelId ??
-     (conversation?.providerId
-       ? getLegacyModel(conversation.providerId, settings) ||
-         getDefaultModel(conversation.providerId)
-       : settings.chat.model)
+   function resolveConversationModel(conversation, settings) {
+     const chatFallback = resolveFeatureModel('chat', settings)
+     const providerId = conversation?.providerId || chatFallback.providerId
+
+     let modelId
+     if (conversation?.modelId) {
+       modelId = conversation.modelId
+     } else if (conversation?.providerId) {
+       // Stored provider, no stored model → use THIS provider's own model.
+       // getLegacyModel returns null for dynamic profiles; getDefaultModel is
+       // profile-aware (needs `settings`) and returns the profile's defaultModel.
+       modelId =
+         getLegacyModel(conversation.providerId, settings) ||
+         getDefaultModel(conversation.providerId, settings) ||
+         chatFallback.modelId
+     } else {
+       modelId = chatFallback.modelId
+     }
+     return { providerId, modelId }
+   }
    ```
 
-   Old conversations — e.g. cerebras ones created while `getModelId` lacked a
-   cerebras entry — have `providerId: 'cerebras'`, `modelId: null`. They must
-   **stay on cerebras** with that provider's legacy/default model, not silently
-   switch to whatever `settings.chat` currently points at.
-   Returns `{ providerId, modelId, adapterProviderId, settingsOverlay }` via
-   the registry (`providerId` may be `'geminiAdvanced'`; it is also the
-   request's `featureProviderId`).
-2. Use it in `runGeneration` and `continueResponse`: pass
-   `providerId: adapterProviderId`, `featureProviderId: providerId`, `modelId`,
-   and `settings: { ...settings, ...settingsOverlay }` to `streamRequest`, and
-   use the same `{ providerId, modelId }` pair for every persisted assistant
-   record and pipeline call (the
-   `conversation.modelId || getModelId(settings.selectedProvider, settings)`
-   sites at lines ~171, 184, 223, 238, 257, 456).
-3. Capability lookups: where `providerId` feeds `buildPipeline`/context-meter
-   capability checks, map through the registry's `capabilityProviderId` so
-   `'geminiAdvanced'` resolves gemini capabilities.
+   Pass `settings` everywhere (older drafts called `getDefaultModel(id)` without
+   it — that returns `null` for dynamic profiles and is wrong).
+2. Wire it into **both** generation paths (`runGeneration`/`send` and
+   `continueResponse`). It replaces the current
+   `conversation.modelId || fallbackModelId` derivation as the source of
+   `{ conversationProviderId, conversationModelId }`. Keep the existing
+   **deleted-profile guard** that runs first (when
+   `isOpenAICompatibleProfileId(conversationProviderId)` resolves to no profile,
+   it already repairs to the Chat fallback, updates conversation metadata, and
+   emits an `onWarnings` message) — `resolveConversationModel` complements it,
+   it does not replace it. Feed the resolved `{ providerId, modelId }` into the
+   existing `resolveAdapterCall(...)` call unchanged.
+3. Capability lookups are already correct: chatService derives
+   `capabilityProviderId` from `resolveProviderEntry(conversationProviderId,
+   settings)?.capabilityProviderId`, which maps dynamic profiles to
+   `openaiCompatible` and legacy `geminiAdvanced` to `gemini`. Just ensure the
+   provider id it uses is `resolveConversationModel`'s `providerId`.
 4. `startConversationForActiveTab({ settings, modelOverride })`: accept an
    optional `{ provider, model }` override that wins over `settings.chat` when
    stamping the new conversation's `providerId`/`modelId`.
@@ -172,17 +180,15 @@ npx vitest run tests/chat/aiSdkAdapter.test.js
 [`tests/chat/chatService.test.js`](../tests/chat/chatService.test.js):
 
 - `conversation.modelId` wins over `settings.chat.model` and reaches
-  `streamRequest` as `modelId`;
+  `resolveAdapterCall`/`streamRequest` as the model;
 - a conversation with `providerId: 'cerebras'`, `modelId: null` **stays on
-  cerebras** with the cerebras legacy/default model — provider is not swapped
-  to `settings.chat.provider`;
+  cerebras** with the cerebras legacy/default model — provider is not swapped to
+  `settings.chat.provider`, and the model is not `settings.chat.model`;
+- a conversation with `providerId: 'openai-compatible-<uuid>'`, `modelId: null`
+  resolves to that profile's `defaultModel` (profile-aware fallback);
 - a conversation with no stored provider at all falls back to
   `settings.chat.provider/model`;
-- switching the conversation's model mid-conversation affects the next
-  generation;
-- a `geminiAdvanced` conversation calls the adapter with
-  `providerId: 'gemini'`, `featureProviderId: 'geminiAdvanced'`, and
-  `isAdvancedMode: true` in the overlaid settings.
+- switching a conversation's model mid-conversation affects the next generation.
 
 ```bash
 npx vitest run tests/chat/chatService.test.js
@@ -190,57 +196,64 @@ npx vitest run tests/chat/chatService.test.js
 
 ## Phase 3 — Per-tab switcher UI + Chat settings (quick models, default reasoning)
 
-1. **chatStore** ([`src/stores/chatStore.svelte.js`](../src/stores/chatStore.svelte.js)):
+1. **chatStore** ([`chatStore.svelte.js`](../src/stores/chatStore.svelte.js)):
    - Add `modelOverride: null` (`{ provider, model } | null`) to
-     `createChatSessionState()` — `SESSION_KEYS`/stash/project carry it per tab
-     automatically.
+     `createChatSessionState()` — `SESSION_KEYS`/`stashViewInto`/
+     `projectSessionToView` carry it per tab automatically.
    - New exported `setChatModel({ provider, model })`:
      - active conversation → `await conversationRepository.updateConversationMetadata(conversation.id, { providerId: provider, modelId: model })`,
-       then update the in-view `conversation` object (and the owning session
-       snapshot via the existing `writeSession` helper);
+       then update the in-view `conversation` object and the owning session
+       snapshot via the existing `writeSession` helper;
      - no conversation yet → set the session's `modelOverride`;
        `startConversationForActiveTab` consumes and clears it (Phase 2 §4);
      - no-op while `isSending` (the UI also disables the trigger).
    - Expose a `$derived`-style getter for the current effective
-     `{ provider, model }` (conversation → override → `settings.chat`) for the
-     switcher trigger label.
+     `{ provider, model }` (conversation → `modelOverride` → `settings.chat`) for
+     the switcher trigger label.
 2. **`src/components/chat/ChatModelSelect.svelte`** (new):
    - bits-ui `DropdownMenu` following the pattern in
-     [`src/components/chat/ConversationMenu.svelte`](../src/components/chat/ConversationMenu.svelte);
+     [`ConversationMenu.svelte`](../src/components/chat/ConversationMenu.svelte);
      compact trigger like the deepdive
-     `src/components/tools/deepdive/ChatProviderSelect.svelte` (provider icon +
-     truncated model name; accessible label "Chat model: {model}").
-   - Menu items, in order: **Default** (`settings.chat.provider/model`,
-     labeled as default) → each `settings.chat.quickModels` entry → the
-     conversation's current pair if it is in neither group → separator →
-     **Manage models…** which opens Settings > Chat (reuse the existing
-     open-settings pathway used elsewhere in the side panel).
+     [`ChatProviderSelect.svelte`](../src/components/tools/deepdive/ChatProviderSelect.svelte)
+     (provider icon + truncated model name; accessible label "Chat model:
+     {model}").
+   - Resolve every entry's label/icon through
+     `resolveProviderEntry(provider, settings)` so dynamic profiles show their
+     profile name; if an entry's provider is unconfigured or its profile was
+     deleted (`resolveProviderEntry` → `null`), render it in a warning state
+     rather than crashing.
+   - Menu items, in order: **Default** (`settings.chat.provider/model`, labeled
+     as default) → each `settings.chat.quickModels` entry → the conversation's
+     current pair if it is in neither group → separator → **Manage models…**
+     which opens Settings > Chat (reuse the existing open-settings pathway used
+     elsewhere in the side panel).
    - Selecting an item calls `setChatModel`. Checkmark on the effective pair.
      Disabled while `chatState.isSending`.
 3. **Mount in the composer**
-   ([`src/components/chat/ChatComposer.svelte`](../src/components/chat/ChatComposer.svelte)):
-   place `ChatModelSelect` in the bottom action area beside the Send/Stop
-   button — left of `ChatReasoningSelect` if the reasoning-control plan has
-   landed, otherwise alone.
+   ([`ChatComposer.svelte`](../src/components/chat/ChatComposer.svelte)): place
+   `ChatModelSelect` in the bottom action area beside the Send/Stop button —
+   left of `ChatReasoningSelect` if the reasoning-control plan has landed,
+   otherwise alone.
 4. **Chat settings** (`src/components/settings/ChatSettings.svelte`):
    - The "Chat model" `FeatureModelPicker` (from the restructure plan) gains an
      **"Add to quick models"** button: appends the picker's current
      `{ provider, model }` to `settings.chat.quickModels` (dedup by
-     provider+model, cap 6, disable button when full or duplicate).
+     provider+model, cap 6, disable the button when full or duplicate). The
+     provider may be a dynamic `openai-compatible-*` id — store it as-is.
    - **All `chat` block writes** (`quickModels`, `defaultReasoningLevel`, the
-     picker's provider/model) go through the restructure plan's
-     `updateFeatureSettings('chat', patch)` — `updateSettings` shallow-merges
-     top-level keys, so writing a partial `{ chat: { quickModels } }` directly
-     would clobber the block's other subfields.
-   - Render `quickModels` as removable chips (provider icon + model name + ✕).
+     picker's provider/model) go through `updateFeatureSettings('chat', patch)`
+     — `updateSettings` shallow-merges top-level keys, so writing a partial
+     `{ chat: { quickModels } }` directly would clobber the block's other
+     subfields.
+   - Render `quickModels` as removable chips (provider/profile icon + model name
+     + ✕), resolving labels via `resolveProviderEntry`.
    - **Default reasoning** row: ButtonSet with Auto/Low/Medium/High writing
-     `chat.defaultReasoningLevel` (`'provider-default' | 'low' | 'medium' | 'high'`;
-     import labels from `src/lib/chat/reasoningConfig.js` if the
-     reasoning-control plan has landed, otherwise define the four labels
-     locally and leave a note to consolidate). Per the amended
-     `chat-reasoning-control-v1.md`, this value seeds each tab's
-     `reasoningLevel`; until that plan lands the control is stored but inert —
-     that is expected.
+     `chat.defaultReasoningLevel` (`'provider-default' | 'low' | 'medium' |
+     'high'`; import labels from `src/lib/chat/reasoningConfig.js` if the
+     reasoning-control plan has landed, otherwise define the four labels locally
+     and leave a note to consolidate). Per the amended
+     `chat-reasoning-control-v1.md`, this value seeds each tab's `reasoningLevel`;
+     until that plan lands the control is stored but inert — that is expected.
    - i18n: add all new strings to the 8 locale files in `src/lib/locales/`.
 
 **Verify:** extend
@@ -254,7 +267,7 @@ npx vitest run tests/chat/chatService.test.js
 
 Add a component test
 `tests/chat/composer/ChatModelSelect.test.svelte.js` (menu contents order,
-selection callback, disabled-while-sending).
+selection callback, dynamic-profile label, disabled-while-sending).
 
 ```bash
 npx vitest run tests/chat/chatStoreTabs.test.js tests/chat/composer/ChatModelSelect.test.svelte.js
@@ -280,70 +293,67 @@ git diff --check
 2. Manual smoke on `.output/chrome`:
    - Mid-conversation switch: start a chat on the default model, switch to a
      quick model, send again — **inspect the network request body and confirm
-     the model actually changed** (this is the core acceptance test for the
-     adapter fix).
-   - Switch to a `geminiAdvanced` quick model: request goes out with the
-     advanced key; context meter still shows sane capability numbers.
-   - Old conversation (created before this feature, `modelId: null` but a
-     stored `providerId`): opens and generates on its **stored provider** with
-     that provider's default model — it does not jump to the current
-     `settings.chat` provider.
+     the model actually changed** (core acceptance test).
+   - Old conversation (created before this feature, `modelId: null` but a stored
+     `providerId`): opens and generates on its **stored provider** with that
+     provider's default model — it does not jump to the current `settings.chat`
+     provider. Verify specifically with a `cerebras` conversation.
+   - Switch to a quick model backed by a dynamic OpenAI-compatible profile: the
+     request uses that profile's key/base URL/model; the switcher shows the
+     profile name; deleting that profile downgrades the entry to the warning
+     state without crashing.
    - Retry/Regenerate/Continue after a model switch use the conversation's
      current model.
-   - Summary generation unchanged (Basic and Advanced) — no `modelId` is sent
-     on the Summary path.
-   - Quick models list: add to 6, 7th add disabled; remove chips; switcher
-     menu reflects the list immediately.
-   - Default reasoning ButtonSet persists across reload (and, if
-     reasoning-control has landed, seeds new tabs' selectors).
+   - Summary generation unchanged (no per-conversation model is sent on the
+     Summary path).
+   - Quick models list: add to 6, 7th add disabled; remove chips; switcher menu
+     reflects the list immediately.
+   - Default reasoning ButtonSet persists across reload (and, if reasoning-control
+     has landed, seeds new tabs' selectors).
 
 ## Out of scope (V1)
 
 - Reasoning-effort request mapping and the composer reasoning selector — see
   `chat-reasoning-control-v1.md`.
+- Any adapter `modelId`/`featureProviderId` request-contract change — routing
+  stays on the existing `resolveAdapterCall` settings overlay.
 - Per-message model display in the transcript beyond what already exists.
 - Reordering quick models (add/remove only).
 - Applying quick models or the switcher to Summary/Deep Dive.
-- Model capability filtering of the quick list (e.g. hiding models whose
-  provider lost its key — show the warning state instead).
+- Model capability filtering of the quick list — show the warning state for an
+  unconfigured provider or a deleted profile instead of hiding the entry.
 
 ## Final verification checklist
 
-- [ ] Explicit `modelId` reaches the provider request in both blocking and
-      streaming paths; requests without it are byte-for-byte unchanged;
-      `modelId`/`featureProviderId` never leak into AI SDK options.
 - [ ] Mid-conversation model switch changes the actual network request model.
-- [ ] Explicit model on a `geminiAdvanced` conversation keeps the Advanced
-      key/model keys (no collapse to Gemini Basic).
-- [ ] Legacy conversations with a stored `providerId` and `modelId: null`
-      stay on their stored provider (with its default model); only
-      provider-less conversations fall back to `settings.chat`.
+- [ ] Legacy conversations with a stored `providerId` and `modelId: null` stay
+      on their stored provider with **that provider's** default model (verified
+      for `cerebras`); only provider-less conversations fall back to
+      `settings.chat`.
+- [ ] A dynamic OpenAI-compatible profile conversation with `modelId: null`
+      resolves to the profile's `defaultModel`.
 - [ ] Per-tab `modelOverride` is isolated between browser tabs.
-- [ ] `geminiAdvanced` conversations use the advanced key/settings overlay and
-      correct capability lookups.
+- [ ] Dynamic profiles show their profile name in the switcher and settings
+      chips; a deleted profile degrades to a warning state, not a crash.
 - [ ] Quick models: dedup, cap 6, chips removable, switcher menu in sync.
 - [ ] `chat.defaultReasoningLevel` persists; seeds tab selectors once
       reasoning-control lands.
+- [ ] Summary generation is byte-for-byte unchanged.
 - [ ] `npm test`, `npm check`, both builds, `git diff --check` all pass.
 - [ ] All 8 locales updated; no raw i18n keys.
 
 ## Notable files
 
-- `src/lib/api/aiSdkAdapter.js` — accept explicit `modelId` +
-  `featureProviderId` (destructured away from AI SDK options) via settings
-  overlay in blocking + streaming paths; Gemini fallback seeding.
-- `src/lib/providers/providerRegistry.js` — new
-  `applyExplicitModel(featureProviderId, …)` helper (feature-id keyed, no
-  Basic collapse).
-- `src/services/chat/chatService.js` — `resolveConversationModel` with
-  independent provider/model fallback, forward `modelId`/overlay,
-  capability-id mapping, conversation-start override.
+- `src/lib/api/aiSdkAdapter.js` — verified (not modified) to honor the overlaid
+  model; regression tests lock it.
+- `src/services/chat/chatService.js` — new `resolveConversationModel` with
+  independent, profile-aware provider/model fallback; conversation-start
+  override; existing deleted-profile guard and `resolveAdapterCall` reused.
 - `src/stores/chatStore.svelte.js` — per-tab `modelOverride`, `setChatModel`.
 - `src/components/chat/ChatModelSelect.svelte` — **new** compact switcher.
 - `src/components/chat/ChatComposer.svelte` — mounts the switcher beside Send.
 - `src/components/settings/ChatSettings.svelte` — quick-models manager +
-  default-reasoning ButtonSet.
-- `src/lib/chat/contracts.js` — `GenerationRequest.modelId` JSDoc.
+  default-reasoning ButtonSet (writes via `updateFeatureSettings('chat', …)`).
 - `tests/chat/aiSdkAdapter.test.js`, `tests/chat/chatService.test.js`,
   `tests/chat/chatStoreTabs.test.js`,
   `tests/chat/composer/ChatModelSelect.test.svelte.js` — coverage.

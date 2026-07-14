@@ -6,7 +6,12 @@
   import { t } from 'svelte-i18n'
   import Icon from '@iconify/svelte'
 
-  let { entry, isExpanded = false, onToggle = () => {}, showHeader = true } = $props()
+  let {
+    entry,
+    isExpanded = false,
+    onToggle = () => {},
+    showHeader = true,
+  } = $props()
 
   let additionalKeys = $state([])
 
@@ -51,32 +56,28 @@
   }
 </script>
 
-<div class="overflow-hidden transition-colors duration-150 {isExpanded ? 'bg-muted/5 border border-border' : ''}">
-  {#if showHeader}
+<div class="overflow-hidden transition-colors duration-150">
+  {#if !showHeader}
     <!-- Accordion Header - always visible -->
     <button
       type="button"
-      class="w-full flex items-center gap-3 px-3 py-2.5 cursor-pointer select-none transition-colors duration-150 hover:bg-muted/10 rounded-sm"
+      class="w-full flex items-center gap-3 py-2.5 cursor-pointer select-none transition-colors duration-150"
       onclick={onToggle}
     >
-      <Icon
-        icon={entry.iconifyIcon || 'heroicons:cube-20-solid'}
-        width="16"
-        height="16"
-        class="text-text-secondary shrink-0"
-      />
       <span class="font-medium text-sm text-text-primary">{entry.label}</span>
     </button>
   {/if}
 
   <!-- Accordion Content - only when expanded -->
   {#if isExpanded}
-    <div class="px-4 pb-4 flex flex-col gap-3 border-t border-border">
+    <div class="pb-4 flex flex-col gap-3">
       {#if entry.baseUrlField}
         <div class="flex flex-col gap-1.5 mt-3">
           <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs text-text-secondary">
-            {$t('settings.provider_key_config.base_url_label', { default: 'Base URL' })}
+            {$t('settings.provider_key_config.base_url_label', {
+              default: 'Base URL',
+            })}
           </label>
           <input
             type="text"
@@ -93,7 +94,9 @@
         <div class="flex flex-col gap-1.5 {entry.baseUrlField ? '' : 'mt-3'}">
           <!-- svelte-ignore a11y_label_has_associated_control -->
           <label class="text-xs text-text-secondary">
-            {$t('settings.provider_key_config.endpoint_label', { default: 'Endpoint URL' })}
+            {$t('settings.provider_key_config.endpoint_label', {
+              default: 'Endpoint URL',
+            })}
           </label>
           <input
             type="text"
@@ -107,20 +110,34 @@
       {/if}
 
       {#if entry.apiKeyField}
-        <div class="{!entry.baseUrlField && !entry.endpointField ? 'mt-3' : ''}">
+        <div class={!entry.baseUrlField && !entry.endpointField ? 'mt-3' : ''}>
           <ApiKeyInputMulti
             apiKey={settings[entry.apiKeyField]}
-            label={$t('settings.provider_key_config.api_key_label', { default: 'API Key' })}
-            placeholder={$t('settings.provider_key_config.api_key_placeholder', { default: 'Enter API Key' })}
+            label={$t('settings.provider_key_config.api_key_label', {
+              default: 'API Key',
+            })}
+            placeholder={$t(
+              'settings.provider_key_config.api_key_placeholder',
+              { default: 'Enter API Key' },
+            )}
             id={`${entry.id}-api-key`}
             onSave={saveApiKey}
-            linkHref={entry.id === 'gemini' ? 'https://aistudio.google.com/app/apikey' :
-                      entry.id === 'chatgpt' ? 'https://platform.openai.com/api-keys' :
-                      entry.id === 'openrouter' ? 'https://openrouter.ai/keys' :
-                      entry.id === 'deepseek' ? 'https://platform.deepseek.com/api_keys' :
-                      entry.id === 'groq' ? 'https://console.groq.com/keys' :
-                      entry.id === 'cerebras' ? 'https://cloud.cerebras.ai' : ''}
-            linkText={$t('settings.provider_key_config.get_a_key', { default: 'Get API Key' })}
+            linkHref={entry.id === 'gemini'
+              ? 'https://aistudio.google.com/app/apikey'
+              : entry.id === 'chatgpt'
+                ? 'https://platform.openai.com/api-keys'
+                : entry.id === 'openrouter'
+                  ? 'https://openrouter.ai/keys'
+                  : entry.id === 'deepseek'
+                    ? 'https://platform.deepseek.com/api_keys'
+                    : entry.id === 'groq'
+                      ? 'https://console.groq.com/keys'
+                      : entry.id === 'cerebras'
+                        ? 'https://cloud.cerebras.ai'
+                        : ''}
+            linkText={$t('settings.provider_key_config.get_a_key', {
+              default: 'Get API Key',
+            })}
           />
         </div>
       {/if}
@@ -134,7 +151,13 @@
                   bind:apiKey={additionalKeys[index]}
                   label=""
                   onSave={saveAdditionalKeys}
-                  placeholder={$t('settings.gemini_basic_config.placeholder_additional_key', { values: { index: index + 1 }, default: `Additional Key #${index + 1}` })}
+                  placeholder={$t(
+                    'settings.gemini_basic_config.placeholder_additional_key',
+                    {
+                      values: { index: index + 1 },
+                      default: `Additional Key #${index + 1}`,
+                    },
+                  )}
                   id={`${entry.id}-additional-key-${index}`}
                   showStatus={false}
                 />
@@ -142,11 +165,22 @@
               <button
                 class="text-text-secondary size-8.5 border-l-0 flex justify-center items-center bg-muted/5 dark:bg-muted/5 border border-border focus-within:border-blackwhite/30 dark:border-blackwhite/10 dark:focus-within:border-blackwhite/20 transition-colors duration-150 hover:text-text-primary hover:bg-muted/20"
                 onclick={() => removeAdditionalKey(index)}
-                title={$t('settings.gemini_basic_config.remove_api_key', { default: 'Remove API Key' })}
-                aria-label={$t('settings.gemini_basic_config.remove_api_key', { default: 'Remove API Key' })}
+                title={$t('settings.gemini_basic_config.remove_api_key', {
+                  default: 'Remove API Key',
+                })}
+                aria-label={$t('settings.gemini_basic_config.remove_api_key', {
+                  default: 'Remove API Key',
+                })}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
-                  <path d="M3.75 7.25a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z"/>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  class="size-4"
+                >
+                  <path
+                    d="M3.75 7.25a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z"
+                  />
                 </svg>
               </button>
             </div>
@@ -159,34 +193,53 @@
           class="flex items-center gap-1.5 font-medium text-xs text-primary hover:text-primary/80 transition-colors w-fit px-1 mt-1"
           onclick={addAdditionalKey}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
-            <path fill-rule="evenodd" d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm.75-10.25v2.5h2.5a.75.75 0 0 1 0 1.5h-2.5v2.5a.75.75 0 0 1-1.5 0v-2.5h-2.5a.75.75 0 0 1 0-1.5h2.5v-2.5a.75.75 0 0 1 1.5 0Z" clip-rule="evenodd"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            class="size-4"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm.75-10.25v2.5h2.5a.75.75 0 0 1 0 1.5h-2.5v2.5a.75.75 0 0 1-1.5 0v-2.5h-2.5a.75.75 0 0 1 0-1.5h2.5v-2.5a.75.75 0 0 1 1.5 0Z"
+              clip-rule="evenodd"
+            />
           </svg>
-          {$t('settings.gemini_basic_config.add_key_for_higher_limit', { default: 'Add key for higher rate limits' })}
+          {$t('settings.gemini_basic_config.add_key_for_higher_limit', {
+            default: 'Add key for higher rate limits',
+          })}
         </button>
       {/if}
     </div>
   {/if}
 
   {#if isExpanded && entry.id === 'gemini'}
-    <div class="px-4 pb-4 flex flex-col gap-2">
+    <div class="pb-4 flex flex-col gap-2">
       <!-- svelte-ignore a11y_label_has_associated_control -->
       <label class="text-xs text-text-secondary"
-        >{$t('settings.gemini_basic_config.thinking_level', { default: 'Thinking Level' })}</label
+        >{$t('settings.gemini_basic_config.thinking_level', {
+          default: 'Thinking Level',
+        })}</label
       >
       <div class="grid grid-cols-3 gap-1">
         <ButtonSet
-          title={$t('settings.gemini_basic_config.thinking_levels.minimal', { default: 'Minimal' })}
+          title={$t('settings.gemini_basic_config.thinking_levels.minimal', {
+            default: 'Minimal',
+          })}
           class={settings.geminiThinkingLevel === 'minimal' ? 'active' : ''}
           onclick={() => updateSettings({ geminiThinkingLevel: 'minimal' })}
         />
         <ButtonSet
-          title={$t('settings.gemini_basic_config.thinking_levels.medium', { default: 'Medium' })}
+          title={$t('settings.gemini_basic_config.thinking_levels.medium', {
+            default: 'Medium',
+          })}
           class={settings.geminiThinkingLevel === 'medium' ? 'active' : ''}
           onclick={() => updateSettings({ geminiThinkingLevel: 'medium' })}
         />
         <ButtonSet
-          title={$t('settings.gemini_basic_config.thinking_levels.high', { default: 'High' })}
+          title={$t('settings.gemini_basic_config.thinking_levels.high', {
+            default: 'High',
+          })}
           class={settings.geminiThinkingLevel === 'high' ? 'active' : ''}
           onclick={() => updateSettings({ geminiThinkingLevel: 'high' })}
         />
