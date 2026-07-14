@@ -3,7 +3,7 @@
   import { updateSettings } from '../../../stores/settingsStore.svelte.js'
   import { settings } from '@/stores/settingsStore.svelte.js'
   import ApiKeyInputMulti from '../../inputs/ApiKeyInputMulti.svelte'
-  import ReusableCombobox from '../../inputs/ReusableCombobox.svelte'
+  import ProviderModelSelect from '../ProviderModelSelect.svelte'
   import { t } from 'svelte-i18n'
   import { onMount } from 'svelte'
 
@@ -17,37 +17,9 @@
   let sharedSaveStatus = $state('')
   let statusTimeout = null
 
-  const availableModels = [
-    {
-      value: 'gemini-3.1-flash-lite-preview',
-      label: 'gemini-3.1-flash-lite-preview',
-    },
-    { value: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview' },
-    {
-      value: 'gemini-3-pro-preview',
-      label: 'gemini-3-pro-preview',
-    },
-    { value: 'gemini-2.5-pro', label: 'gemini-2.5-pro' },
-    { value: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
-    {
-      value: 'gemini-2.5-flash-lite',
-      label: 'gemini-2.5-flash-lite',
-    },
-    {
-      value: 'gemini-2.5-computer-use-preview-10-2025',
-      label: 'gemini-2.5-computer-use-preview-10-2025',
-    },
-    { value: 'gemma-4-31b-it', label: 'gemma-4-31b-it' },
-    { value: 'gemma-4-26b-a4b-it', label: 'gemma-4-26b-a4b-it' },
-    {
-      value: 'gemini-robotics-er-1.5-preview',
-      label: 'gemini-robotics-er-1.5-preview',
-    },
-  ]
-
   // Đảm bảo giá trị mặc định nếu props không được cung cấp
   if (!selectedModel) {
-    selectedModel = availableModels[0].value
+    selectedModel = 'gemini-3.1-flash-lite'
   }
 
   function saveKeys() {
@@ -165,15 +137,14 @@
 </div>
 
 <div class="flex flex-col gap-2 relative z-50">
-  <label for="gemini-tool-model" class="block text-xs text-text-secondary"
-    >{$t('settings.gemini_advanced_config.select_model_label')}</label
-  >
-  <ReusableCombobox
-    items={availableModels}
-    bind:bindValue={selectedModel}
+  <ProviderModelSelect
+    providerId="geminiAdvanced"
+    {apiKey}
+    bind:selectedModel
+    label={$t('settings.gemini_advanced_config.select_model_label')}
     placeholder={$t('settings.gemini_advanced_config.select_model_placeholder')}
-    id="gemini-tool-model"
+    inputId="gemini-tool-model"
     ariaLabel="Search Gemini model"
-    onValueChangeCallback={handleModelSave}
+    onModelChange={handleModelSave}
   />
 </div>

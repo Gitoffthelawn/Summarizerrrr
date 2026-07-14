@@ -51,6 +51,112 @@ describe('provider model discovery', () => {
     )
   })
 
+  it('loads DeepSeek models dynamically when an API key is available', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [
+          { id: 'deepseek-reasoner' },
+          { id: 'deepseek-chat' },
+          { id: 'deepseek-chat' },
+        ],
+      }),
+    )
+
+    await expect(fetchProviderModels('deepseek', 'secret', fetchFn)).resolves.toEqual([
+      'deepseek-chat',
+      'deepseek-reasoner',
+    ])
+    expect(fetchFn).toHaveBeenCalledWith(
+      'https://api.deepseek.com/models',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer secret' },
+      }),
+    )
+  })
+
+  it('uses fallback DeepSeek models until an API key is available', async () => {
+    const fetchFn = vi.fn()
+
+    await expect(fetchProviderModels('deepseek', '', fetchFn)).resolves.toEqual(
+      FALLBACK_PROVIDER_MODELS.deepseek,
+    )
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('loads every page of generative Gemini models dynamically', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          models: [
+            {
+              name: 'models/gemini-2.5-pro-001',
+              baseModelId: 'gemini-2.5-pro',
+              inputTokenLimit: 1_000_000,
+              supportedGenerationMethods: ['generateContent'],
+            },
+            {
+              name: 'models/text-embedding-004',
+              supportedGenerationMethods: ['embedContent'],
+            },
+          ],
+          nextPageToken: 'next page',
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          models: [
+            {
+              name: 'models/gemini-2.5-flash',
+              supportedGenerationMethods: ['generateContent'],
+            },
+            {
+              name: 'models/gemini-2.5-pro-002',
+              baseModelId: 'gemini-2.5-pro',
+              supportedGenerationMethods: ['generateContent'],
+            },
+          ],
+        }),
+      )
+
+    await expect(
+      fetchProviderModels('geminiAdvanced', 'secret', fetchFn),
+    ).resolves.toEqual(['gemini-2.5-flash', 'gemini-2.5-pro'])
+    expect(fetchFn).toHaveBeenNthCalledWith(
+      1,
+      'https://generativelanguage.googleapis.com/v1beta/models?key=secret&pageSize=1000',
+      { method: 'GET' },
+    )
+    expect(fetchFn).toHaveBeenNthCalledWith(
+      2,
+      'https://generativelanguage.googleapis.com/v1beta/models?key=secret&pageSize=1000&pageToken=next+page',
+      { method: 'GET' },
+    )
+    expect(getProviderCapabilities('gemini', 'gemini-2.5-pro')).toMatchObject({
+      contextWindowTokens: 1_000_000,
+      source: 'discovered',
+    })
+    clearDiscoveredCapabilities()
+  })
+
+  it('uses fallback Gemini models until an API key is available', async () => {
+    const fetchFn = vi.fn()
+
+    expect(FALLBACK_PROVIDER_MODELS.geminiAdvanced).toEqual([
+      'gemini-3.5-flash',
+      'gemini-3.1-flash-lite',
+      'gemini-3.1-pro-preview',
+      'gemini-3-flash-preview',
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+    ])
+    await expect(fetchProviderModels('geminiAdvanced', '', fetchFn)).resolves.toEqual(
+      FALLBACK_PROVIDER_MODELS.geminiAdvanced,
+    )
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
   it('registers each Groq model\'s context_window into the capability registry', async () => {
     clearDiscoveredCapabilities()
     const fetchFn = vi.fn().mockResolvedValue(

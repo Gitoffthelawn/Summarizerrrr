@@ -15,6 +15,8 @@
     inputId,
     placeholder,
     ariaLabel,
+    modelInfoHref = '',
+    modelInfoText = '',
     onModelChange = () => {},
   } = $props()
 
@@ -65,20 +67,31 @@
     <label for={inputId} class="block text-xs font-medium text-text-primary">
       {label}
     </label>
-    <button
-      type="button"
-      class="grid size-6 place-items-center text-muted transition-colors hover:text-text-primary disabled:cursor-wait disabled:opacity-50"
-      onclick={loadModels}
-      disabled={isLoading}
-      aria-label={`Refresh ${providerId} models`}
-      title={loadError ? `${loadError.message}. Using fallback models.` : 'Refresh models'}
-    >
-      <Icon
-        width={14}
-        icon="heroicons:arrow-path-16-solid"
-        class={isLoading ? 'is-loading' : ''}
-      />
-    </button>
+    <div class="flex items-center gap-1">
+      {#if modelInfoHref}
+        <a
+          href={modelInfoHref}
+          target="_blank"
+          class="text-xs text-primary outline-gray-500 hover:underline"
+        >
+          {modelInfoText}
+        </a>
+      {/if}
+      <button
+        type="button"
+        class="grid size-6 place-items-center text-muted transition-colors hover:text-text-primary disabled:cursor-wait disabled:opacity-50"
+        onclick={loadModels}
+        disabled={isLoading}
+        aria-label={`Refresh ${providerId} models`}
+        title={loadError ? `${loadError.message}. Using fallback models.` : 'Refresh models'}
+      >
+        <Icon
+          width={14}
+          icon="heroicons:arrow-path-16-solid"
+          class={isLoading ? 'is-loading' : ''}
+        />
+      </button>
+    </div>
   </div>
 
   <ReusableCombobox

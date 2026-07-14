@@ -10,6 +10,16 @@ const PROVIDER_CONFIG = {
     publicUrl: 'https://api.cerebras.ai/public/v1/models',
     requiresApiKey: false,
   },
+  deepseek: {
+    url: 'https://api.deepseek.com/models',
+    requiresApiKey: true,
+  },
+  geminiAdvanced: {
+    url: 'https://generativelanguage.googleapis.com/v1beta/models',
+    requiresApiKey: true,
+    usesApiKeyQueryParam: true,
+    capabilityProviderId: 'gemini',
+  },
 }
 
 export const FALLBACK_PROVIDER_MODELS = {
@@ -23,6 +33,16 @@ export const FALLBACK_PROVIDER_MODELS = {
     'qwen/qwen3-32b',
   ],
   cerebras: ['gpt-oss-120b', 'zai-glm-4.7'],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  geminiAdvanced: [
+    'gemini-3.5-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-3.1-pro-preview',
+    'gemini-3-flash-preview',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+  ],
 }
 
 function isGroqChatModel(model) {
@@ -40,24 +60,54 @@ function isGroqChatModel(model) {
 /**
  * Capture per-model context length from a provider's `/models` response and
  * feed it into the shared capability registry. Providers expose it under
- * different keys: Groq → `context_window`, OpenRouter → `context_length`.
+ * different keys: Groq → `context_window`, OpenRouter → `context_length`,
+ * Gemini → `inputTokenLimit`.
  * Silently ignores models that don't carry it.
  *
  * @param {string} providerId
- * @param {{data?: Array<object>}} body
+ * @param {{data?: Array<object>, models?: Array<object>}} body
  */
 function registerCapabilitiesFromBody(providerId, body) {
-  if (!Array.isArray(body?.data)) return
-  for (const model of body.data) {
-    const id = typeof model?.id === 'string' ? model.id.trim() : ''
+  const models = Array.isArray(body?.data)
+    ? body.data
+    : Array.isArray(body?.models)
+      ? body.models
+      : []
+
+  for (const model of models) {
+    const id = typeof model?.id === 'string'
+      ? model.id.trim()
+      : typeof model?.baseModelId === 'string'
+        ? model.baseModelId.trim()
+        : ''
     if (!id) continue
-    const contextWindowTokens = Number(model.context_window ?? model.context_length)
+    const contextWindowTokens = Number(
+      model.context_window ?? model.context_length ?? model.inputTokenLimit,
+    )
     if (!Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) continue
     registerModelCapability(providerId, id, { contextWindowTokens })
   }
 }
 
 function normalizeModels(providerId, body) {
+  if (providerId === 'geminiAdvanced') {
+    if (!Array.isArray(body?.models)) {
+      throw new Error("Invalid API response: missing 'models' array")
+    }
+
+    return body.models
+      .filter((model) =>
+        model?.supportedGenerationMethods?.includes('generateContent'),
+      )
+      .map(
+        (model) =>
+          model.baseModelId?.trim() || model.name?.replace(/^models\//, '').trim(),
+      )
+      .filter(Boolean)
+      .filter((id, index, models) => models.indexOf(id) === index)
+      .sort((a, b) => a.localeCompare(b))
+  }
+
   if (!Array.isArray(body?.data)) {
     throw new Error("Invalid API response: missing 'data' array")
   }
@@ -83,6 +133,31 @@ async function requestModels(url, apiKey, fetchFn) {
   return response.json()
 }
 
+async function requestPaginatedModels(config, apiKey, fetchFn) {
+  let nextPageToken = ''
+  let models = []
+
+  do {
+    const params = new URLSearchParams({ key: apiKey, pageSize: '1000' })
+    if (nextPageToken) params.set('pageToken', nextPageToken)
+
+    const response = await fetchFn(`${config.url}?${params}`, { method: 'GET' })
+    if (!response.ok) {
+      throw new Error(`Could not load models (HTTP ${response.status})`)
+    }
+
+    const body = await response.json()
+    if (!Array.isArray(body?.models)) {
+      throw new Error("Invalid API response: missing 'models' array")
+    }
+
+    models = [...models, ...body.models]
+    nextPageToken = body.nextPageToken || ''
+  } while (nextPageToken)
+
+  return { models }
+}
+
 export async function fetchProviderModels(
   providerId,
   apiKey,
@@ -97,17 +172,18 @@ export async function fetchProviderModels(
   }
 
   try {
-    const body = await requestModels(config.url, cleanApiKey, fetchFn)
-    registerCapabilitiesFromBody(providerId, body)
+    const body = config.usesApiKeyQueryParam
+      ? await requestPaginatedModels(config, cleanApiKey, fetchFn)
+      : await requestModels(config.url, cleanApiKey, fetchFn)
+    registerCapabilitiesFromBody(config.capabilityProviderId || providerId, body)
     const models = normalizeModels(providerId, body)
     return models.length ? models : FALLBACK_PROVIDER_MODELS[providerId]
   } catch (error) {
     if (!config.publicUrl) throw error
 
     const body = await requestModels(config.publicUrl, '', fetchFn)
-    registerCapabilitiesFromBody(providerId, body)
+    registerCapabilitiesFromBody(config.capabilityProviderId || providerId, body)
     const models = normalizeModels(providerId, body)
     return models.length ? models : FALLBACK_PROVIDER_MODELS[providerId]
   }
 }
-
