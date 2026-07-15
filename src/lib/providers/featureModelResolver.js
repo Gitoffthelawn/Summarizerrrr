@@ -68,3 +68,36 @@ export function resolveFeatureModel(feature, settings) {
     settingsOverlay: provider.adapterOverlay || {},
   };
 }
+
+/**
+ * Resolves provider and model for a conversation with provider-independent
+ * fallback. A stored provider whose model is missing resolves to that
+ * provider's own default — it never borrows settings.chat's model.
+ *
+ * Single source of truth for both the request path (chatService) and the
+ * display path (chatStore's effective-model getter); they must not disagree.
+ *
+ * @param {Object|null} conversation
+ * @param {Object} settings
+ * @returns {{ providerId: string, modelId: string }}
+ */
+export function resolveConversationModel(conversation, settings) {
+  const chatFallback = resolveFeatureModel('chat', settings);
+  const providerId = conversation?.providerId || chatFallback.providerId;
+
+  let modelId;
+  if (conversation?.modelId) {
+    modelId = conversation.modelId;
+  } else if (conversation?.providerId) {
+    // Stored provider, no stored model → use THIS provider's own model.
+    // getLegacyModel returns null for dynamic profiles; getDefaultModel is
+    // profile-aware (needs `settings`) and returns the profile's defaultModel.
+    modelId =
+      getLegacyModel(conversation.providerId, settings) ||
+      getDefaultModel(conversation.providerId, settings) ||
+      chatFallback.modelId;
+  } else {
+    modelId = chatFallback.modelId;
+  }
+  return { providerId, modelId };
+}

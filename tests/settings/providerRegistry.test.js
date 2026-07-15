@@ -51,6 +51,15 @@ describe('Provider Registry', () => {
     }
   })
 
+  it('exposes official model-list links for cloud providers', () => {
+    expect(getProvider('gemini').modelInfoHref).toBe('https://aistudio.google.com/app/rate-limit')
+    expect(getProvider('chatgpt').modelInfoHref).toBe('https://platform.openai.com/docs/pricing')
+    expect(getProvider('openrouter').modelInfoHref).toBe('https://openrouter.ai/models')
+    expect(getProvider('deepseek').modelInfoHref).toBe('https://api-docs.deepseek.com/quick_start/pricing')
+    expect(getProvider('groq').modelInfoHref).toBe('https://console.groq.com/docs/models')
+    expect(getProvider('cerebras').modelInfoHref).toBe('https://inference-docs.cerebras.ai/models/overview')
+  })
+
   it('resolveAdapterCall returns correct adapter ID and overlay settings', () => {
     const settings = {
       isAdvancedMode: false,

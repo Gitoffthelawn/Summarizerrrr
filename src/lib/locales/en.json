@@ -321,6 +321,7 @@
       "provider_label": "Model Provider",
       "model_label": "Model Name",
       "model_placeholder": "Search or select model",
+      "view_models": "View Models",
       "unconfigured_suffix": "unconfigured",
       "unconfigured_warning": "This provider is not configured.",
       "configure_link": "Configure API Key",
@@ -348,6 +349,34 @@
       "default_model_label": "Default Model ID",
       "default_model_required": "Default model ID is required",
       "delete_profile": "Delete Profile"
+    },
+    "chat": {
+      "add_to_quick_models": "Add to quick models",
+      "quick_models": "Quick models",
+      "quick_models_hint": "Up to {max} models for fast switching in the composer.",
+      "remove_quick_model": "Remove from quick models",
+      "default_reasoning": "Default reasoning",
+      "default_reasoning_hint": "Seeds new tabs' reasoning selector. Per-tab overrides are independent."
+    }
+  },
+  "chat": {
+    "context_donut": {
+      "aria_usage": "Context window usage:",
+      "aria_unknown": "Context usage not known yet",
+      "model": "Model",
+      "unknown_provider": "Unknown provider",
+      "context_window": "Context window",
+      "input_budget": "Input budget",
+      "input": "Input",
+      "output": "Output",
+      "cache": "Cache",
+      "source": "Source"
+    },
+    "model_select": {
+      "aria_label": "Chat model: {model}",
+      "default_label": "Default ({model})",
+      "manage_models": "Manage models...",
+      "warning_unresolvable": "Unknown profile"
     }
   },
   "tab_navigation": {

@@ -2,7 +2,9 @@
   // @ts-nocheck
   import Icon from '@iconify/svelte'
   import ChatSkillChip from './ChatSkillChip.svelte'
-  import ChatSourceChip from './ChatSourceChip.svelte'
+  import ChatContextBar from './ChatContextBar.svelte'
+  import ChatContextDonut from './ChatContextDonut.svelte'
+  import ChatModelSelect from './ChatModelSelect.svelte'
   import SkillPicker from './SkillPicker.svelte'
   import TabMentionMenu from './TabMentionMenu.svelte'
   import ChatComposerInput from './ChatComposerInput.svelte'
@@ -25,9 +27,6 @@
   import { settings } from '@/stores/settingsStore.svelte.js'
   import {
     resolveAutoSourceKind,
-    labelForSourceKind,
-    iconForSourceKind,
-    activeSourceLabelForUrl,
   } from '@/services/chat/sourceResolution.js'
   import {
     getChatReasoningOptions,
@@ -94,18 +93,11 @@
   let skillRange = $state(null)
   let composerError = $state('')
 
-  /**
-   * Resolve the kind/label/icon for an attachment chip.
-   * Comment entries carry their own sourceKind; tab entries resolve via the URL.
-   */
-  function resolveAttachmentDisplay(attachment) {
-    const kind = attachment.sourceKind || resolveAutoSourceKind(attachment.url || '')
-    return {
-      kind,
-      kindLabel: labelForSourceKind(kind),
-      icon: iconForSourceKind(kind),
-    }
-  }
+  // Total estimated token cost of @tab chips attached but not yet sent.
+  const pendingEstimate = $derived(
+    chatState.pendingAttachments.reduce((sum, a) => sum + (a.estimatedTokens || 0), 0)
+  )
+
 
   $effect(() => {
     settings.chatUserSkills
@@ -230,40 +222,23 @@
 </script>
 
 <div class="flex w-full flex-col gap-2 px-3 pt-2 pb-3">
-  {#if chatState.selectedSkill || chatState.currentUrl || chatState.pendingAttachments.length}
+  {#if chatState.selectedSkill}
     <div class="flex flex-wrap items-center gap-1.5">
       <ChatSkillChip skill={chatState.selectedSkill} onClear={clearSkill} />
-      {#if activeSourceKind && !chatState.activeSourceDismissed}
-        <ChatSourceChip
-          label={activeSourceLabelForUrl(chatState.currentUrl || '')}
-          icon={iconForSourceKind(activeSourceKind)}
-          kindLabel={labelForSourceKind(activeSourceKind)}
-          onRemove={dismissActiveSource}
-        />
-      {:else if chatState.currentUrl && chatState.activeSourceDismissed}
-        <button
-          type="button"
-          class="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-text-tertiary transition-colors hover:border-text-tertiary hover:text-text-secondary"
-          onclick={restoreActiveSource}
-          title="Add this page as context"
-        >
-          <Icon icon="heroicons:plus" width="14" height="14" />
-          {activeSourceLabelForUrl(chatState.currentUrl || '')}
-        </button>
-      {/if}
-      {#each chatState.pendingAttachments as attachment (`${attachment.tabId}-${attachment.sourceKind || 'auto'}`)}
-        {@const display = resolveAttachmentDisplay(attachment)}
-        <ChatSourceChip
-          label={attachment.title || attachment.hostname || 'Attached tab'}
-          icon={display.icon}
-          kindLabel={display.kindLabel}
-          estimatedTokens={attachment.estimatedTokens}
-          estimating={attachment.estimating}
-          onRemove={() => removeTabAttachment(attachment.tabId, attachment.sourceKind)}
-        />
-      {/each}
     </div>
   {/if}
+
+  <ChatContextBar
+    currentUrl={chatState.currentUrl}
+    currentTitle={chatState.currentTitle}
+    currentFavIconUrl={chatState.currentFavIconUrl}
+    {activeSourceKind}
+    activeSourceDismissed={chatState.activeSourceDismissed}
+    pendingAttachments={chatState.pendingAttachments}
+    onDismissActiveSource={dismissActiveSource}
+    onRestoreActiveSource={restoreActiveSource}
+    onRemoveAttachment={removeTabAttachment}
+  />
 
   <div class="relative">
     <TabMentionMenu
@@ -310,12 +285,6 @@
       {/if}
 
       <div class="absolute bottom-1.5 right-1.5 flex items-center gap-1.5">
-        <ChatReasoningSelect
-          value={displayedReasoningLevel}
-          options={reasoningOptions}
-          disabled={chatState.isSending}
-          onchange={handleReasoningChange}
-        />
         <button
           type="button"
           class="z-20 flex size-10 items-center justify-center rounded-full transition-all duration-300 {chatState.isSending
@@ -334,6 +303,18 @@
           {/if}
         </button>
       </div>
+    </div>
+
+    <!-- Action row: Model | Reasoning | Donut -->
+    <div class="flex items-center justify-end gap-1.5 px-0.5">
+      <ChatModelSelect />
+      <ChatReasoningSelect
+        value={displayedReasoningLevel}
+        options={reasoningOptions}
+        disabled={chatState.isSending}
+        onchange={handleReasoningChange}
+      />
+      <ChatContextDonut usage={chatState.contextUsage} {pendingEstimate} />
     </div>
     {#if composerError}<p class="mt-1 text-xs text-error">
         {composerError}

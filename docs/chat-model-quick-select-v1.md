@@ -26,9 +26,21 @@ status: planned
 >   `settings.chat.provider` carry ids such as `openai-compatible-<uuid>` /
 >   `openai-compatible-legacy`, not the static `openaiCompatible`.
 >
-> **Soft dependency on** [`docs/chat-reasoning-control-v1.md`](chat-reasoning-control-v1.md):
-> if the reasoning selector already exists, mount the model switcher to its
-> left; if not, mount the switcher alone — nothing here blocks on it.
+> **Scope split — read this first.** This plan owns the **logic**: model
+> routing, provider-independent fallback, per-tab model state, and the Chat
+> settings that back the quick list. It does **not** own composer UI.
+> [`docs/chat-composer-ui-v1.md`](chat-composer-ui-v1.md) owns
+> `ChatModelSelect.svelte` (the `Opus 4.8` trigger) and where it mounts,
+> alongside the context bar and token donut. The dependency runs one way: that
+> plan's Phase 5 consumes `setChatModel` / `settings.chat.quickModels` from
+> **Phase 3 below**, so land this plan first.
+>
+> **`chat-reasoning-control-v1.md` has landed.**
+> [`ChatReasoningSelect.svelte`](../src/components/chat/ChatReasoningSelect.svelte)
+> exists and is mounted in the composer, `src/lib/api/reasoningConfig.js` exports
+> `getChatReasoningOptions` / `effectiveReasoningLevel`, and
+> `chatState.reasoningLevel` is a live per-tab session key. Import the reasoning
+> labels from `reasoningConfig.js` — do not redefine them.
 
 ## Context
 
@@ -60,7 +72,10 @@ pipeline already honors a per-conversation model. What is missing is the
   Basic-vs-Advanced collapse handling.
 - The composer
   ([`ChatComposer.svelte`](../src/components/chat/ChatComposer.svelte)) has no
-  model display; the only bottom-right control is the round Send/Stop button.
+  model display. Its bottom-right overlay currently holds `ChatReasoningSelect`
+  and the round Send/Stop button; that layout is being reworked into an action
+  row by [`chat-composer-ui-v1.md`](chat-composer-ui-v1.md) — another reason
+  this plan stops at the store API.
 - Per-tab chat state lives in
   [`chatStore.svelte.js`](../src/stores/chatStore.svelte.js) —
   `createChatSessionState()` + `SESSION_KEYS` + `stashViewInto`/
@@ -71,14 +86,17 @@ pipeline already honors a per-conversation model. What is missing is the
   exists yet.
 
 This plan delivers: (1) provider-independent conversation-model resolution,
-(2) a compact model switcher in the composer fed by a user-curated **quick
-models** list, (3) the quick-models manager and a **default reasoning level**
-control in Chat settings.
+(2) the per-tab model state and `setChatModel` API a switcher drives,
+(3) the quick-models manager and a **default reasoning level** control in Chat
+settings. The switcher **component** is
+[`chat-composer-ui-v1.md`](chat-composer-ui-v1.md) Phase 5.
 
 ### Goal & scope decision (confirmed with user)
 
-- Quick model switcher lives **in the composer**, beside the Send button (left
-  of the reasoning selector when that exists).
+- Quick model switcher lives **in the composer**, in the action row below the
+  input (`Model | Reasoning | Donut`) — built in
+  [`chat-composer-ui-v1.md`](chat-composer-ui-v1.md), driven by this plan's
+  `setChatModel`.
 - Switching applies to the **active conversation immediately** (persisted via
   `updateConversationMetadata`) and to future messages; before a conversation
   exists it is a per-tab pending override.
@@ -102,11 +120,13 @@ and lock the existing behavior so later phases and future refactors cannot
 regress it.
 
 1. Confirm in [`aiSdkAdapter.js`](../src/lib/api/aiSdkAdapter.js) that
-   `getAISDKModel` / `getDisplayModelName` derive the model from
-   `settings.selected*Model` (or, for profiles, `selectedOpenAICompatibleModel`),
-   which `resolveAdapterCall` sets from the passed `modelId`. No code change is
-   expected here; if a change *is* needed, keep it to reading the overlaid
-   settings — never bypass the overlay.
+   `getAISDKModel` derives the model from `settings.selected*Model` (or, for
+   profiles, `selectedOpenAICompatibleModel`), which `resolveAdapterCall` sets
+   from the passed `modelId`. No code change is expected here; if a change *is*
+   needed, keep it to reading the overlaid settings — never bypass the overlay.
+   Note `getDisplayModelName` (line ~949) is **module-private and not exported**
+   — do not plan to import or assert on it directly; observe the model through
+   the constructed `streamText`/`generateText` call instead.
 2. Confirm Gemini auto-fallback seeds its chain from the overlaid
    `selectedGeminiModel` (already the case). No change expected.
 
@@ -115,8 +135,7 @@ regress it.
 the contract:
 
 - an explicit model, supplied via `resolveAdapterCall(providerId, modelId,
-  settings)`, reaches `streamText`/`generateText` as the constructed model and
-  is reflected by `getDisplayModelName`;
+  settings)`, reaches `streamText`/`generateText` as the constructed model;
 - for a dynamic `openai-compatible-*` profile id, `resolveAdapterCall` collapses
   to the `openaiCompatible` adapter and the overlay carries the profile's key,
   base URL, and `selectedOpenAICompatibleModel === modelId`;
@@ -199,7 +218,7 @@ npx vitest run tests/chat/aiSdkAdapter.test.js
 npx vitest run tests/chat/chatService.test.js
 ```
 
-## Phase 3 — Per-tab switcher UI + Chat settings (quick models, default reasoning)
+## Phase 3 — Per-tab model state + Chat settings (quick models, default reasoning)
 
 1. **chatStore** ([`chatStore.svelte.js`](../src/stores/chatStore.svelte.js)):
    - Add `modelOverride: null` (`{ provider, model } | null`) to
@@ -215,31 +234,13 @@ npx vitest run tests/chat/chatService.test.js
    - Expose a `$derived`-style getter for the current effective
      `{ provider, model }` (conversation → `modelOverride` → `settings.chat`) for
      the switcher trigger label.
-2. **`src/components/chat/ChatModelSelect.svelte`** (new):
-   - bits-ui `DropdownMenu` following the pattern in
-     [`ConversationMenu.svelte`](../src/components/chat/ConversationMenu.svelte);
-     compact trigger like the deepdive
-     [`ChatProviderSelect.svelte`](../src/components/tools/deepdive/ChatProviderSelect.svelte)
-     (provider icon + truncated model name; accessible label "Chat model:
-     {model}").
-   - Resolve every entry's label/icon through
-     `resolveProviderEntry(provider, settings)` so dynamic profiles show their
-     profile name; if an entry's provider is unconfigured or its profile was
-     deleted (`resolveProviderEntry` → `null`), render it in a warning state
-     rather than crashing.
-   - Menu items, in order: **Default** (`settings.chat.provider/model`, labeled
-     as default) → each `settings.chat.quickModels` entry → the conversation's
-     current pair if it is in neither group → separator → **Manage models…**
-     which opens Settings > Chat (reuse the existing open-settings pathway used
-     elsewhere in the side panel).
-   - Selecting an item calls `setChatModel`. Checkmark on the effective pair.
-     Disabled while `chatState.isSending`.
-3. **Mount in the composer**
-   ([`ChatComposer.svelte`](../src/components/chat/ChatComposer.svelte)): place
-   `ChatModelSelect` in the bottom action area beside the Send/Stop button —
-   left of `ChatReasoningSelect` if the reasoning-control plan has landed,
-   otherwise alone.
-4. **Chat settings** (`src/components/settings/ChatSettings.svelte`):
+2. **The switcher component and its mount point are NOT in this plan.**
+   `ChatModelSelect.svelte` and the composer action row that hosts it are
+   [`docs/chat-composer-ui-v1.md`](chat-composer-ui-v1.md) Phase 5. Stop at the
+   store API here: this plan is done when `setChatModel` and the effective-pair
+   getter are exported, tested, and callable. Do not build UI against them.
+3. **Chat settings** (`src/components/settings/ChatSettings.svelte`) — this
+   *is* in scope; it is the settings page, not the composer:
    - The "Chat model" `FeatureModelPicker` (from the restructure plan) gains an
      **"Add to quick models"** button: appends the picker's current
      `{ provider, model }` to `settings.chat.quickModels` (dedup by
@@ -254,11 +255,12 @@ npx vitest run tests/chat/chatService.test.js
      + ✕), resolving labels via `resolveProviderEntry`.
    - **Default reasoning** row: ButtonSet with Auto/Low/Medium/High writing
      `chat.defaultReasoningLevel` (`'provider-default' | 'low' | 'medium' |
-     'high'`; import labels from `src/lib/chat/reasoningConfig.js` if the
-     reasoning-control plan has landed, otherwise define the four labels locally
-     and leave a note to consolidate). Per the amended
-     `chat-reasoning-control-v1.md`, this value seeds each tab's `reasoningLevel`;
-     until that plan lands the control is stored but inert — that is expected.
+     'high'`). Import the labels from **`src/lib/api/reasoningConfig.js`** (note
+     the path — it is `lib/api/`, not `lib/chat/`), which already exports
+     `getChatReasoningOptions` and `effectiveReasoningLevel`. Reasoning-control
+     has landed, so this value is **live**, not inert: `effectiveReasoningLevel`
+     already resolves the `chatState.reasoningLevel: null` sentinel against it,
+     so writing this setting immediately changes what new tabs default to.
    - i18n: add all new strings to the 8 locale files in `src/lib/locales/`.
 
 **Verify:** extend
@@ -268,14 +270,14 @@ npx vitest run tests/chat/chatService.test.js
 - `setChatModel` with an active conversation persists via
   `updateConversationMetadata` and updates the view;
 - `setChatModel` before a conversation stores the override, and starting a
-  conversation consumes it.
+  conversation consumes it;
+- `setChatModel` is a no-op while `isSending`.
 
-Add a component test
-`tests/chat/composer/ChatModelSelect.test.svelte.js` (menu contents order,
-selection callback, dynamic-profile label, disabled-while-sending).
+The `ChatModelSelect` component test lives with the component, in
+[`chat-composer-ui-v1.md`](chat-composer-ui-v1.md) Phase 5.
 
 ```bash
-npx vitest run tests/chat/chatStoreTabs.test.js tests/chat/composer/ChatModelSelect.test.svelte.js
+npx vitest run tests/chat/chatStoreTabs.test.js
 npm check
 ```
 
@@ -295,31 +297,37 @@ npm run build:firefox
 git diff --check
 ```
 
-2. Manual smoke on `.output/chrome`:
-   - Mid-conversation switch: start a chat on the default model, switch to a
-     quick model, send again — **inspect the network request body and confirm
-     the model actually changed** (core acceptance test).
+2. Manual smoke on `.output/chrome`. Until
+   [`chat-composer-ui-v1.md`](chat-composer-ui-v1.md) Phase 5 lands there is no
+   switcher to click — drive `setChatModel` from the side panel devtools console
+   for the switch-flavored checks below.
+   - Mid-conversation switch: start a chat on the default model, `setChatModel`
+     to a quick model, send again — **inspect the network request body and
+     confirm the model actually changed** (core acceptance test).
    - Old conversation (created before this feature, `modelId: null` but a stored
      `providerId`): opens and generates on its **stored provider** with that
      provider's default model — it does not jump to the current `settings.chat`
      provider. Verify specifically with a `cerebras` conversation.
    - Switch to a quick model backed by a dynamic OpenAI-compatible profile: the
-     request uses that profile's key/base URL/model; the switcher shows the
-     profile name; deleting that profile downgrades the entry to the warning
-     state without crashing.
+     request uses that profile's key/base URL/model. Deleting that profile leaves
+     the stored entry resolving to `null` — the settings chip must degrade to a
+     warning state, not crash.
    - Retry/Regenerate/Continue after a model switch use the conversation's
      current model.
    - Summary generation unchanged (no per-conversation model is sent on the
      Summary path).
-   - Quick models list: add to 6, 7th add disabled; remove chips; switcher menu
-     reflects the list immediately.
-   - Default reasoning ButtonSet persists across reload (and, if reasoning-control
-     has landed, seeds new tabs' selectors).
+   - Quick models list: add to 6, 7th add disabled; remove chips; the list in
+     `settings.chat.quickModels` reflects it immediately.
+   - Default reasoning ButtonSet persists across reload and seeds new tabs'
+     reasoning selectors (reasoning-control has landed, so this is live).
 
 ## Out of scope (V1)
 
-- Reasoning-effort request mapping and the composer reasoning selector — see
-  `chat-reasoning-control-v1.md`.
+- **`ChatModelSelect.svelte` and the composer action row that hosts it** — see
+  [`chat-composer-ui-v1.md`](chat-composer-ui-v1.md) Phase 5. Also everything
+  else in the composer: the tab context bar and the token donut.
+- Reasoning-effort request mapping and the composer reasoning selector — already
+  landed via `chat-reasoning-control-v1.md`.
 - Any adapter `modelId`/`featureProviderId` request-contract change — routing
   stays on the existing `resolveAdapterCall` settings overlay.
 - Per-message model display in the transcript beyond what already exists.
@@ -338,11 +346,11 @@ git diff --check
 - [ ] A dynamic OpenAI-compatible profile conversation with `modelId: null`
       resolves to the profile's `defaultModel`.
 - [ ] Per-tab `modelOverride` is isolated between browser tabs.
-- [ ] Dynamic profiles show their profile name in the switcher and settings
-      chips; a deleted profile degrades to a warning state, not a crash.
-- [ ] Quick models: dedup, cap 6, chips removable, switcher menu in sync.
-- [ ] `chat.defaultReasoningLevel` persists; seeds tab selectors once
-      reasoning-control lands.
+- [ ] Dynamic profiles show their profile name in the settings chips; a deleted
+      profile degrades to a warning state, not a crash.
+- [ ] Quick models: dedup, cap 6, chips removable.
+- [ ] `chat.defaultReasoningLevel` persists and seeds new tabs' reasoning
+      selectors.
 - [ ] Summary generation is byte-for-byte unchanged.
 - [ ] `npm test`, `npm check`, both builds, `git diff --check` all pass.
 - [ ] All 8 locales updated; no raw i18n keys.
@@ -354,11 +362,11 @@ git diff --check
 - `src/services/chat/chatService.js` — new `resolveConversationModel` with
   independent, profile-aware provider/model fallback; conversation-start
   override; existing deleted-profile guard and `resolveAdapterCall` reused.
-- `src/stores/chatStore.svelte.js` — per-tab `modelOverride`, `setChatModel`.
-- `src/components/chat/ChatModelSelect.svelte` — **new** compact switcher.
-- `src/components/chat/ChatComposer.svelte` — mounts the switcher beside Send.
+- `src/stores/chatStore.svelte.js` — per-tab `modelOverride`, `setChatModel`,
+  effective-pair getter. This is the seam
+  [`chat-composer-ui-v1.md`](chat-composer-ui-v1.md) Phase 5 builds against.
 - `src/components/settings/ChatSettings.svelte` — quick-models manager +
-  default-reasoning ButtonSet (writes via `updateFeatureSettings('chat', …)`).
+  default-reasoning ButtonSet (writes via `updateFeatureSettings('chat', …)`,
+  labels from `src/lib/api/reasoningConfig.js`).
 - `tests/chat/aiSdkAdapter.test.js`, `tests/chat/chatService.test.js`,
-  `tests/chat/chatStoreTabs.test.js`,
-  `tests/chat/composer/ChatModelSelect.test.svelte.js` — coverage.
+  `tests/chat/chatStoreTabs.test.js` — coverage.

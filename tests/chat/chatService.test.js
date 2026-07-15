@@ -161,6 +161,23 @@ describe('chat orchestration', () => {
     expect(probe.calls[1].input.conversationSourceRefs).toEqual(['source-1'])
   })
 
+  it('stores long source snapshots without creating a truncated condensed copy', async () => {
+    const repository = createRepository()
+    const content = `${'Complete source content. '.repeat(800)}THE FINAL SECTION`
+    const sourceService = createChatSourceService({
+      browserApi: { tabs: { query: async () => [{ id: 44, url: 'https://example.com/long', title: 'Long page' }] } },
+      getPageContentFn: async () => ({ type: 'webpage', content }),
+      repository,
+    })
+
+    const { source } = await sourceService.captureActiveSource('webpage')
+
+    expect(source.rawContent).toBe(content)
+    expect(source.rawContent).toContain('THE FINAL SECTION')
+    expect(source.condensedContent).toBeNull()
+    expect(source.condensationVersion).toBe(0)
+  })
+
   it('persists non-empty partial output as aborted and clears the terminal lifecycle', async () => {
     const repository = createRepository()
     const activeSource = source()
@@ -505,5 +522,328 @@ describe('reasoning level snapshot', () => {
     // Should contain both the pipeline warning and the reasoning warning
     expect(collectedWarnings).toContain('Pipeline warning from context assembly')
     expect(collectedWarnings).toContain('High reasoning is not supported by this model; the provider used Medium.')
+  })
+})
+
+describe('enriched onDiagnostics payload (Phase 3)', () => {
+  it('onDiagnostics fires with input/output/cached/providerId/modelId/sourceTokens from mocked usage', async () => {
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const collectedDiagnostics = []
+    const service = createChatService({
+      repository,
+      sourceService: {
+        getActiveTab: async () => ({ id: 1, title: 'Example' }),
+        getCachedActiveSource: async () => ({ source: activeSource }),
+      },
+      buildPipeline: async (input) => ({
+        system: 'System',
+        messages: [{ role: 'user', content: input.currentUserMessage.content }],
+        warnings: [],
+        inputBudgetTokens: 120_000,
+        capabilities: { contextWindowTokens: 128_000, source: 'known-model' },
+        sourceTokens: { 'source-1': 42 },
+      }),
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield {
+          chunk: '',
+          fullText: 'Answer',
+          isComplete: true,
+          usage: {
+            promptTokens: 1500,
+            completionTokens: 200,
+            totalTokens: 1700,
+            inputTokens: 1500,
+            outputTokens: 200,
+            cachedInputTokens: 160000,
+          },
+        }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'Test diagnostics',
+      settings,
+      onDiagnostics: (d) => collectedDiagnostics.push(d),
+    })
+
+    expect(collectedDiagnostics).toHaveLength(1)
+    const diag = collectedDiagnostics[0]
+
+    // Legacy keys unchanged
+    expect(diag.used).toBe(1500)
+    expect(diag.inputBudget).toBe(120_000)
+    expect(diag.window).toBe(128_000)
+    expect(diag.source).toBe('known-model')
+
+    // New keys
+    expect(diag.input).toBe(1500)
+    expect(diag.output).toBe(200)
+    expect(diag.cached).toBe(160000)
+    expect(diag.providerId).toBe('gemini')
+    expect(diag.modelId).toBe('gemini-test')
+    expect(diag.sourceTokens).toEqual({ 'source-1': 42 })
+  })
+
+  it('cached is null when the provider reports no cache figure', async () => {
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const collectedDiagnostics = []
+    const service = createChatService({
+      repository,
+      sourceService: {
+        getActiveTab: async () => ({ id: 1, title: 'Example' }),
+        getCachedActiveSource: async () => ({ source: activeSource }),
+      },
+      buildPipeline: async (input) => ({
+        system: 'System',
+        messages: [{ role: 'user', content: input.currentUserMessage.content }],
+        warnings: [],
+        inputBudgetTokens: 120_000,
+        capabilities: { contextWindowTokens: 128_000, source: 'known-model' },
+        sourceTokens: {},
+      }),
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield {
+          chunk: '',
+          fullText: 'Answer',
+          isComplete: true,
+          usage: {
+            promptTokens: 500,
+            completionTokens: 100,
+            totalTokens: 600,
+            // no cachedInputTokens
+          },
+        }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'No cache',
+      settings,
+      onDiagnostics: (d) => collectedDiagnostics.push(d),
+    })
+
+    expect(collectedDiagnostics).toHaveLength(1)
+    expect(collectedDiagnostics[0].cached).toBeNull()
+    // Legacy keys still present
+    expect(collectedDiagnostics[0].used).toBe(500)
+    expect(collectedDiagnostics[0].inputBudget).toBe(120_000)
+  })
+})
+
+describe('conversation-model resolution (Phase 2)', () => {
+  function createModelRoutingService() {
+    const repository = createRepository()
+    const streamRequestCalls = []
+    const service = createChatService({
+      repository,
+      sourceService: { getActiveTab: async () => ({ id: 1, title: 'Example' }) },
+      buildPipeline: createPipelineProbe().build,
+      streamRequest: async function* (req) {
+        streamRequestCalls.push(req)
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield { chunk: '', fullText: 'Answer', isComplete: true }
+      },
+    })
+    return { repository, service, streamRequestCalls }
+  }
+
+  it('conversation.modelId wins over settings.chat.model and reaches resolveAdapterCall', async () => {
+    const { repository, service, streamRequestCalls } = createModelRoutingService()
+
+    const chatSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      geminiApiKey: 'key',
+      chat: { provider: 'gemini', model: 'gemini-3-flash-preview' },
+    }
+
+    const { conversation } = await service.startConversationForActiveTab({ settings: chatSettings })
+
+    // Manually stamp a different model on the conversation
+    await repository.updateConversationMetadata(conversation.id, {
+      providerId: 'gemini',
+      modelId: 'gemini-2.5-pro-preview',
+    })
+    const updatedConversation = await repository.getConversation(conversation.id)
+
+    await service.send({
+      conversation: updatedConversation,
+      content: 'Hello',
+      settings: chatSettings,
+      sourceRequired: false,
+    })
+
+    // The stream request must carry the conversation's explicit model, NOT settings.chat.model
+    expect(streamRequestCalls[0].settings.selectedGeminiModel).toBe('gemini-2.5-pro-preview')
+  })
+
+  it('cerebras conversation with modelId:null stays on cerebras with its own default model', async () => {
+    const { repository, service, streamRequestCalls } = createModelRoutingService()
+
+    const chatSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      geminiApiKey: 'key',
+      cerebrasApiKey: 'cerebras-key',
+      selectedCerebrasModel: 'llama-3.3-70b',
+      chat: { provider: 'gemini', model: 'gemini-3-flash-preview' },
+    }
+
+    // Create a conversation with cerebras provider but no stored model
+    const { conversation } = await service.startConversationForActiveTab({ settings: chatSettings })
+    await repository.updateConversationMetadata(conversation.id, {
+      providerId: 'cerebras',
+      modelId: null,
+    })
+    const cerebrasConversation = await repository.getConversation(conversation.id)
+
+    await service.send({
+      conversation: cerebrasConversation,
+      content: 'Hello from cerebras',
+      settings: chatSettings,
+      sourceRequired: false,
+    })
+
+    // Must resolve to cerebras adapter — NOT gemini
+    expect(streamRequestCalls[0].providerId).toBe('cerebras')
+    // Must use cerebras' own legacy model, not settings.chat.model
+    expect(streamRequestCalls[0].settings.selectedCerebrasModel).toBe('llama-3.3-70b')
+  })
+
+  it('dynamic profile conversation with modelId:null resolves to the profile defaultModel', async () => {
+    const { repository, service, streamRequestCalls } = createModelRoutingService()
+
+    const profileSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      geminiApiKey: 'key',
+      chat: { provider: 'gemini', model: 'gemini-3-flash-preview' },
+      openaiCompatibleProfiles: [
+        {
+          id: 'openai-compatible-profile-abc',
+          name: 'My Profile',
+          baseUrl: 'https://api.custom.com/v1',
+          apiKey: 'custom-key',
+          defaultModel: 'custom-default-model',
+        },
+      ],
+    }
+
+    const { conversation } = await service.startConversationForActiveTab({ settings: profileSettings })
+    // Stamp the profile provider with no explicit model
+    await repository.updateConversationMetadata(conversation.id, {
+      providerId: 'openai-compatible-profile-abc',
+      modelId: null,
+    })
+    const profileConversation = await repository.getConversation(conversation.id)
+
+    await service.send({
+      conversation: profileConversation,
+      content: 'Hello from profile',
+      settings: profileSettings,
+      sourceRequired: false,
+    })
+
+    // Must route to the openaiCompatible adapter
+    expect(streamRequestCalls[0].providerId).toBe('openaiCompatible')
+    // Must use the profile's defaultModel, not settings.chat.model
+    expect(streamRequestCalls[0].settings.selectedOpenAICompatibleModel).toBe('custom-default-model')
+    expect(streamRequestCalls[0].settings.openaiCompatibleApiKey).toBe('custom-key')
+    expect(streamRequestCalls[0].settings.openaiCompatibleBaseUrl).toBe('https://api.custom.com/v1')
+  })
+
+  it('conversation with no stored provider falls back to settings.chat provider/model', async () => {
+    const { repository, service, streamRequestCalls } = createModelRoutingService()
+
+    const chatSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      geminiApiKey: 'key',
+      chat: { provider: 'gemini', model: 'gemini-2.5-flash-preview' },
+    }
+
+    const { conversation } = await service.startConversationForActiveTab({ settings: chatSettings })
+    // Clear the stored provider and model (simulates a legacy conversation)
+    await repository.updateConversationMetadata(conversation.id, {
+      providerId: null,
+      modelId: null,
+    })
+    const legacyConversation = await repository.getConversation(conversation.id)
+
+    await service.send({
+      conversation: legacyConversation,
+      content: 'Hello legacy',
+      settings: chatSettings,
+      sourceRequired: false,
+    })
+
+    // Must use settings.chat's provider and model
+    expect(streamRequestCalls[0].providerId).toBe('gemini')
+    expect(streamRequestCalls[0].settings.selectedGeminiModel).toBe('gemini-2.5-flash-preview')
+  })
+
+  it('switching a conversation model mid-conversation affects the next generation', async () => {
+    const { repository, service, streamRequestCalls } = createModelRoutingService()
+
+    const chatSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      geminiApiKey: 'key',
+      chat: { provider: 'gemini', model: 'gemini-3-flash-preview' },
+    }
+
+    const { conversation } = await service.startConversationForActiveTab({ settings: chatSettings })
+
+    // First send — uses the default model
+    await service.send({
+      conversation,
+      content: 'First message',
+      settings: chatSettings,
+      sourceRequired: false,
+    })
+    expect(streamRequestCalls[0].settings.selectedGeminiModel).toBe('gemini-3-flash-preview')
+
+    // Switch the model mid-conversation
+    await repository.updateConversationMetadata(conversation.id, {
+      modelId: 'gemini-2.5-pro-preview',
+    })
+    const switchedConversation = await repository.getConversation(conversation.id)
+
+    // Second send — must use the switched model
+    await service.send({
+      conversation: switchedConversation,
+      content: 'Second message',
+      settings: chatSettings,
+      sourceRequired: false,
+    })
+    expect(streamRequestCalls[1].settings.selectedGeminiModel).toBe('gemini-2.5-pro-preview')
+  })
+
+  it('startConversationForActiveTab honors modelOverride over settings.chat', async () => {
+    const { service } = createModelRoutingService()
+
+    const chatSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      chat: { provider: 'gemini', model: 'gemini-3-flash-preview' },
+    }
+
+    const { conversation } = await service.startConversationForActiveTab({
+      settings: chatSettings,
+      modelOverride: { provider: 'cerebras', model: 'llama-3.3-70b' },
+    })
+
+    expect(conversation.providerId).toBe('cerebras')
+    expect(conversation.modelId).toBe('llama-3.3-70b')
   })
 })

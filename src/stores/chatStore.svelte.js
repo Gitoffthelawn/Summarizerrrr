@@ -8,6 +8,10 @@ import { handleError } from '@/lib/error/simpleErrorHandler.js'
 import { skillService } from '@/lib/chat/skills/skillService.js'
 import { invalidateConversationDeepDive } from '@/stores/deepDiveStore.svelte.js'
 import { effectiveReasoningLevel } from '@/lib/api/reasoningConfig.js'
+import {
+  resolveFeatureModel,
+  resolveConversationModel,
+} from '@/lib/providers/featureModelResolver.js'
 
 /** Number of messages to show in the visible window — pagination decoupled from context. */
 const VISIBLE_MESSAGE_WINDOW = 25
@@ -46,6 +50,10 @@ function createChatSessionState() {
     contextUsage: null,
     abortController: null,
     currentUrl: null,
+    /** Real browser tab title from `browser.tabs` metadata — refreshes on every sync. */
+    currentTitle: null,
+    /** Real browser tab favicon URL from `browser.tabs` metadata — refreshes on every sync. */
+    currentFavIconUrl: null,
     /** True when there are earlier messages not yet loaded into the visible window. */
     hasEarlierMessages: false,
     /**
@@ -54,6 +62,12 @@ function createChatSessionState() {
      * `effectiveReasoningLevel()`, never at session-creation time.
      */
     reasoningLevel: null,
+    /**
+     * Per-tab model override. `null` means "use the conversation's model or
+     * the global Chat default". Set by `setChatModel` before a conversation
+     * exists; consumed and cleared by `startConversationForActiveTab`.
+     */
+    modelOverride: null,
   }
 }
 
@@ -224,7 +238,11 @@ async function reloadActivePath(tabId, result) {
 }
 
 export async function startConversationForActiveTab() {
-  const { conversation, tab } = await chatService.startConversationForActiveTab({ settings })
+  const modelOverride = chatState.modelOverride
+  const { conversation, tab } = await chatService.startConversationForActiveTab({
+    settings,
+    modelOverride: modelOverride || undefined,
+  })
   if (activeTabId == null) activeTabId = tab.id
   chatTabsState.activeBrowserTabId = tab.id
   writeSession(tab.id, {
@@ -233,8 +251,62 @@ export async function startConversationForActiveTab() {
     messages: [],
     error: null,
     contextWarnings: [],
+    modelOverride: null, // consumed
   })
   return conversation
+}
+
+/**
+ * Switch the model for the active tab's chat. If a conversation exists, the
+ * change is persisted immediately via `updateConversationMetadata`. If no
+ * conversation has been started yet, it is stored as `modelOverride` and
+ * consumed when the first message is sent. No-op while a generation is
+ * in-flight.
+ *
+ * @param {{ provider: string, model: string }} selection
+ */
+export async function setChatModel({ provider, model }) {
+  if (chatState.isSending) return
+
+  if (chatState.conversation) {
+    const updated = await conversationRepository.updateConversationMetadata(
+      chatState.conversation.id,
+      { providerId: provider, modelId: model }
+    )
+    writeSession(activeTabId, {
+      conversation: updated,
+    })
+  } else {
+    writeSession(activeTabId, {
+      modelOverride: { provider, model },
+    })
+  }
+}
+
+/**
+ * Reactive getter for the effective model that should display on the switcher
+ * trigger. Resolution order: conversation → modelOverride → settings.chat.
+ *
+ * A conversation delegates to `resolveConversationModel` — the same resolver
+ * the request path uses — so the trigger can never label a model different
+ * from the one a send would actually route to. That matters for conversations
+ * stamped with a provider but no model, which resolve to their own provider's
+ * default rather than settings.chat's.
+ * @returns {{ provider: string, model: string }}
+ */
+export function getEffectiveChatModel() {
+  if (chatState.conversation) {
+    const { providerId, modelId } = resolveConversationModel(chatState.conversation, settings)
+    return { provider: providerId, model: modelId }
+  }
+  if (chatState.modelOverride) {
+    return chatState.modelOverride
+  }
+  const fallback = resolveFeatureModel('chat', settings)
+  return {
+    provider: fallback.providerId,
+    model: fallback.modelId,
+  }
 }
 
 export async function openConversation(id) {
@@ -314,13 +386,19 @@ export function handleChatTabNavigation(tabId, nextUrl) {
 /**
  * Swap the chat view to a tab. Never touches other tabs' generations. A tab
  * with a persisted conversation but no loaded messages is hydrated lazily.
+ *
+ * `title` and `favIconUrl` refresh on every sync (a tab's title changes as it
+ * loads, and a stale title is a visible bug). `url` remains sticky first-write.
  */
-export async function syncChatForActiveTab(tabId, { url = null } = {}) {
+export async function syncChatForActiveTab(tabId, { url = null, title = undefined, favIconUrl = undefined } = {}) {
   if (tabId == null) return chatState.conversation
   chatTabsState.activeBrowserTabId = tabId
 
   if (tabId === activeTabId) {
     if (url) handleChatTabNavigation(tabId, url)
+    // Always refresh title/favicon even when staying on the same tab
+    if (title !== undefined) chatState.currentTitle = title
+    if (favIconUrl !== undefined) chatState.currentFavIconUrl = favIconUrl
     return chatState.conversation
   }
 
@@ -329,6 +407,9 @@ export async function syncChatForActiveTab(tabId, { url = null } = {}) {
 
   const session = getSession(tabId)
   if (url && !session.currentUrl) session.currentUrl = url
+  // Title and favicon always refresh — unlike URL they are not sticky
+  if (title !== undefined) session.currentTitle = title
+  if (favIconUrl !== undefined) session.currentFavIconUrl = favIconUrl
   projectSessionToView(session)
   markChatTabsChanged()
 
@@ -357,6 +438,17 @@ export async function syncChatForActiveTab(tabId, { url = null } = {}) {
     }
   }
   return session.conversation
+}
+
+/**
+ * Update a tab's title/favicon in its session snapshot. Used by the
+ * `onUpdated` browser event to keep inactive tabs' metadata fresh
+ * without triggering a full view swap.
+ */
+export function updateChatTabMetadata(tabId, { title, favIconUrl } = {}) {
+  if (tabId == null) return
+  if (title !== undefined) writeSession(tabId, { currentTitle: title })
+  if (favIconUrl !== undefined) writeSession(tabId, { currentFavIconUrl: favIconUrl })
 }
 
 export async function listRecentConversations({ limit = 10 } = {}) {

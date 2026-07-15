@@ -63,22 +63,22 @@
     font-size: 0.75rem;
     line-height: 1;
     font-weight: 500;
-    color: var(--text-secondary);
-    background: transparent;
-    border: 1px solid var(--border);
+    color: var(--color-text-secondary);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
     cursor: pointer;
     transition: all 150ms ease;
     white-space: nowrap;
   }
 
   .reasoning-trigger:hover:not(.reasoning-trigger-disabled) {
-    color: var(--text-primary);
-    border-color: var(--text-tertiary);
-    background: var(--surface-2);
+    color: var(--color-text-primary);
+    border-color: var(--color-muted);
+    background: color-mix(in srgb, var(--color-surface-2) 92%, var(--color-blackwhite) 8%);
   }
 
   .reasoning-trigger:focus-visible {
-    outline: 2px solid var(--primary);
+    outline: 2px solid var(--color-primary);
     outline-offset: 2px;
   }
 
@@ -93,8 +93,8 @@
   }
 
   :global(.reasoning-menu) {
-    background: var(--surface-1);
-    border: 1px solid var(--border);
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
     z-index: 50;
@@ -104,7 +104,7 @@
   }
 
   :global(.dark .reasoning-menu) {
-    background: var(--surface-2);
+    background: var(--color-surface-2);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   }
 
@@ -120,31 +120,31 @@
 
   :global(.reasoning-option:hover),
   :global(.reasoning-option[data-highlighted]) {
-    background: var(--surface-2);
+    background: var(--color-surface-2);
   }
 
   :global(.dark .reasoning-option:hover),
   :global(.dark .reasoning-option[data-highlighted]) {
-    background: var(--surface-3);
+    background: var(--color-surface-2);
   }
 
   :global(.reasoning-option-active) {
-    background: var(--primary-subtle, var(--surface-2));
+    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface-2));
   }
 
   :global(.reasoning-option-label) {
     font-size: 0.8125rem;
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--color-text-primary);
   }
 
   :global(.reasoning-option-desc) {
     font-size: 0.6875rem;
-    color: var(--text-tertiary);
+    color: var(--color-muted);
   }
 
   :global(.reasoning-option-active .reasoning-option-label) {
-    color: var(--primary);
+    color: var(--color-primary);
   }
 
   @keyframes reasoning-menu-in {

@@ -30,13 +30,13 @@ const DEFAULT_SETTINGS = {
   openaiCompatibleBaseUrl: '',
   selectedOpenAICompatibleModel: '',
   openrouterApiKey: '',
-  selectedOpenrouterModel: 'deepseek/deepseek-r1-0528:free',
+  selectedOpenrouterModel: 'openrouter/free',
   deepseekApiKey: '',
   deepseekBaseUrl: 'https://api.deepseek.com/',
-  selectedDeepseekModel: 'deepseek-chat',
+  selectedDeepseekModel: 'deepseek-v4-flash',
   chatgptApiKey: '',
   chatgptBaseUrl: 'https://api.openai.com/v1',
-  selectedChatgptModel: 'gpt-5-mini',
+  selectedChatgptModel: 'gpt-5.6-luna',
   ollamaEndpoint: 'http://127.0.0.1:11434/',
   selectedOllamaModel: 'deepseek-r1:8b',
   lmStudioEndpoint: 'http://localhost:1234/v1',
@@ -235,6 +235,58 @@ function migrateDeprecatedGeminiProModels(settings) {
     migrated = true
   }
 
+  return migrated
+}
+
+/**
+ * Replaces DeepSeek's retired compatibility aliases everywhere they can be
+ * persisted in settings. Both aliases previously routed to V4 Flash; thinking
+ * mode is controlled independently by the feature reasoning setting.
+ *
+ * @param {Object} settings - Settings object to migrate
+ * @returns {boolean} - True if any migration was performed
+ */
+function migrateDeprecatedDeepSeekModels(settings) {
+  const deprecatedModels = new Set(['deepseek-chat', 'deepseek-reasoner'])
+  const newModel = 'deepseek-v4-flash'
+  let migrated = false
+
+  if (deprecatedModels.has(settings.selectedDeepseekModel)) {
+    settings.selectedDeepseekModel = newModel
+    migrated = true
+  }
+
+  for (const feature of [settings.summarize, settings.chat]) {
+    if (feature?.provider === 'deepseek' && deprecatedModels.has(feature.model)) {
+      feature.model = newModel
+      migrated = true
+    }
+  }
+
+  if (
+    settings.tools?.deepDive?.customProvider === 'deepseek' &&
+    deprecatedModels.has(settings.tools.deepDive.customModel)
+  ) {
+    settings.tools.deepDive.customModel = newModel
+    migrated = true
+  }
+
+  if (Array.isArray(settings.chat?.quickModels)) {
+    settings.chat.quickModels = settings.chat.quickModels.map((quickModel) => {
+      if (
+        quickModel?.provider === 'deepseek' &&
+        deprecatedModels.has(quickModel.model)
+      ) {
+        migrated = true
+        return { ...quickModel, model: newModel }
+      }
+      return quickModel
+    })
+  }
+
+  if (migrated) {
+    console.log(`[settingsStore] Migration: DeepSeek legacy aliases -> ${newModel}`)
+  }
   return migrated
 }
 
@@ -470,6 +522,10 @@ export function normalizeStoredSettings(rawSettings) {
       cleanSettings.addedProviders = cleanSettings.addedProviders.filter(id => id !== 'openaiCompatible')
     }
   }
+
+  // 8. DeepSeek V4 renamed the public API models and is retiring the old
+  // deepseek-chat/deepseek-reasoner compatibility aliases.
+  migrateDeprecatedDeepSeekModels(cleanSettings)
 
   return cleanSettings
 }

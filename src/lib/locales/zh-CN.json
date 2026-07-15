@@ -321,6 +321,7 @@
       "provider_label": "模型商",
       "model_label": "模型名称",
       "model_placeholder": "搜索或选择模型",
+      "view_models": "查看模型",
       "unconfigured_suffix": "未配置",
       "unconfigured_warning": "该供应商未配置。",
       "configure_link": "配置 API Key",
@@ -348,6 +349,34 @@
       "default_model_label": "默认模型 ID",
       "default_model_required": "默认模型 ID 是必填项",
       "delete_profile": "删除配置"
+    },
+    "chat": {
+      "add_to_quick_models": "添加到快捷模型",
+      "quick_models": "快捷模型",
+      "quick_models_hint": "最多 {max} 个模型，用于在编辑器中快速切换。",
+      "remove_quick_model": "从快捷模型中移除",
+      "default_reasoning": "默认推理级别",
+      "default_reasoning_hint": "应用于新标签页的推理选择器。每个标签页的设置是独立的。"
+    }
+  },
+  "chat": {
+    "context_donut": {
+      "aria_usage": "Context window usage:",
+      "aria_unknown": "Context usage not known yet",
+      "model": "Model",
+      "unknown_provider": "Unknown provider",
+      "context_window": "Context window",
+      "input_budget": "Input budget",
+      "input": "Input",
+      "output": "Output",
+      "cache": "Cache",
+      "source": "Source"
+    },
+    "model_select": {
+      "aria_label": "对话模型: {model}",
+      "default_label": "默认 ({model})",
+      "manage_models": "管理模型...",
+      "warning_unresolvable": "未知配置"
     }
   },
   "tab_navigation": {

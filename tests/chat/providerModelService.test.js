@@ -17,6 +17,63 @@ function jsonResponse(body, { ok = true, status = 200 } = {}) {
 }
 
 describe('provider model discovery', () => {
+  it('uses static OpenAI models until an API key is available', async () => {
+    const fetchFn = vi.fn()
+
+    await expect(fetchProviderModels('chatgpt', '', fetchFn)).resolves.toEqual(
+      FALLBACK_PROVIDER_MODELS.chatgpt,
+    )
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('loads OpenAI models dynamically when an API key is available', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [
+          { id: 'gpt-5.6-terra' },
+          { id: 'gpt-5.6-luna' },
+          { id: 'gpt-5.6-terra' },
+        ],
+      }),
+    )
+
+    await expect(fetchProviderModels('chatgpt', 'secret', fetchFn)).resolves.toEqual([
+      'gpt-5.6-luna',
+      'gpt-5.6-terra',
+    ])
+    expect(fetchFn).toHaveBeenCalledWith(
+      'https://api.openai.com/v1/models',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer secret' },
+      }),
+    )
+  })
+
+  it('loads OpenRouter models dynamically without requiring an API key', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [
+          { id: 'openrouter/auto', context_length: 2_000_000 },
+          { id: 'openai/gpt-5.2', context_length: 400_000 },
+        ],
+      }),
+    )
+
+    await expect(fetchProviderModels('openrouter', '', fetchFn)).resolves.toEqual([
+      'openai/gpt-5.2',
+      'openrouter/auto',
+    ])
+    expect(fetchFn).toHaveBeenCalledWith(
+      'https://openrouter.ai/api/v1/models',
+      expect.objectContaining({ headers: undefined }),
+    )
+    expect(getProviderCapabilities('openrouter', 'openai/gpt-5.2')).toMatchObject({
+      contextWindowTokens: 400_000,
+      source: 'discovered',
+    })
+    clearDiscoveredCapabilities()
+  })
+
   it('uses static Groq models until an API key is available', async () => {
     const fetchFn = vi.fn()
 
@@ -55,16 +112,16 @@ describe('provider model discovery', () => {
     const fetchFn = vi.fn().mockResolvedValue(
       jsonResponse({
         data: [
-          { id: 'deepseek-reasoner' },
-          { id: 'deepseek-chat' },
-          { id: 'deepseek-chat' },
+          { id: 'deepseek-v4-pro' },
+          { id: 'deepseek-v4-flash' },
+          { id: 'deepseek-v4-flash' },
         ],
       }),
     )
 
     await expect(fetchProviderModels('deepseek', 'secret', fetchFn)).resolves.toEqual([
-      'deepseek-chat',
-      'deepseek-reasoner',
+      'deepseek-v4-flash',
+      'deepseek-v4-pro',
     ])
     expect(fetchFn).toHaveBeenCalledWith(
       'https://api.deepseek.com/models',

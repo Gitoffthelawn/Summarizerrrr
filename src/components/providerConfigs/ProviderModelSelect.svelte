@@ -73,9 +73,11 @@
         <a
           href={modelInfoHref}
           target="_blank"
-          class="text-xs text-primary outline-gray-500 hover:underline"
+          rel="noreferrer"
+          class="flex items-center gap-0.5 text-xs text-primary outline-gray-500 hover:underline"
         >
           {modelInfoText}
+          <Icon width={12} icon="heroicons:arrow-up-right-16-solid" />
         </a>
       {/if}
       <button

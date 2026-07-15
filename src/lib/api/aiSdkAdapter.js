@@ -112,7 +112,7 @@ export function getAISDKModel(providerId, settings) {
         apiKey: settings.chatgptApiKey,
         baseURL: settings.chatgptBaseUrl,
       })
-      return openai(settings.selectedChatgptModel || 'gpt-3.5-turbo')
+      return openai(settings.selectedChatgptModel || 'gpt-5.6-luna')
 
     case 'groq':
       const groq = createGroq({
@@ -124,7 +124,7 @@ export function getAISDKModel(providerId, settings) {
       const openrouter = createOpenRouter({
         apiKey: settings.openrouterApiKey,
       })
-      return openrouter(settings.selectedOpenrouterModel || 'openrouter/auto')
+      return openrouter(settings.selectedOpenrouterModel || 'openrouter/free')
 
     case 'deepseek':
       // Dedicated DeepSeek provider (not the generic openai-compatible one) so
@@ -135,7 +135,7 @@ export function getAISDKModel(providerId, settings) {
         apiKey: settings.deepseekApiKey,
         baseURL: settings.deepseekBaseUrl || undefined,
       })
-      return deepseek(settings.selectedDeepseekModel || 'deepseek-chat')
+      return deepseek(settings.selectedDeepseekModel || 'deepseek-v4-flash')
 
     case 'ollama':
       const ollama = createOllama({
@@ -952,13 +952,13 @@ function getDisplayModelName(providerId, settings) {
       return getCurrentGeminiModel(settings)
     case 'openai':
     case 'chatgpt':
-      return settings.selectedChatgptModel || 'gpt-3.5-turbo'
+      return settings.selectedChatgptModel || 'gpt-5.6-luna'
     case 'groq':
       return settings.selectedGroqModel || 'llama-3.3-70b-versatile'
     case 'openrouter':
-      return settings.selectedOpenrouterModel || 'openrouter/auto'
+      return settings.selectedOpenrouterModel || 'openrouter/free'
     case 'deepseek':
-      return settings.selectedDeepseekModel || 'deepseek-chat'
+      return settings.selectedDeepseekModel || 'deepseek-v4-flash'
     case 'ollama':
       return settings.selectedOllamaModel || 'llama2'
     case 'openaiCompatible':

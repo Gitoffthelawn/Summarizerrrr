@@ -79,7 +79,7 @@
  * @property {'webpage' | 'youtube' | 'course' | 'youtubeTranscript' | 'youtubeComments' | 'courseTranscript' | 'selectedText'} sourceType
  * @property {string} capturedAt
  * @property {string} contentHash
- * @property {string} condensedContent
+ * @property {string | null} condensedContent
  * @property {number} condensationVersion
  * @property {string} condensationLanguage
  * @property {number} originalLength

@@ -32,7 +32,7 @@
               startScale: 1,
               startBlur: 0,
             }}
-            class="z-50 overflow-hidden text-xs px-1 text-muted"
+            class="z-50 overflow-hidden text-[10px] px-2 py-1 bg-surface-2 border border-border rounded-md shadow-md text-text-primary"
           >
             {content}
           </div>

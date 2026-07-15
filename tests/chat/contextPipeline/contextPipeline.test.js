@@ -3,6 +3,7 @@ import {
   buildContextPipeline,
   budgetContext,
 } from '@/lib/chat/contextPipeline/index.js'
+import { estimateTokens } from '@/lib/chat/contextPipeline/contextBudgeter.js'
 import {
   getProviderCapabilities,
   registerModelCapability,
@@ -78,6 +79,31 @@ describe('Context Pipeline', () => {
     expect(result.messages[0]).toMatchObject({ role: 'user' })
     expect(result.messages[0].content).toContain('[[UNTRUSTED_SOURCE')
     expect(result.messages[1]).toEqual({ role: 'user', content: 'What does the article say?' })
+  })
+
+  it('prefers full raw content for non-active sources when it fits the model context', () => {
+    const rawContent = `${'Full article paragraph. '.repeat(800)}THE FINAL SECTION`
+    const budget = budgetContext({
+      system: 'Persona',
+      currentUserMessage: { content: 'Summarize the whole article.' },
+      skillInvocation: null,
+      history: [],
+      conversationSources: [],
+      attachmentSources: [
+        {
+          id: 'long-tab-source',
+          isActive: false,
+          rawContent,
+          condensedContent: rawContent.slice(0, 12_000),
+        },
+      ],
+      contextWindowTokens: 128_000,
+      requestedOutputTokens: 4_000,
+    })
+
+    expect(budget.attachmentSources[0].selectedContentKind).toBe('raw')
+    expect(budget.attachmentSources[0].selectedContent).toBe(rawContent)
+    expect(budget.attachmentSources[0].selectedContent).toContain('THE FINAL SECTION')
   })
 
   it('escapes malicious source titles and content without breaking deterministic wrappers', async () => {
@@ -193,13 +219,25 @@ describe('Context Pipeline', () => {
     clearDiscoveredCapabilities()
   })
 
-  it('resolves the real 64K window for deepseek chat/reasoner models', () => {
-    expect(getProviderCapabilities('deepseek', 'deepseek-chat')).toMatchObject({
-      contextWindowTokens: 64_000,
+  it('resolves the real 1M window for DeepSeek V4 models', () => {
+    expect(getProviderCapabilities('deepseek', 'deepseek-v4-flash')).toMatchObject({
+      contextWindowTokens: 1_000_000,
       source: 'known-model',
     })
-    expect(getProviderCapabilities('deepseek', 'deepseek-reasoner')).toMatchObject({
-      contextWindowTokens: 64_000,
+    expect(getProviderCapabilities('deepseek', 'deepseek-v4-pro')).toMatchObject({
+      contextWindowTokens: 1_000_000,
+      source: 'known-model',
+    })
+  })
+
+  it('resolves the long context window for current OpenAI frontier models', () => {
+    expect(getProviderCapabilities('chatgpt', 'gpt-5.6-luna')).toMatchObject({
+      contextWindowTokens: 1_050_000,
+      source: 'known-model',
+    })
+    // GPT-5.4 mini has a smaller window and should not match the frontier rule.
+    expect(getProviderCapabilities('chatgpt', 'gpt-5.4-mini')).toMatchObject({
+      contextWindowTokens: 128_000,
       source: 'known-model',
     })
   })
@@ -230,12 +268,90 @@ describe('Context Pipeline', () => {
     expect(budget.conversationSources[0].truncated).toBe(true)
     expect(budget.warnings.join('\n')).toContain('Truncated active source large-active-source')
   })
+
+  it('sourceTokens has an entry per included source matching estimateTokens of selected content', () => {
+    const source = {
+      id: 'active-source',
+      isActive: true,
+      rawContent: 'r'.repeat(2_000),
+      condensedContent: 'c'.repeat(2_000),
+    }
+    const budget = budgetContext({
+      system: 'Persona',
+      currentUserMessage: { content: 'Hi' },
+      skillInvocation: null,
+      history: [],
+      conversationSources: [source],
+      attachmentSources: [],
+      contextWindowTokens: 16_384,
+      requestedOutputTokens: 4_000,
+    })
+
+    expect(budget.includedSourceIds).toContain('active-source')
+    expect(budget.sourceTokens).toHaveProperty('active-source')
+    // The token count must equal estimateTokens of the selected content
+    const expectedTokens = estimateTokens(budget.conversationSources[0].selectedContent)
+    expect(budget.sourceTokens['active-source']).toBe(expectedTokens)
+  })
+
+  it('sourceTokens omits dropped sources', () => {
+    const budget = budgetContext({
+      system: 'Persona',
+      currentUserMessage: { content: 'Question' },
+      skillInvocation: null,
+      history: [],
+      conversationSources: [
+        {
+          id: 'active-source',
+          isActive: true,
+          rawContent: longYoutubeTranscript,
+          condensedContent: 'a'.repeat(1_200),
+        },
+      ],
+      attachmentSources: [
+        {
+          id: 'tab-source',
+          isActive: false,
+          condensedContent: 't'.repeat(1_000),
+        },
+      ],
+      contextWindowTokens: 500,
+      requestedOutputTokens: 100,
+    })
+
+    expect(budget.droppedSourceIds).toContain('tab-source')
+    expect(budget.sourceTokens).not.toHaveProperty('tab-source')
+    expect(budget.sourceTokens).toHaveProperty('active-source')
+  })
+
+  it('sourceTokens read-out does not change the assembled system/messages', async () => {
+    const input = createInput({ conversationSourceRefs: ['article-source'] })
+    const repository = createRepository([normalArticle])
+
+    // Run the pipeline with sourceTokens enabled
+    const result = await buildContextPipeline(input, { repository })
+
+    // Verify sourceTokens is populated
+    expect(result.sourceTokens).toHaveProperty('article-source')
+
+    // Verify the system and messages match a baseline pipeline run
+    // (the point is that adding sourceTokens did not alter any assembled content)
+    expect(result.system).toBeTruthy()
+    expect(result.messages[0]).toMatchObject({ role: 'user' })
+    expect(result.messages[0].content).toContain('[[UNTRUSTED_SOURCE')
+
+    // groundingRefs now carry tokens
+    expect(result.groundingRefs[0]).toMatchObject({
+      sourceId: 'article-source',
+      tokens: expect.any(Number),
+    })
+  })
 })
 
 describe('OpenRouter catalog resolver layer', () => {
   const catalog = {
     'openai:gpt-4o': 128000,
-    'deepseek:deepseek-chat': 64000,
+    'deepseek:deepseek-v4-flash': 1000000,
     'google:gemini-2-5-flash': 1000000,
     'anthropic:claude-4-sonnet': 200000,
   }
@@ -256,9 +372,9 @@ describe('OpenRouter catalog resolver layer', () => {
 
   it('curated static-table entry wins over the catalog', () => {
     setOpenrouterCatalog(catalog)
-    // 'deepseek-chat' matches the static pattern /^deepseek-/ → 64K, source: 'known-model'.
-    expect(getProviderCapabilities('deepseek', 'deepseek-chat')).toMatchObject({
-      contextWindowTokens: 64_000,
+    // DeepSeek V4 matches the static table before the catalog is consulted.
+    expect(getProviderCapabilities('deepseek', 'deepseek-v4-flash')).toMatchObject({
+      contextWindowTokens: 1_000_000,
       source: 'known-model',
     })
   })

@@ -108,7 +108,7 @@ export function createTabMentionService({ browserApi = browser, isFirefox = () =
           throw new Error(`Permission to read ${tab.title || tab.hostname} was denied. Your draft was kept.`)
         }
       }
-      return { tabId, url: tab.url, title: tab.title || tab.hostname, hostname: tab.hostname, sourceKind: tab.kind || undefined }
+      return { tabId, url: tab.url, title: tab.title || tab.hostname, hostname: tab.hostname, favIconUrl: tab.favIconUrl ?? null, sourceKind: tab.kind || undefined }
     },
   }
 }

@@ -9,6 +9,7 @@
     handleChatTabNavigation,
     removeChatTabSession,
     syncChatForActiveTab,
+    updateChatTabMetadata,
   } from '@/stores/chatStore.svelte.js'
   import {
     getAdjacentChatTabId,
@@ -43,7 +44,11 @@
     const handleActivated = async ({ tabId }) => {
       try {
         const tab = await browser.tabs.get(tabId)
-        await syncChatForActiveTab(tabId, { url: tab?.url || null })
+        await syncChatForActiveTab(tabId, {
+          url: tab?.url || null,
+          title: tab?.title ?? null,
+          favIconUrl: tab?.favIconUrl ?? null,
+        })
       } catch (error) {
         console.error('[ChatTabTitleBar] Failed to activate chat tab:', error)
       }
@@ -52,6 +57,12 @@
 
     const handleUpdated = (tabId, changeInfo) => {
       if (changeInfo.url) handleChatTabNavigation(tabId, changeInfo.url)
+      if (changeInfo.title || changeInfo.favIconUrl) {
+        updateChatTabMetadata(tabId, {
+          ...(changeInfo.title !== undefined && { title: changeInfo.title }),
+          ...(changeInfo.favIconUrl !== undefined && { favIconUrl: changeInfo.favIconUrl }),
+        })
+      }
       if (changeInfo.url || changeInfo.title) refreshTabsInfo()
     }
 
@@ -78,7 +89,11 @@
         currentWindow: true,
       })
       if (activeTab?.id) {
-        await syncChatForActiveTab(activeTab.id, { url: activeTab.url || null })
+        await syncChatForActiveTab(activeTab.id, {
+          url: activeTab.url || null,
+          title: activeTab.title ?? null,
+          favIconUrl: activeTab.favIconUrl ?? null,
+        })
       }
     } catch (error) {
       console.error('[ChatTabTitleBar] Failed to initialize:', error)

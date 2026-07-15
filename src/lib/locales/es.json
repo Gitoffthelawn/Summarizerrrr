@@ -321,6 +321,7 @@
       "provider_label": "Proveedor de modelos",
       "model_label": "Nombre del modelo",
       "model_placeholder": "Buscar o seleccionar modelo",
+      "view_models": "Ver modelos",
       "unconfigured_suffix": "no configurado",
       "unconfigured_warning": "Este proveedor no está configurado.",
       "configure_link": "Configurar clave API",
@@ -348,6 +349,34 @@
       "default_model_label": "ID de modelo predeterminado",
       "default_model_required": "El ID de modelo predeterminado es obligatorio",
       "delete_profile": "Eliminar perfil"
+    },
+    "chat": {
+      "add_to_quick_models": "Añadir a modelos rápidos",
+      "quick_models": "Modelos rápidos",
+      "quick_models_hint": "Hasta {max} modelos para cambiar rápidamente en el compositor.",
+      "remove_quick_model": "Quitar de modelos rápidos",
+      "default_reasoning": "Nivel de razonamiento predeterminado",
+      "default_reasoning_hint": "Se aplica al selector de razonamiento de las pestañas nuevas. Los ajustes por pestaña son independientes."
+    }
+  },
+  "chat": {
+    "context_donut": {
+      "aria_usage": "Context window usage:",
+      "aria_unknown": "Context usage not known yet",
+      "model": "Model",
+      "unknown_provider": "Unknown provider",
+      "context_window": "Context window",
+      "input_budget": "Input budget",
+      "input": "Input",
+      "output": "Output",
+      "cache": "Cache",
+      "source": "Source"
+    },
+    "model_select": {
+      "aria_label": "Modelo de chat: {model}",
+      "default_label": "Predeterminado ({model})",
+      "manage_models": "Administrar modelos...",
+      "warning_unresolvable": "Perfil desconocido"
     }
   },
   "tab_navigation": {

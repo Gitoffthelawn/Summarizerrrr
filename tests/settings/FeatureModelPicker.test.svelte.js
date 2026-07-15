@@ -106,7 +106,7 @@ describe('FeatureModelPicker Component', () => {
     }
   })
 
-  it('allows committing a custom typed model id for a static provider', () => {
+  it('allows committing a custom typed model id for a discovered provider', () => {
     const onchange = vi.fn()
     let currentProvider = 'chatgpt'
     let currentModel = 'gpt-5-mini'
@@ -126,7 +126,7 @@ describe('FeatureModelPicker Component', () => {
 
     flushSync()
 
-    const input = host.querySelector('#feature-model-input')
+    const input = host.querySelector('#feature-model-select')
     expect(input).not.toBeNull()
 
     // Type a custom model ID
@@ -138,6 +138,32 @@ describe('FeatureModelPicker Component', () => {
     flushSync()
 
     expect(onchange).toHaveBeenCalledWith('chatgpt', 'my-custom-gpt-model')
+    unmount(component)
+  })
+
+  it('shows the selected provider model-list link beside Model Provider', () => {
+    settings.addedProviders = ['gemini', 'chatgpt']
+    settings.geminiApiKey = 'test-gemini-key'
+    settings.chatgptApiKey = 'test-chatgpt-key'
+    flushSync()
+
+    const component = mount(FeatureModelPicker, {
+      target: host,
+      props: {
+        provider: 'chatgpt',
+        model: 'gpt-5.6-luna',
+        onchange: vi.fn(),
+      }
+    })
+    flushSync()
+
+    const link = host.querySelector(
+      'a[href="https://platform.openai.com/docs/pricing"]',
+    )
+    expect(link).not.toBeNull()
+    expect(link.textContent).toContain('View Models')
+    expect(link.getAttribute('target')).toBe('_blank')
+
     unmount(component)
   })
 

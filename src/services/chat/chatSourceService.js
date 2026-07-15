@@ -23,12 +23,6 @@ function stableContentHash(content) {
   return `fnv1a-${(hash >>> 0).toString(16)}`
 }
 
-function condenseContent(content) {
-  const limit = 12_000
-  if (content.length <= limit) return content
-  return `${content.slice(0, limit)}\n\n[Source snapshot condensed; remaining content omitted.]`
-}
-
 /**
  * Build the cache key used by `sourceIdsByTab`.
  * Differentiates entries so a transcript and comments for the same tab
@@ -140,8 +134,8 @@ export function createChatSourceService({
       sourceKey,
       contentHash,
       rawContent: content,
-      condensedContent: condenseContent(content),
-      condensationVersion: 1,
+      condensedContent: null,
+      condensationVersion: 0,
       condensationLanguage: 'en',
       originalLength: content.length,
       tabIdHint: tab.id,

@@ -100,10 +100,23 @@
   <!-- Provider Select — only shown when ≥2 providers are configured -->
   {#if showProviderDropdown}
     <div class="flex flex-col gap-1.5">
-      <!-- svelte-ignore a11y_label_has_associated_control -->
-      <label class="text-xs text-text-secondary">
-        {$t('settings.feature_model_picker.provider_label', { default: 'Model Provider' })}
-      </label>
+      <div class="flex items-center justify-between gap-2">
+        <!-- svelte-ignore a11y_label_has_associated_control -->
+        <label class="text-xs text-text-secondary">
+          {$t('settings.feature_model_picker.provider_label', { default: 'Model Provider' })}
+        </label>
+        {#if currentProviderEntry?.modelInfoHref}
+          <a
+            href={currentProviderEntry.modelInfoHref}
+            target="_blank"
+            rel="noreferrer"
+            class="flex items-center gap-0.5 text-xs text-primary outline-gray-500 hover:underline"
+          >
+            {$t('settings.feature_model_picker.view_models', { default: 'View Models' })}
+            <Icon width={12} icon="heroicons:arrow-up-right-16-solid" />
+          </a>
+        {/if}
+      </div>
       <div class="relative">
         <ReusableSelect
           items={providerOptions}
@@ -140,6 +153,8 @@
         placeholder={$t('settings.feature_model_picker.model_placeholder', { default: 'Search or select model' })}
         ariaLabel="Select Model"
         allowCustomValue={true}
+        modelInfoHref={showProviderDropdown ? '' : currentProviderEntry.modelInfoHref}
+        modelInfoText={$t('settings.feature_model_picker.view_models', { default: 'View Models' })}
         onModelChange={handleModelChange}
       />
     {:else}

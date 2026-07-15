@@ -84,6 +84,18 @@ const KNOWN_MODEL_CAPABILITIES = [
   },
   {
     providerId: 'openai',
+    modelPattern: /^gpt-5\.(?:4(?:-pro)?|5(?:-pro)?|6(?:-(?:sol|terra|luna))?)(?:-\d{4}-\d{2}-\d{2})?$/,
+    contextWindowTokens: 1_050_000,
+    defaultOutputTokens: DEFAULT_OUTPUT_TOKENS,
+  },
+  {
+    providerId: 'chatgpt',
+    modelPattern: /^gpt-5\.(?:4(?:-pro)?|5(?:-pro)?|6(?:-(?:sol|terra|luna))?)(?:-\d{4}-\d{2}-\d{2})?$/,
+    contextWindowTokens: 1_050_000,
+    defaultOutputTokens: DEFAULT_OUTPUT_TOKENS,
+  },
+  {
+    providerId: 'openai',
     modelPattern: /^gpt-5|^o[134]/,
     contextWindowTokens: 128_000,
     defaultOutputTokens: DEFAULT_OUTPUT_TOKENS,
@@ -95,12 +107,11 @@ const KNOWN_MODEL_CAPABILITIES = [
     defaultOutputTokens: DEFAULT_OUTPUT_TOKENS,
   },
   {
-    // deepseek-chat / deepseek-reasoner serve a 64K context window (default
-    // output 4K, max 8K). Without this entry they fall back to the conservative
-    // 16K window and grounding sources get dropped prematurely.
+    // DeepSeek V4 Flash and Pro both expose a 1M context window. The models API
+    // does not include this limit, so keep it in the static capability table.
     providerId: 'deepseek',
-    modelPattern: /^deepseek-/,
-    contextWindowTokens: 64_000,
+    modelPattern: /^deepseek-v4-(flash|pro)$/,
+    contextWindowTokens: 1_000_000,
     defaultOutputTokens: DEFAULT_OUTPUT_TOKENS,
   },
 ]

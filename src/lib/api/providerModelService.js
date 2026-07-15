@@ -1,6 +1,14 @@
 import { registerModelCapability } from '@/lib/chat/providerCapabilities.js'
 
 export const PROVIDER_CONFIG = {
+  chatgpt: {
+    url: 'https://api.openai.com/v1/models',
+    requiresApiKey: true,
+  },
+  openrouter: {
+    url: 'https://openrouter.ai/api/v1/models',
+    requiresApiKey: false,
+  },
   groq: {
     url: 'https://api.groq.com/openai/v1/models',
     requiresApiKey: true,
@@ -33,7 +41,7 @@ export const FALLBACK_PROVIDER_MODELS = {
     'qwen/qwen3-32b',
   ],
   cerebras: ['gpt-oss-120b', 'zai-glm-4.7'],
-  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  deepseek: ['deepseek-v4-flash', 'deepseek-v4-pro'],
   gemini: [
     'gemini-3.5-flash',
     'gemini-3.1-flash-lite',
@@ -44,22 +52,18 @@ export const FALLBACK_PROVIDER_MODELS = {
     'gemini-2.5-flash-lite',
   ],
   chatgpt: [
-    'gpt-5-mini',
-    'gpt-4o',
-    'gpt-4o-mini',
-    'gpt-4-turbo',
-    'gpt-4',
-    'o1',
-    'o1-mini',
-    'o3-mini',
+    'gpt-5.6-luna',
+    'gpt-5.6-terra',
+    'gpt-5.6-sol',
+    'gpt-5.6',
+    'gpt-5.5',
+    'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
   ],
   openrouter: [
-    'deepseek/deepseek-r1-0528:free',
-    'google/gemini-2.5-pro',
-    'google/gemini-2.5-flash',
-    'anthropic/claude-3.5-sonnet',
-    'meta-llama/llama-3.3-70b-instruct',
-    'deepseek/deepseek-chat',
+    'openrouter/free',
+    'openrouter/auto',
   ],
 }
 

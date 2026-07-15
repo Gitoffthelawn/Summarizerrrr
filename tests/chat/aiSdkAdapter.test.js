@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   createGoogleGenerativeAI: vi.fn(),
+  createOpenAI: vi.fn(),
+  createOpenAICompatible: vi.fn(),
+  createCerebras: vi.fn(),
   createOllamaProxyModel: vi.fn(),
   generateText: vi.fn(),
   streamText: vi.fn(),
@@ -24,12 +27,12 @@ vi.mock('ai', () => ({
 vi.mock('@ai-sdk/google', () => ({
   createGoogleGenerativeAI: mocks.createGoogleGenerativeAI,
 }))
-vi.mock('@ai-sdk/openai', () => ({ createOpenAI: vi.fn() }))
+vi.mock('@ai-sdk/openai', () => ({ createOpenAI: mocks.createOpenAI }))
 vi.mock('@ai-sdk/anthropic', () => ({ anthropic: vi.fn() }))
-vi.mock('@ai-sdk/openai-compatible', () => ({ createOpenAICompatible: vi.fn() }))
+vi.mock('@ai-sdk/openai-compatible', () => ({ createOpenAICompatible: mocks.createOpenAICompatible }))
 vi.mock('@openrouter/ai-sdk-provider', () => ({ createOpenRouter: vi.fn() }))
 vi.mock('@ai-sdk/groq', () => ({ createGroq: vi.fn() }))
-vi.mock('@ai-sdk/cerebras', () => ({ createCerebras: vi.fn() }))
+vi.mock('@ai-sdk/cerebras', () => ({ createCerebras: mocks.createCerebras }))
 vi.mock('ai-sdk-ollama', () => ({ createOllama: vi.fn() }))
 vi.mock('@/lib/api/ollamaProxyModel.js', () => ({
   createOllamaProxyModel: mocks.createOllamaProxyModel,
@@ -61,6 +64,7 @@ import {
   generateContentStreamEnhancedRequest,
   generateContentStreamRequest,
 } from '@/lib/api/aiSdkAdapter.js'
+import { resolveAdapterCall } from '@/lib/providers/providerRegistry.js'
 
 const settings = {
   geminiApiKey: 'test-key',
@@ -347,5 +351,219 @@ describe('AI SDK generation requests', () => {
     const completion = events.find((e) => e.isComplete)
     expect(completion).toBeDefined()
     expect(completion.reasoningWarnings).toBeUndefined()
+  })
+})
+
+describe('Model-routing contract (Phase 1 lock)', () => {
+  it('an explicit model via resolveAdapterCall reaches generateText as the constructed model', async () => {
+    // resolveAdapterCall overlays settings.selectedGeminiModel = modelId
+    const explicitModel = 'gemini-2.5-pro-preview'
+    const { providerId: adapterId, settings: resolved } = resolveAdapterCall(
+      'gemini',
+      explicitModel,
+      settings
+    )
+    expect(adapterId).toBe('gemini')
+    expect(resolved.selectedGeminiModel).toBe(explicitModel)
+
+    // Now drive through generateContentRequest to confirm getAISDKModel reads it
+    const sentinelModel = { modelId: explicitModel }
+    mocks.createGoogleGenerativeAI.mockReturnValue(() => sentinelModel)
+
+    await generateContentRequest({
+      providerId: adapterId,
+      settings: resolved,
+      prompt: 'test explicit model routing',
+    })
+
+    // The model passed to generateText must be the sentinel
+    expect(mocks.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({ model: sentinelModel })
+    )
+  })
+
+  it('a dynamic openai-compatible-* profile id collapses to the openaiCompatible adapter with correct overlay', async () => {
+    const profileId = 'openai-compatible-test-uuid-1234'
+    const profileSettings = {
+      ...settings,
+      openaiCompatibleProfiles: [
+        {
+          id: profileId,
+          name: 'My Custom Provider',
+          apiKey: 'profile-api-key-xyz',
+          baseUrl: 'https://custom.api.example.com/v1',
+          defaultModel: 'my-custom-model',
+        },
+      ],
+    }
+
+    const explicitModel = 'custom-model-override'
+    const { providerId: adapterId, settings: resolved } = resolveAdapterCall(
+      profileId,
+      explicitModel,
+      profileSettings
+    )
+
+    // Must collapse to the openaiCompatible adapter
+    expect(adapterId).toBe('openaiCompatible')
+    // Overlay must carry the profile's credentials
+    expect(resolved.openaiCompatibleApiKey).toBe('profile-api-key-xyz')
+    expect(resolved.openaiCompatibleBaseUrl).toBe('https://custom.api.example.com/v1')
+    // The model must be the explicit override, not the profile default
+    expect(resolved.selectedOpenAICompatibleModel).toBe(explicitModel)
+
+    // Drive through to confirm the adapter reads the overlaid settings
+    const profileModel = { modelId: explicitModel }
+    mocks.createOpenAICompatible.mockReturnValue(() => profileModel)
+
+    await generateContentRequest({
+      providerId: adapterId,
+      settings: resolved,
+      prompt: 'test profile model routing',
+    })
+
+    // createOpenAICompatible must receive the profile's API key and base URL
+    expect(mocks.createOpenAICompatible).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: 'profile-api-key-xyz',
+        baseURL: 'https://custom.api.example.com/v1',
+      })
+    )
+    // The constructed model must reach generateText
+    expect(mocks.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({ model: profileModel })
+    )
+  })
+
+  it('an explicit chatgpt model is overlaid and reaches the OpenAI adapter', async () => {
+    const chatgptSettings = {
+      ...settings,
+      chatgptApiKey: 'openai-key-test',
+      selectedChatgptModel: 'gpt-4o',
+    }
+
+    const explicitModel = 'o3-mini'
+    const { providerId: adapterId, settings: resolved } = resolveAdapterCall(
+      'chatgpt',
+      explicitModel,
+      chatgptSettings
+    )
+
+    expect(adapterId).toBe('chatgpt')
+    expect(resolved.selectedChatgptModel).toBe(explicitModel)
+
+    const chatgptModel = { modelId: explicitModel }
+    const chatgptFactory = vi.fn(() => chatgptModel)
+    mocks.createOpenAI.mockReturnValue(chatgptFactory)
+
+    await generateContentRequest({
+      providerId: adapterId,
+      settings: resolved,
+      prompt: 'test chatgpt model routing',
+    })
+
+    // The OpenAI factory must be called with the API key
+    expect(mocks.createOpenAI).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: 'openai-key-test' })
+    )
+    // The factory's return must be called with the explicit model
+    expect(chatgptFactory).toHaveBeenCalledWith(explicitModel)
+    // The model must reach generateText
+    expect(mocks.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({ model: chatgptModel })
+    )
+  })
+
+  it('a call without an explicit model (Summary path) produces the same model/config as default settings', async () => {
+    // This simulates the Summary path: providerId and settings come from
+    // the user's default settings, no resolveAdapterCall overlay
+    const defaultSettings = {
+      geminiApiKey: 'summary-key',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+    }
+
+    const defaultModel = { modelId: 'gemini-3-flash-preview' }
+    const geminiFactory = vi.fn(() => defaultModel)
+    mocks.createGoogleGenerativeAI.mockReturnValue(geminiFactory)
+
+    await generateContentRequest({
+      providerId: 'gemini',
+      settings: defaultSettings,
+      prompt: 'summarize this page',
+    })
+
+    // The Google provider factory must be called with the summary-key
+    expect(mocks.createGoogleGenerativeAI).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: 'summary-key' })
+    )
+    // Factory called with the default model name
+    expect(geminiFactory).toHaveBeenCalledWith('gemini-3-flash-preview')
+    // Config must include the standard maxOutputTokens
+    expect(mocks.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: defaultModel,
+        maxOutputTokens: 4000,
+      })
+    )
+  })
+
+  it('resolveAdapterCall for cerebras overlays selectedCerebrasModel correctly', async () => {
+    const cerebrasSettings = {
+      ...settings,
+      cerebrasApiKey: 'cerebras-key-test',
+      selectedCerebrasModel: 'gpt-oss-120b',
+    }
+
+    const explicitModel = 'llama-3.3-70b'
+    const { providerId: adapterId, settings: resolved } = resolveAdapterCall(
+      'cerebras',
+      explicitModel,
+      cerebrasSettings
+    )
+
+    expect(adapterId).toBe('cerebras')
+    expect(resolved.selectedCerebrasModel).toBe(explicitModel)
+
+    const cerebrasModel = { modelId: explicitModel }
+    const cerebrasFactory = vi.fn(() => cerebrasModel)
+    mocks.createCerebras.mockReturnValue(cerebrasFactory)
+
+    await generateContentRequest({
+      providerId: adapterId,
+      settings: resolved,
+      prompt: 'test cerebras model routing',
+    })
+
+    expect(mocks.createCerebras).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: 'cerebras-key-test' })
+    )
+    expect(cerebrasFactory).toHaveBeenCalledWith(explicitModel)
+    expect(mocks.generateText).toHaveBeenCalledWith(
+      expect.objectContaining({ model: cerebrasModel })
+    )
+  })
+
+  it('explicit model via resolveAdapterCall reaches streamText in the streaming path', async () => {
+    const explicitModel = 'gemini-2.5-pro-preview'
+    const { providerId: adapterId, settings: resolved } = resolveAdapterCall(
+      'gemini',
+      explicitModel,
+      settings
+    )
+
+    const sentinelModel = { modelId: explicitModel }
+    mocks.createGoogleGenerativeAI.mockReturnValue(() => sentinelModel)
+
+    await Array.fromAsync(
+      generateContentStreamRequest({
+        providerId: adapterId,
+        settings: resolved,
+        messages: [{ role: 'user', content: 'stream with explicit model' }],
+      })
+    )
+
+    expect(mocks.streamText).toHaveBeenCalledWith(
+      expect.objectContaining({ model: sentinelModel })
+    )
   })
 })

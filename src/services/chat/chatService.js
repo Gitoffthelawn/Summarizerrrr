@@ -5,7 +5,10 @@ import { chatSourceService } from './chatSourceService.js'
 import { chatSessionService } from './chatSessionService.js'
 import { createPersonaSnapshot } from '@/lib/chat/skills/skillService.js'
 import { resolveAutoSourceKind } from './sourceResolution.js'
-import { resolveFeatureModel } from '@/lib/providers/featureModelResolver.js'
+import {
+  resolveFeatureModel,
+  resolveConversationModel,
+} from '@/lib/providers/featureModelResolver.js'
 import {
   normalizeProviderId,
   getLegacyModel,
@@ -98,9 +101,11 @@ export function createChatService({
   buildPipeline = buildContextPipeline,
   streamRequest = defaultStreamRequest,
 } = {}) {
-  async function startConversationForActiveTab({ settings, personaSnapshot } = {}) {
+  async function startConversationForActiveTab({ settings, personaSnapshot, modelOverride } = {}) {
     const tab = await sourceService.getActiveTab()
     const resolvedChat = resolveFeatureModel('chat', settings)
+    const providerId = modelOverride?.provider || resolvedChat.providerId
+    const modelId = modelOverride?.model || resolvedChat.modelId
     const conversation = (
       await repository.createConversation({
         title: titleFrom(tab.title),
@@ -109,8 +114,8 @@ export function createChatService({
           createPersonaSnapshot(settings?.chatGlobalPersona, {
             language: settings?.summaryLang || null,
           }),
-        providerId: resolvedChat.providerId,
-        modelId: resolvedChat.modelId,
+        providerId,
+        modelId,
       })
     ).conversation
     sessionService.setConversationId(tab.id, conversation.id)
@@ -166,12 +171,9 @@ export function createChatService({
     onWarnings,
     onDiagnostics,
   }) {
-    const resolvedChat = resolveFeatureModel('chat', settings)
-    const fallbackProviderId = resolvedChat.providerId
-    const fallbackModelId = resolvedChat.modelId
-
-    let conversationProviderId = conversation.providerId || fallbackProviderId
-    let conversationModelId = conversation.modelId || fallbackModelId
+    const resolved = resolveConversationModel(conversation, settings)
+    let conversationProviderId = resolved.providerId
+    let conversationModelId = resolved.modelId
 
     // Check if the provider ID is a dynamic profile ID and if it is missing/deleted
     if (isOpenAICompatibleProfileId(conversationProviderId)) {
@@ -282,6 +284,12 @@ export function createChatService({
               inputBudget: pipeline.inputBudgetTokens,
               window: pipeline.capabilities?.contextWindowTokens,
               source: pipeline.capabilities?.source,
+              input: usage?.promptTokens ?? null,
+              output: usage?.completionTokens ?? null,
+              cached: usage?.cachedInputTokens ?? null,
+              providerId: conversationProviderId,
+              modelId: conversationModelId,
+              sourceTokens: pipeline.sourceTokens || {},
             })
           }
           // Merge any reasoning-related warnings from the AI SDK into context
@@ -532,12 +540,9 @@ export function createChatService({
       await repository.markMessageStreaming(assistantMessageId)
 
       try {
-        const resolvedChat = resolveFeatureModel('chat', settings)
-        const fallbackProviderId = resolvedChat.providerId
-        const fallbackModelId = resolvedChat.modelId
-
-        let conversationProviderId = conversation.providerId || fallbackProviderId
-        let conversationModelId = conversation.modelId || fallbackModelId
+        const resolved = resolveConversationModel(conversation, settings)
+        let conversationProviderId = resolved.providerId
+        let conversationModelId = resolved.modelId
 
         // Check if the provider ID is a dynamic profile ID and if it is missing/deleted
         if (isOpenAICompatibleProfileId(conversationProviderId)) {
@@ -609,6 +614,12 @@ export function createChatService({
                 inputBudget: pipeline.inputBudgetTokens,
                 window: pipeline.capabilities?.contextWindowTokens,
                 source: pipeline.capabilities?.source,
+                input: usage?.promptTokens ?? null,
+                output: usage?.completionTokens ?? null,
+                cached: usage?.cachedInputTokens ?? null,
+                providerId: conversationProviderId,
+                modelId: conversationModelId,
+                sourceTokens: pipeline.sourceTokens || {},
               })
             }
             // Merge any reasoning-related warnings from the AI SDK.

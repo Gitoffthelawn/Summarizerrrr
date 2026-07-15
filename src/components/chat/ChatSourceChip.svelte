@@ -1,6 +1,7 @@
 <script>
   // @ts-nocheck
   import Icon from '@iconify/svelte'
+  import { formatK } from '@/lib/utils/formatTokens.js'
 
   let {
     label = 'This page',
@@ -13,13 +14,6 @@
     estimating = false,
     onRemove = null,
   } = $props()
-
-  function formatK(n) {
-    if (n == null || n < 0) return ''
-    if (n < 1000) return String(n)
-    if (n < 1_000_000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K'
-    return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
-  }
 </script>
 
 <span

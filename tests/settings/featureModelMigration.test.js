@@ -62,11 +62,11 @@ describe('Feature Model Migration & Normalization', () => {
     const result = normalizeStoredSettings(legacy)
     expect(result.summarize).toEqual({
       provider: 'deepseek',
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
     })
     expect(result.chat).toEqual({
       provider: 'deepseek',
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       defaultReasoningLevel: 'provider-default',
       quickModels: [],
     })
@@ -171,12 +171,12 @@ describe('Feature Model Migration & Normalization', () => {
 
     expect(settings.summarize).toEqual({
       provider: 'deepseek',
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       reasoningLevel: 'off',
     })
     expect(settings.chat).toEqual({
       provider: 'deepseek',
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       defaultReasoningLevel: 'provider-default',
       quickModels: [],
     })
@@ -218,8 +218,38 @@ describe('Feature Model Migration & Normalization', () => {
     }
     const result = normalizeStoredSettings(legacy)
     expect(result.summarize.provider).toBe('deepseek')
-    expect(result.summarize.model).toBe('deepseek-chat')
+    expect(result.summarize.model).toBe('deepseek-v4-flash')
     // and the migrated level survives the derivation
     expect(result.summarize.reasoningLevel).toBe('medium')
+  })
+
+  it('migrates every persisted DeepSeek legacy alias to V4 Flash', () => {
+    const result = normalizeStoredSettings({
+      selectedDeepseekModel: 'deepseek-reasoner',
+      summarize: { provider: 'deepseek', model: 'deepseek-chat' },
+      chat: {
+        provider: 'deepseek',
+        model: 'deepseek-reasoner',
+        quickModels: [
+          { provider: 'deepseek', model: 'deepseek-chat' },
+          { provider: 'groq', model: 'deepseek-chat' },
+        ],
+      },
+      tools: {
+        deepDive: {
+          customProvider: 'deepseek',
+          customModel: 'deepseek-reasoner',
+        },
+      },
+    })
+
+    expect(result.selectedDeepseekModel).toBe('deepseek-v4-flash')
+    expect(result.summarize.model).toBe('deepseek-v4-flash')
+    expect(result.chat.model).toBe('deepseek-v4-flash')
+    expect(result.chat.quickModels).toEqual([
+      { provider: 'deepseek', model: 'deepseek-v4-flash' },
+      { provider: 'groq', model: 'deepseek-chat' },
+    ])
+    expect(result.tools.deepDive.customModel).toBe('deepseek-v4-flash')
   })
 })

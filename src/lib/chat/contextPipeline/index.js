@@ -50,10 +50,12 @@ export async function buildContextPipeline(input, dependencies) {
     ...budget.conversationSources.map((s) => ({
       sourceId: String(s.sourceId || s.id),
       contentKind: s.selectedContentKind || 'condensed',
+      tokens: budget.sourceTokens[String(s.sourceId || s.id)] ?? null,
     })),
     ...budget.attachmentSources.map((s) => ({
       sourceId: String(s.sourceId || s.id),
       contentKind: s.selectedContentKind || 'condensed',
+      tokens: budget.sourceTokens[String(s.sourceId || s.id)] ?? null,
     })),
   ]
 
@@ -73,6 +75,7 @@ export async function buildContextPipeline(input, dependencies) {
   return {
     ...assembled,
     groundingRefs,
+    sourceTokens: budget.sourceTokens || {},
     capabilities,
     unresolvedRefs: sourceResolution.unresolvedRefs,
   }

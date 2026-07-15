@@ -17,16 +17,15 @@ export function estimateTokens(value) {
 
 function selectedSourceContent(source, remainingTokens) {
   const rawContent = source.rawContent || null
-  const condensedContent = source.condensedContent || rawContent || ''
-  const mustUseCondensed = !source.isActive
-  const preferredContent = mustUseCondensed ? condensedContent : rawContent || condensedContent
-  const preferredKind = mustUseCondensed || !rawContent ? 'condensed' : 'raw'
+  const condensedContent = source.condensedContent || null
+  const preferredContent = rawContent || condensedContent || ''
+  const preferredKind = rawContent ? 'raw' : 'condensed'
 
   if (estimateTokens(preferredContent) <= remainingTokens) {
     return { content: preferredContent, kind: preferredKind, truncated: false }
   }
 
-  if (!mustUseCondensed && rawContent && estimateTokens(condensedContent) <= remainingTokens) {
+  if (rawContent && condensedContent && estimateTokens(condensedContent) <= remainingTokens) {
     return { content: condensedContent, kind: 'condensed', truncated: false }
   }
 
@@ -38,7 +37,7 @@ function selectedSourceContent(source, remainingTokens) {
   }
 
   const characterBudget = Math.max(0, (remainingTokens - estimateTokens(TRUNCATION_MARKER)) * 4)
-  const sourceText = condensedContent.slice(0, characterBudget)
+  const sourceText = (condensedContent || rawContent || '').slice(0, characterBudget)
   if (!sourceText) return null
   return {
     content: `${sourceText}${TRUNCATION_MARKER}`,
@@ -104,6 +103,7 @@ export function budgetContext({
   const warnings = []
   const includedSourceIds = []
   const droppedSourceIds = []
+  const sourceTokens = {}
   const budgetedConversationSources = []
   const budgetedAttachmentSources = []
 
@@ -119,8 +119,8 @@ export function budgetContext({
     ...attachmentSources.map((source) => ({ source, destination: budgetedAttachmentSources })),
   ]
 
-  // Active sources are eligible for raw content and are considered before all
-  // @tab sources. Non-active sources are condensed and dropped first.
+  // Prefer full raw content for every source. Active sources are considered
+  // first when the model's real context budget cannot fit everything.
   sourceGroups.sort((left, right) => Number(right.source.isActive) - Number(left.source.isActive))
 
   for (const { source, destination } of sourceGroups) {
@@ -135,6 +135,7 @@ export function budgetContext({
     const tokens = estimateTokens(selection.content)
     sourceRemaining -= tokens
     includedSourceIds.push(sourceId)
+    sourceTokens[sourceId] = tokens
     if (selection.truncated) {
       warnings.push(`Truncated active source ${sourceId} to fit the context budget.`)
     }
@@ -186,6 +187,7 @@ export function budgetContext({
     inputBudgetTokens,
     includedSourceIds,
     droppedSourceIds,
+    sourceTokens,
     trimmedTurnCount,
     warnings,
   }
