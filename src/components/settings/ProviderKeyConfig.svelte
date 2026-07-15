@@ -2,7 +2,6 @@
 <script>
   import { settings, updateSettings } from '@/stores/settingsStore.svelte.js'
   import ApiKeyInputMulti from '../inputs/ApiKeyInputMulti.svelte'
-  import ButtonSet from '../buttons/ButtonSet.svelte'
   import { t } from 'svelte-i18n'
   import Icon from '@iconify/svelte'
 
@@ -213,37 +212,4 @@
     </div>
   {/if}
 
-  {#if isExpanded && entry.id === 'gemini'}
-    <div class="pb-4 flex flex-col gap-2">
-      <!-- svelte-ignore a11y_label_has_associated_control -->
-      <label class="text-xs text-text-secondary"
-        >{$t('settings.gemini_basic_config.thinking_level', {
-          default: 'Thinking Level',
-        })}</label
-      >
-      <div class="grid grid-cols-3 gap-1">
-        <ButtonSet
-          title={$t('settings.gemini_basic_config.thinking_levels.minimal', {
-            default: 'Minimal',
-          })}
-          class={settings.geminiThinkingLevel === 'minimal' ? 'active' : ''}
-          onclick={() => updateSettings({ geminiThinkingLevel: 'minimal' })}
-        />
-        <ButtonSet
-          title={$t('settings.gemini_basic_config.thinking_levels.medium', {
-            default: 'Medium',
-          })}
-          class={settings.geminiThinkingLevel === 'medium' ? 'active' : ''}
-          onclick={() => updateSettings({ geminiThinkingLevel: 'medium' })}
-        />
-        <ButtonSet
-          title={$t('settings.gemini_basic_config.thinking_levels.high', {
-            default: 'High',
-          })}
-          class={settings.geminiThinkingLevel === 'high' ? 'active' : ''}
-          onclick={() => updateSettings({ geminiThinkingLevel: 'high' })}
-        />
-      </div>
-    </div>
-  {/if}
 </div>

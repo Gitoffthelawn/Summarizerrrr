@@ -11,6 +11,8 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { createDeepSeek } from '@ai-sdk/deepseek'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import { createGroq } from '@ai-sdk/groq'
+import { createCerebras } from '@ai-sdk/cerebras'
 import { createOllama } from 'ai-sdk-ollama'
 import { getBrowserCompatibility } from '@/lib/utils/browserDetection.js'
 import { requiresApiProxy } from '@/lib/utils/contextDetection.js'
@@ -27,7 +29,7 @@ import {
 import { updateModelStatus } from '@/stores/summaryStore.svelte.js'
 
 import { showModelFallbackToast } from '@/lib/utils/toastUtils.js'
-import { buildThinkingProviderOptions } from '@/lib/utils/geminiThinkingConfig.js'
+
 
 // Global index for round-robin key rotation
 let currentKeyIndex = 0
@@ -113,18 +115,14 @@ export function getAISDKModel(providerId, settings) {
       return openai(settings.selectedChatgptModel || 'gpt-3.5-turbo')
 
     case 'groq':
-      const groq = createOpenAICompatible({
-        name: 'groq',
+      const groq = createGroq({
         apiKey: settings.groqApiKey,
-        baseURL: 'https://api.groq.com/openai/v1',
       })
       return groq(settings.selectedGroqModel || 'llama-3.3-70b-versatile')
 
     case 'openrouter':
-      const openrouter = createOpenAICompatible({
-        name: 'openrouter',
+      const openrouter = createOpenRouter({
         apiKey: settings.openrouterApiKey,
-        baseURL: 'https://openrouter.ai/api/v1',
       })
       return openrouter(settings.selectedOpenrouterModel || 'openrouter/auto')
 
@@ -166,10 +164,8 @@ export function getAISDKModel(providerId, settings) {
       )
 
     case 'cerebras':
-      const cerebras = createOpenAICompatible({
-        name: 'cerebras',
+      const cerebras = createCerebras({
         apiKey: settings.cerebrasApiKey,
-        baseURL: 'https://api.cerebras.ai/v1',
       })
       return cerebras(settings.selectedCerebrasModel || 'gpt-oss-120b')
 
@@ -382,19 +378,6 @@ export async function generateContentRequest(request) {
         console.log(`[aiSdkAdapter] ✅ API Success - Model: ${modelName}`)
         return result.text
       } else {
-        // Build thinking providerOptions from user settings (Gemini-only)
-        // Caller-provided providerOptions (e.g. DeepDive) take precedence
-        const thinkingLevel = currentSettings.geminiThinkingLevel || 'high'
-        const thinkingProviderOptions =
-          providerId === 'gemini'
-            ? buildThinkingProviderOptions(modelName, thinkingLevel)
-            : {}
-
-        // Merge: caller options override auto-built thinking options
-        const mergedProviderOptions = Object.keys(thinkingProviderOptions).length
-          ? { ...thinkingProviderOptions, ...(providerOptions || {}) }
-          : providerOptions
-
         // Use the standard AI SDK generateText for direct calls - no middleware
         const { text } = await generateText({
           model,
@@ -404,7 +387,7 @@ export async function generateContentRequest(request) {
           ...generationConfig,
           ...generationOptions,
           ...(tools && { tools }),
-          ...(mergedProviderOptions && { providerOptions: mergedProviderOptions }),
+          ...(providerOptions && { providerOptions }),
           ...(abortSignal && { abortSignal }),
         })
         console.log(`[aiSdkAdapter] ✅ API Success - Model: ${modelName}`)
@@ -654,17 +637,6 @@ export async function* generateContentStreamRequest(request) {
           browserCompatibility.streamingOptions.useSmoothing &&
           useSmoothing !== false
 
-        // Build thinking providerOptions from user settings (Gemini-only)
-        const thinkingLevel = currentSettings.geminiThinkingLevel || 'high'
-        const thinkingProviderOptions =
-          providerId === 'gemini'
-            ? buildThinkingProviderOptions(modelName, thinkingLevel)
-            : {}
-
-        const mergedProviderOptions = Object.keys(thinkingProviderOptions).length
-          ? { ...thinkingProviderOptions, ...(providerOptions || {}) }
-          : providerOptions
-
         const streamConfig = {
           model,
           instructions: effectiveSystemInstruction,
@@ -674,7 +646,7 @@ export async function* generateContentStreamRequest(request) {
           ...(shouldUseSmoothing ? defaultSmoothingOptions : {}),
           ...generationOptions,
           ...(tools && { tools }),
-          ...(mergedProviderOptions && { providerOptions: mergedProviderOptions }),
+          ...(providerOptions && { providerOptions }),
           ...(abortSignal && { abortSignal }),
         }
 
@@ -691,14 +663,19 @@ export async function* generateContentStreamRequest(request) {
           yield chunk
         }
 
-        // Yield usage metadata from AI SDK result (if available)
+        // Yield usage and warnings metadata from AI SDK result (if available)
         try {
           const usage = normalizeUsage(await result.usage)
-          if (usage) {
-            yield { __streamMeta: true, usage }
+          const warnings = await result.warnings
+          const reasoningWarnings = extractReasoningWarnings(warnings, modelName, generationOptions)
+          const meta = {}
+          if (usage) meta.usage = usage
+          if (reasoningWarnings.length) meta.reasoningWarnings = reasoningWarnings
+          if (Object.keys(meta).length) {
+            yield { __streamMeta: true, ...meta }
           }
         } catch {
-          // Usage may not be available for all providers
+          // Usage/warnings may not be available for all providers
         }
       }
 
@@ -843,6 +820,49 @@ function normalizeUsage(usage) {
 }
 
 /**
+ * Extract reasoning-related warnings from AI SDK's warnings array and
+ * normalize them into user-friendly messages. Logs a concise dev warning
+ * without exposing API keys or raw provider payloads.
+ *
+ * @param {Array<{type: string, message?: string, [key: string]: unknown}> | null | undefined} warnings
+ * @param {string} modelName
+ * @param {object} generationOptions - to read the requested reasoning level
+ * @returns {string[]} user-facing warning messages
+ */
+function extractReasoningWarnings(warnings, modelName, generationOptions) {
+  if (!Array.isArray(warnings) || !warnings.length) return []
+
+  const reasoningWarnings = []
+  const requestedLevel = generationOptions?.reasoning || null
+
+  for (const warning of warnings) {
+    if (!warning || typeof warning !== 'object') continue
+
+    // AI SDK may emit various warning types; filter for reasoning-related ones.
+    // Known patterns: 'unsupported-setting' with setting === 'reasoning',
+    // or any warning whose message mentions reasoning/thinking coercion.
+    const msg = warning.message || ''
+    const isReasoningRelated =
+      (warning.type === 'unsupported-setting' && warning.setting === 'reasoning') ||
+      /reasoning|thinking/i.test(msg)
+
+    if (isReasoningRelated) {
+      // Build a user-friendly message
+      const userMsg = msg || `Reasoning effort is not fully supported by ${modelName}.`
+      reasoningWarnings.push(userMsg)
+
+      // Log a concise dev warning (no API keys, no raw payloads)
+      console.warn(
+        `[aiSdkAdapter] ⚠️ Reasoning warning — model: ${modelName}, ` +
+        `requested: ${requestedLevel || 'none'}, type: ${warning.type || 'unknown'}: ${userMsg}`
+      )
+    }
+  }
+
+  return reasoningWarnings
+}
+
+/**
  * Compatibility wrapper for existing positional enhanced streaming callers.
  * @returns {AsyncIterable<{chunk: string, fullText: string, isComplete: boolean}>}
  */
@@ -873,6 +893,7 @@ export async function* generateContentStreamEnhancedRequest(request) {
   const normalizedRequest = normalizeGenerationRequest(request)
   let fullText = ''
   let usage = null
+  let reasoningWarnings = []
 
   // Get browser compatibility info
   const browserCompatibility = getBrowserCompatibility()
@@ -884,6 +905,9 @@ export async function* generateContentStreamEnhancedRequest(request) {
       // Detect metadata marker from generateContentStreamRequest
       if (chunk && typeof chunk === 'object' && chunk.__streamMeta) {
         usage = chunk.usage || null
+        if (chunk.reasoningWarnings?.length) {
+          reasoningWarnings = chunk.reasoningWarnings
+        }
         continue
       }
       fullText += chunk
@@ -894,12 +918,14 @@ export async function* generateContentStreamEnhancedRequest(request) {
       }
     }
 
-    // Final yield with completion flag and usage data
+    // Final yield with completion flag, usage data, and reasoning warnings.
+    // reasoningWarnings is additive — existing callers that ignore it keep working.
     yield {
       chunk: '',
       fullText,
       isComplete: true,
       usage,
+      ...(reasoningWarnings.length ? { reasoningWarnings } : {}),
     }
   } catch (error) {
     // Check if this is a Firefox mobile specific error

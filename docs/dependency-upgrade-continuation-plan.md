@@ -1,3 +1,8 @@
+---
+type: plan
+status: done
+---
+
 # Dependency Upgrade Continuation Plan
 
 Updated: 2026-07-13

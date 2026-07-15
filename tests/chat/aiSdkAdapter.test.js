@@ -28,6 +28,8 @@ vi.mock('@ai-sdk/openai', () => ({ createOpenAI: vi.fn() }))
 vi.mock('@ai-sdk/anthropic', () => ({ anthropic: vi.fn() }))
 vi.mock('@ai-sdk/openai-compatible', () => ({ createOpenAICompatible: vi.fn() }))
 vi.mock('@openrouter/ai-sdk-provider', () => ({ createOpenRouter: vi.fn() }))
+vi.mock('@ai-sdk/groq', () => ({ createGroq: vi.fn() }))
+vi.mock('@ai-sdk/cerebras', () => ({ createCerebras: vi.fn() }))
 vi.mock('ai-sdk-ollama', () => ({ createOllama: vi.fn() }))
 vi.mock('@/lib/api/ollamaProxyModel.js', () => ({
   createOllamaProxyModel: mocks.createOllamaProxyModel,
@@ -51,9 +53,7 @@ vi.mock('@/stores/summaryStore.svelte.js', () => ({
   updateModelStatus: mocks.updateModelStatus,
 }))
 vi.mock('@/lib/utils/toastUtils.js', () => ({ showModelFallbackToast: vi.fn() }))
-vi.mock('@/lib/utils/geminiThinkingConfig.js', () => ({
-  buildThinkingProviderOptions: vi.fn(() => ({})),
-}))
+
 
 import {
   generateContent,
@@ -262,5 +262,90 @@ describe('AI SDK generation requests', () => {
         })
       )
     ).rejects.toMatchObject({ isFirefoxMobileStreamingError: true })
+  })
+
+  it('forwards explicit reasoning to generateText', async () => {
+    await generateContentRequest({
+      providerId: 'gemini',
+      settings,
+      prompt: 'chat with reasoning',
+      reasoning: 'medium',
+    })
+
+    const call = mocks.generateText.mock.calls[0][0]
+    expect(call.reasoning).toBe('medium')
+  })
+
+  it('forwards explicit reasoning through streaming path', async () => {
+    await Array.fromAsync(
+      generateContentStreamRequest({
+        providerId: 'gemini',
+        settings,
+        messages: [{ role: 'user', content: 'stream with reasoning' }],
+        reasoning: 'high',
+      })
+    )
+
+    const call = mocks.streamText.mock.calls[0][0]
+    expect(call.reasoning).toBe('high')
+  })
+
+  it('surfaces reasoning-coercion warnings in the enhanced stream completion event', async () => {
+    mocks.streamText.mockImplementation(() =>
+      Promise.resolve({
+        textStream: textStream(['response text']),
+        usage: Promise.resolve({ promptTokens: 10, completionTokens: 20 }),
+        warnings: Promise.resolve([
+          {
+            type: 'unsupported-setting',
+            setting: 'reasoning',
+            message: 'High reasoning is not supported by this model; the provider used Medium.',
+          },
+        ]),
+      })
+    )
+
+    const events = await Array.fromAsync(
+      generateContentStreamEnhancedRequest({
+        providerId: 'gemini',
+        settings,
+        messages: [{ role: 'user', content: 'test warnings' }],
+        reasoning: 'high',
+      })
+    )
+
+    const completion = events.find((e) => e.isComplete)
+    expect(completion).toBeDefined()
+    expect(completion.reasoningWarnings).toBeDefined()
+    expect(completion.reasoningWarnings).toHaveLength(1)
+    expect(completion.reasoningWarnings[0]).toContain('High reasoning is not supported')
+  })
+
+  it('does not include non-reasoning warnings in reasoningWarnings', async () => {
+    mocks.streamText.mockImplementation(() =>
+      Promise.resolve({
+        textStream: textStream(['response']),
+        usage: Promise.resolve({ promptTokens: 5, completionTokens: 10 }),
+        warnings: Promise.resolve([
+          {
+            type: 'unsupported-setting',
+            setting: 'temperature',
+            message: 'Temperature is not supported.',
+          },
+        ]),
+      })
+    )
+
+    const events = await Array.fromAsync(
+      generateContentStreamEnhancedRequest({
+        providerId: 'gemini',
+        settings,
+        messages: [{ role: 'user', content: 'test non-reasoning warning' }],
+      })
+    )
+
+    const completion = events.find((e) => e.isComplete)
+    expect(completion).toBeDefined()
+    expect(completion.reasoningWarnings).toBeUndefined()
   })
 })

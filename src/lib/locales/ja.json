@@ -189,6 +189,15 @@
         "youtube_comment": "YouTubeコメント",
         "override_note": "* カスタムプロンプトが基本設定より優先されます。"
       },
+      "reasoning": {
+        "title": "推論",
+        "off": "オフ",
+        "off_desc": "直接回答、最速。",
+        "low": "低",
+        "low_desc": "軽い推論。",
+        "medium": "中",
+        "medium_desc": "深さと速さのバランス。"
+      },
       "comment_limit": "YouTubeコメント制限",
       "comment_limit_desc": "分析するコメントの最大数。",
       "uses_gemini_basic": "Gemini Basicを使用"
@@ -215,13 +224,7 @@
       "select_model_label": "Gemini Advancedモデル",
       "select_model_placeholder": "モデルを選択",
       "select_gemini_model_aria_label": "Geminiモデルを選択",
-      "auto_fallback_label": "過負荷時の自動フォールバック",
-      "thinking_level": "思考レベル",
-      "thinking_levels": {
-        "minimal": "最小",
-        "medium": "中",
-        "high": "高"
-      }
+      "auto_fallback_label": "過負荷時の自動フォールバック"
     },
     "gemini_basic_config": {
       "api_key_label": "Gemini APIキー",
@@ -303,7 +306,15 @@
         "ask_own_question_in_chat": "チャットで独自の質問をする",
         "api_keys_info_restructured": "APIキーはグローバルで管理されています。",
         "api_keys_link_text": "プロバイダーとAPIキー",
-        "api_keys_info_restructured_end": "タブで認証情報を設定してください。"
+        "api_keys_info_restructured_end": "タブで認証情報を設定してください。",
+        "reasoning_title": "推論",
+        "reasoning_description": "Deep Diveの質問に対するモデルの推論レベルを制御します。",
+        "reasoning_off": "オフ",
+        "reasoning_off_desc": "直接回答、最速。",
+        "reasoning_low": "低",
+        "reasoning_low_desc": "軽い推論。",
+        "reasoning_medium": "中",
+        "reasoning_medium_desc": "深さと速度のバランス。"
       }
     },
     "feature_model_picker": {

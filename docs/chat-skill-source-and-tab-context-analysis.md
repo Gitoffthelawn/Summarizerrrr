@@ -1,3 +1,8 @@
+---
+type: analysis
+status: reference
+---
+
 # Phân tích Skill, nguồn dữ liệu và `@[tab]` trong Chat
 
 ## Phạm vi tài liệu

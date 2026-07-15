@@ -7,6 +7,7 @@ import { settings } from './settingsStore.svelte.js'
 import { handleError } from '@/lib/error/simpleErrorHandler.js'
 import { skillService } from '@/lib/chat/skills/skillService.js'
 import { invalidateConversationDeepDive } from '@/stores/deepDiveStore.svelte.js'
+import { effectiveReasoningLevel } from '@/lib/api/reasoningConfig.js'
 
 /** Number of messages to show in the visible window — pagination decoupled from context. */
 const VISIBLE_MESSAGE_WINDOW = 25
@@ -47,6 +48,12 @@ function createChatSessionState() {
     currentUrl: null,
     /** True when there are earlier messages not yet loaded into the visible window. */
     hasEarlierMessages: false,
+    /**
+     * Per-tab reasoning effort level. `null` is a sentinel meaning "use the
+     * global default from settings" — resolved at read time via
+     * `effectiveReasoningLevel()`, never at session-creation time.
+     */
+    reasoningLevel: null,
   }
 }
 
@@ -395,6 +402,7 @@ export async function sendChatMessage(content = chatState.composerText) {
       skillInvocation,
       pendingAttachments,
       sourceRequired,
+      reasoningLevel: effectiveReasoningLevel(chatState.reasoningLevel, settings),
       settings,
       abortController,
       onUserMessage: (message) => {
@@ -593,6 +601,7 @@ export async function editChatMessage(messageId, content) {
       conversation: owner.conversation,
       messageId,
       content,
+      reasoningLevel: effectiveReasoningLevel(chatState.reasoningLevel, settings),
       settings,
       abortController,
       onChunk: (message) => {

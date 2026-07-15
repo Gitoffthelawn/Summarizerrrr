@@ -2,6 +2,8 @@
   // @ts-nocheck
   import { t } from 'svelte-i18n'
   import { settings, updateSettings } from '@/stores/settingsStore.svelte.js'
+  import { updateToolSettings as updateToolSettingsStore } from '@/stores/settingsStore.svelte.js'
+  import { TASK_REASONING_CHOICES } from '@/lib/api/reasoningConfig.js'
   import Icon from '@iconify/svelte'
   import ButtonSet from '@/components/buttons/ButtonSet.svelte'
   import ToolIcon96 from '@/components/ui/ToolIcon96.svelte'
@@ -131,6 +133,27 @@
         >
           <Icon icon="heroicons:bolt" width="16" height="16" />
         </ButtonSet>
+      </div>
+    </div>
+
+    <!-- Deep Dive Reasoning Section -->
+    <div>
+      <!-- svelte-ignore a11y_label_has_associated_control -->
+      <label class=" text-text-primary"
+        >{$t('settings.tools.deepdive.reasoning_title', { default: 'Reasoning' })}</label
+      >
+      <p class="mt-2 text-muted">
+        {$t('settings.tools.deepdive.reasoning_description', { default: 'Control how much reasoning the model uses for Deep Dive questions.' })}
+      </p>
+      <div class="grid mt-3 grid-cols-3 gap-1">
+        {#each TASK_REASONING_CHOICES as option (option.value)}
+          <ButtonSet
+            title={$t(`settings.tools.deepdive.reasoning_${option.value}`, { default: option.label })}
+            Description={$t(`settings.tools.deepdive.reasoning_${option.value}_desc`, { default: option.description })}
+            class="setting-btn {toolSettings.reasoningLevel === option.value ? 'active' : ''}"
+            onclick={() => updateToolSettingsStore('deepDive', { reasoningLevel: option.value })}
+          ></ButtonSet>
+        {/each}
       </div>
     </div>
   {/if}

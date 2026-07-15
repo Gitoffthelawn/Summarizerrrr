@@ -1,3 +1,8 @@
+---
+type: walkthrough
+status: done
+---
+
 # Walkthrough: Chat System Instruction Upgrade & Skill Refactoring
 
 ## Summary

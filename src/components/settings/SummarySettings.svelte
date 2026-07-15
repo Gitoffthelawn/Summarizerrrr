@@ -12,6 +12,7 @@
     updateSettings,
     updateFeatureSettings,
   } from '../../stores/settingsStore.svelte.js'
+  import { TASK_REASONING_CHOICES } from '@/lib/api/reasoningConfig.js'
   import FeatureModelPicker from '../inputs/FeatureModelPicker.svelte'
   import { browser } from 'wxt/browser'
 
@@ -182,6 +183,24 @@
             ? $t('settings.summary.tone_mode.savage_desc')
             : $t('settings.summary.tone_mode.witty_desc')}
         ></ButtonSet>
+      </div>
+    </div>
+
+    <!-- Summary Reasoning Section -->
+    <div class="flex flex-col gap-2">
+      <!-- svelte-ignore a11y_label_has_associated_control -->
+      <label class="block text-text-secondary"
+        >{$t('settings.summary.reasoning.title')}</label
+      >
+      <div class="grid grid-cols-3 w-full gap-1">
+        {#each TASK_REASONING_CHOICES as option (option.value)}
+          <ButtonSet
+            title={$t(`settings.summary.reasoning.${option.value}`, { default: option.label })}
+            Description={$t(`settings.summary.reasoning.${option.value}_desc`, { default: option.description })}
+            class="setting-btn {settings.summarize?.reasoningLevel === option.value ? 'active' : ''}"
+            onclick={() => updateFeatureSettings('summarize', { reasoningLevel: option.value })}
+          ></ButtonSet>
+        {/each}
       </div>
     </div>
 

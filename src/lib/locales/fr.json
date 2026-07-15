@@ -189,6 +189,15 @@
         "youtube_comment": "Commentaire YouTube",
         "override_note": "* Les prompts actifs remplacent les réglages de base."
       },
+      "reasoning": {
+        "title": "Raisonnement",
+        "off": "Désactivé",
+        "off_desc": "Réponse directe, plus rapide.",
+        "low": "Faible",
+        "low_desc": "Raisonnement léger.",
+        "medium": "Moyen",
+        "medium_desc": "Équilibre entre profondeur et vitesse."
+      },
       "comment_limit": "Limite de commentaires YouTube",
       "comment_limit_desc": "Nombre maximum de commentaires à analyser.",
       "uses_gemini_basic": "Utilise Gemini Basic"
@@ -215,13 +224,7 @@
       "select_model_label": "Modèle Gemini Advanced",
       "select_model_placeholder": "Sélectionnez un modèle",
       "select_gemini_model_aria_label": "Sélectionner un modèle Gemini",
-      "auto_fallback_label": "Repli automatique en cas de surcharge",
-      "thinking_level": "Niveau de réflexion",
-      "thinking_levels": {
-        "minimal": "Minimal",
-        "medium": "Moyen",
-        "high": "Élevé"
-      }
+      "auto_fallback_label": "Repli automatique en cas de surcharge"
     },
     "gemini_basic_config": {
       "api_key_label": "Clé API Gemini",
@@ -303,7 +306,15 @@
         "ask_own_question_in_chat": "Posez votre propre question dans le chat",
         "api_keys_info_restructured": "Les clés API sont gérées globalement. Allez dans l'onglet",
         "api_keys_link_text": "Fournisseurs et clés API",
-        "api_keys_info_restructured_end": "pour configurer les identifiants."
+        "api_keys_info_restructured_end": "pour configurer les identifiants.",
+        "reasoning_title": "Raisonnement",
+        "reasoning_description": "Contrôlez le niveau de raisonnement pour les questions Deep Dive.",
+        "reasoning_off": "Désactivé",
+        "reasoning_off_desc": "Réponse directe, le plus rapide.",
+        "reasoning_low": "Faible",
+        "reasoning_low_desc": "Raisonnement léger.",
+        "reasoning_medium": "Moyen",
+        "reasoning_medium_desc": "Équilibre entre profondeur et vitesse."
       }
     },
     "feature_model_picker": {

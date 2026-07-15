@@ -189,7 +189,16 @@
         "youtube_comment": "YouTube-Kommentar",
         "override_note": "* Benutzerdefinierte Prompts haben Vorrang vor den Basis-Einstellungen."
       },
-      "comment_limit": "YouTube-Kommentar-Limit",
+      "reasoning": {
+        "title": "Begründung",
+        "off": "Aus",
+        "off_desc": "Direkte Antwort, am schnellsten.",
+        "low": "Niedrig",
+        "low_desc": "Leichtes Denken.",
+        "medium": "Mittel",
+        "medium_desc": "Ausgewogene Tiefe und Geschwindigkeit."
+      },
+      "comment_limit": "YouTube-Kommentarlimit",
       "comment_limit_desc": "Maximale Anzahl der zu analysierenden Kommentare.",
       "uses_gemini_basic": "Verwendet Gemini Basic"
     },
@@ -215,13 +224,7 @@
       "select_model_label": "Gemini Advanced-Modell",
       "select_model_placeholder": "Modell auswählen",
       "select_gemini_model_aria_label": "Gemini-Modell auswählen",
-      "auto_fallback_label": "Automatischer Fallback bei Überlastung",
-      "thinking_level": "Denkebene",
-      "thinking_levels": {
-        "minimal": "Minimal",
-        "medium": "Mittel",
-        "high": "Hoch"
-      }
+      "auto_fallback_label": "Automatischer Fallback bei Überlastung"
     },
     "gemini_basic_config": {
       "api_key_label": "Gemini API-Schlüssel",
@@ -303,7 +306,15 @@
         "ask_own_question_in_chat": "Stellen Sie Ihre eigene Frage im Chat",
         "api_keys_info_restructured": "API-Schlüssel werden global verwaltet. Gehen Sie zum Tab",
         "api_keys_link_text": "Anbieter & API-Schlüssel",
-        "api_keys_info_restructured_end": "um Anmeldedaten zu konfigurieren."
+        "api_keys_info_restructured_end": "um Anmeldedaten zu konfigurieren.",
+        "reasoning_title": "Reasoning",
+        "reasoning_description": "Steuern Sie, wie viel Reasoning das Modell für Deep Dive-Fragen verwendet.",
+        "reasoning_off": "Aus",
+        "reasoning_off_desc": "Direkte Antwort, am schnellsten.",
+        "reasoning_low": "Niedrig",
+        "reasoning_low_desc": "Leichtes Reasoning.",
+        "reasoning_medium": "Mittel",
+        "reasoning_medium_desc": "Ausgewogene Tiefe und Geschwindigkeit."
       }
     },
     "feature_model_picker": {

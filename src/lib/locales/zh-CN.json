@@ -114,6 +114,15 @@
         "youtube_comment": "YouTube评论",
         "override_note": "* 激活的提示将覆盖基础设置。"
       },
+      "reasoning": {
+        "title": "推理",
+        "off": "关闭",
+        "off_desc": "直接回答，最快。",
+        "low": "低",
+        "low_desc": "轻度推理。",
+        "medium": "中",
+        "medium_desc": "平衡深度和速度。"
+      },
       "comment_limit": "YouTube评论限制",
       "comment_limit_desc": "分析评论的最大数量。",
       "uses_gemini_basic": "使用 Gemini 基础版"
@@ -140,13 +149,7 @@
       "select_model_label": "Gemini Advanced 模型",
       "select_model_placeholder": "选择模型",
       "select_gemini_model_aria_label": "选择 Gemini 模型",
-      "auto_fallback_label": "超载时自动回退",
-      "thinking_level": "思考水平",
-      "thinking_levels": {
-        "minimal": "最小",
-        "medium": "中",
-        "high": "高"
-      }
+      "auto_fallback_label": "超载时自动回退"
     },
     "gemini_basic_config": {
       "api_key_label": "Gemini API 密钥",
@@ -303,7 +306,15 @@
         "ask_own_question_in_chat": "在聊天中提出自己的问题",
         "api_keys_info_restructured": "API 密钥为全局管理。请前往",
         "api_keys_link_text": "服务商与 API 密钥",
-        "api_keys_info_restructured_end": "选项卡配置凭据。"
+        "api_keys_info_restructured_end": "选项卡配置凭据。",
+        "reasoning_title": "推理",
+        "reasoning_description": "控制模型在 Deep Dive 问题中使用多少推理。",
+        "reasoning_off": "关闭",
+        "reasoning_off_desc": "直接回答，最快。",
+        "reasoning_low": "低",
+        "reasoning_low_desc": "轻度推理。",
+        "reasoning_medium": "中等",
+        "reasoning_medium_desc": "平衡深度与速度。"
       }
     },
     "feature_model_picker": {

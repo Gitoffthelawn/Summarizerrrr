@@ -15,6 +15,9 @@
  * @property {object | undefined} [tools]
  * @property {object | undefined} [providerOptions]
  * @property {AbortSignal | undefined} [abortSignal]
+ * @property {string | undefined} [reasoning] - AI SDK portable reasoning level
+ *   (e.g. 'provider-default', 'low', 'medium', 'high'). When present the adapter
+ *   suppresses legacy Gemini thinking injection.
  */
 
 /**
@@ -60,6 +63,10 @@
  * @property {string | null} modelId
  * @property {object | null} usage
  * @property {object | null} error
+ * @property {string | undefined} [reasoningLevel] - Snapshot of the reasoning
+ *   level applied when this user message was sent. One of the four V1 values
+ *   ('provider-default', 'low', 'medium', 'high'). Missing on older records
+ *   (treated as 'provider-default').
  */
 
 /**

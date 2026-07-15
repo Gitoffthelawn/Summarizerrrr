@@ -102,6 +102,14 @@ function createRepository() {
     archiveConversation(id) {
       return this.updateConversationMetadata(id, { archived: true })
     },
+    async getMessage(id) {
+      return messages.get(id) || null
+    },
+    async markMessageStreaming(messageId) {
+      const msg = messages.get(messageId)
+      if (msg) msg.status = 'streaming'
+      return msg || null
+    },
   }
 }
 
@@ -311,5 +319,191 @@ describe('chat orchestration', () => {
     expect(fallbackWarnings).toContain(
       'The selected OpenAI Compatible profile was deleted. Falling back to the current Chat provider: Google Gemini.'
     )
+  })
+})
+
+describe('reasoning level snapshot', () => {
+  function createReasoningTestService() {
+    const repository = createRepository()
+    const streamRequestCalls = []
+    const service = createChatService({
+      repository,
+      sourceService: { getActiveTab: async () => ({ id: 1, title: 'Example' }) },
+      buildPipeline: createPipelineProbe().build,
+      streamRequest: async function* (req) {
+        streamRequestCalls.push(req)
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield { chunk: '', fullText: 'Answer', isComplete: true }
+      },
+    })
+    return { repository, service, streamRequestCalls }
+  }
+
+  it('send persists the normalized reasoning level on the user message and passes correct request options', async () => {
+    const { repository, service, streamRequestCalls } = createReasoningTestService()
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'Think hard',
+      settings,
+      sourceRequired: false,
+      reasoningLevel: 'high',
+    })
+
+    // Check persisted user message
+    const messages = await repository.listMessagesByConversation(conversation.id)
+    const userMsg = messages.find((m) => m.role === 'user')
+    expect(userMsg.reasoningLevel).toBe('high')
+
+    // Check that reasoning was passed in the stream request
+    expect(streamRequestCalls[0].reasoning).toBe('high')
+  })
+
+  it('normalizes invalid/missing reasoning values to provider-default', async () => {
+    const { repository, service, streamRequestCalls } = createReasoningTestService()
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    // Send with invalid value
+    await service.send({
+      conversation,
+      content: 'Whatever',
+      settings,
+      sourceRequired: false,
+      reasoningLevel: 'xhigh',
+    })
+
+    const messages = await repository.listMessagesByConversation(conversation.id)
+    const userMsg = messages.find((m) => m.role === 'user')
+    expect(userMsg.reasoningLevel).toBe('provider-default')
+
+    // Auto means no reasoning override in request
+    expect(streamRequestCalls[0].reasoning).toBeUndefined()
+  })
+
+  it('retry and regenerate reuse the stored level even if the current UI level has changed', async () => {
+    const { repository, service, streamRequestCalls } = createReasoningTestService()
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    // Original send with 'high'
+    const sendResult = await service.send({
+      conversation,
+      content: 'First message',
+      settings,
+      sourceRequired: false,
+      reasoningLevel: 'high',
+    })
+
+    const messages = await repository.listMessagesByConversation(conversation.id)
+    const userMsg = messages.find((m) => m.role === 'user')
+
+    // Retry — no new reasoningLevel parameter, should reuse stored 'high'
+    await service.retry({
+      conversation,
+      messages,
+      userMessageId: userMsg.id,
+      settings,
+    })
+
+    // The retry request should use 'high' from the stored message
+    expect(streamRequestCalls[1].reasoning).toBe('high')
+  })
+
+  it('edit snapshots the newly selected level on the new branch', async () => {
+    const { repository, service, streamRequestCalls } = createReasoningTestService()
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    // Original send with 'low'
+    await service.send({
+      conversation,
+      content: 'Original',
+      settings,
+      sourceRequired: false,
+      reasoningLevel: 'low',
+    })
+
+    const messages = await repository.listMessagesByConversation(conversation.id)
+    const userMsg = messages.find((m) => m.role === 'user')
+
+    // Edit with 'high' — the new branch should snapshot 'high'
+    await service.edit({
+      conversation,
+      messageId: userMsg.id,
+      content: 'Edited message',
+      reasoningLevel: 'high',
+      settings,
+    })
+
+    // The edit request should use 'high'
+    expect(streamRequestCalls[1].reasoning).toBe('high')
+
+    // Verify the new user message persisted 'high'
+    const allMessages = await repository.listMessagesByConversation(conversation.id)
+    const editedUserMsg = allMessages.find((m) => m.role === 'user' && m.content === 'Edited message')
+    expect(editedUserMsg.reasoningLevel).toBe('high')
+  })
+
+  it('existing messages without reasoningLevel still generate successfully (backward compat)', async () => {
+    const { repository, service, streamRequestCalls } = createReasoningTestService()
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    // Simulate an old message without reasoningLevel
+    const oldUser = await repository.addMessage(conversation.id, {
+      role: 'user',
+      content: 'Old message',
+      // no reasoningLevel field at all
+    })
+
+    // Retry on old message — should not crash, should default to provider-default
+    await service.retry({
+      conversation,
+      messages: [oldUser],
+      userMessageId: oldUser.id,
+      settings,
+    })
+
+    // No reasoning override should be sent
+    expect(streamRequestCalls[0].reasoning).toBeUndefined()
+  })
+
+  it('reasoning warnings from the stream completion event merge into contextWarnings', async () => {
+    const repository = createRepository()
+    const collectedWarnings = []
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const service = createChatService({
+      repository,
+      sourceService: {
+        getActiveTab: async () => ({ id: 1, title: 'Example' }),
+        getCachedActiveSource: async () => ({ source: activeSource }),
+      },
+      buildPipeline: async (input) => ({
+        system: 'System',
+        messages: [{ role: 'user', content: input.currentUserMessage.content }],
+        warnings: ['Pipeline warning from context assembly'],
+      }),
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield {
+          chunk: '',
+          fullText: 'Answer',
+          isComplete: true,
+          reasoningWarnings: ['High reasoning is not supported by this model; the provider used Medium.'],
+        }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'Test warnings',
+      reasoningLevel: 'high',
+      settings,
+      onWarnings: (warnings) => { collectedWarnings.push(...warnings) },
+    })
+
+    // Should contain both the pipeline warning and the reasoning warning
+    expect(collectedWarnings).toContain('Pipeline warning from context assembly')
+    expect(collectedWarnings).toContain('High reasoning is not supported by this model; the provider used Medium.')
   })
 })

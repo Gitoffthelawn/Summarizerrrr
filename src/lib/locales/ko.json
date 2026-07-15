@@ -189,6 +189,15 @@
         "youtube_comment": "YouTube 댓글",
         "override_note": "* 기본 설정은 활성 사용자 지정 프롬프트로 재정의됩니다."
       },
+      "reasoning": {
+        "title": "추론",
+        "off": "끄기",
+        "off_desc": "직접 답변, 가장 빠름.",
+        "low": "낮음",
+        "low_desc": "가벼운 추론.",
+        "medium": "보통",
+        "medium_desc": "깊이와 속도의 균형."
+      },
       "comment_limit": "YouTube 댓글 제한",
       "comment_limit_desc": "분석할 댓글의 최대 수.",
       "uses_gemini_basic": "Gemini Basic 사용"
@@ -215,13 +224,7 @@
       "select_model_label": "Gemini 고급 모델",
       "select_model_placeholder": "모델 선택",
       "select_gemini_model_aria_label": "Gemini 모델 선택",
-      "auto_fallback_label": "과부하 시 자동 폴백",
-      "thinking_level": "생각 수준",
-      "thinking_levels": {
-        "minimal": "최소",
-        "medium": "중간",
-        "high": "높음"
-      }
+      "auto_fallback_label": "과부하 시 자동 폴백"
     },
     "gemini_basic_config": {
       "api_key_label": "Gemini API 키",
@@ -303,7 +306,15 @@
         "ask_own_question_in_chat": "채팅에서 자신만의 질문하기",
         "api_keys_info_restructured": "API 키는 전역으로 관리됩니다. ",
         "api_keys_link_text": "제공자 및 API 키",
-        "api_keys_info_restructured_end": " 탭에서 자격 증명을 설정하십시오."
+        "api_keys_info_restructured_end": " 탭에서 자격 증명을 설정하십시오.",
+        "reasoning_title": "추론",
+        "reasoning_description": "Deep Dive 질문에 대한 모델의 추론 수준을 제어합니다.",
+        "reasoning_off": "끄기",
+        "reasoning_off_desc": "직접 답변, 가장 빠름.",
+        "reasoning_low": "낮음",
+        "reasoning_low_desc": "가벼운 추론.",
+        "reasoning_medium": "보통",
+        "reasoning_medium_desc": "깊이와 속도의 균형."
       }
     },
     "feature_model_picker": {

@@ -69,4 +69,41 @@ describe('chat store tab ownership', () => {
     expect(chatState.conversation.id).toBe('conversation-c')
     expect(chatState.pendingAttachments).toEqual([{ tabId: TAB_B, title: 'Tab B' }])
   })
+
+  it('isolates reasoning level per browser tab', async () => {
+    await syncChatForActiveTab(TAB_A, { url: 'https://a.example' })
+    chatState.reasoningLevel = 'high'
+
+    await syncChatForActiveTab(TAB_B, { url: 'https://b.example' })
+    expect(chatState.reasoningLevel).toBeNull() // fresh tab starts with null sentinel
+
+    chatState.reasoningLevel = 'low'
+
+    await syncChatForActiveTab(TAB_A)
+    expect(chatState.reasoningLevel).toBe('high') // Tab A retains its own value
+
+    await syncChatForActiveTab(TAB_B)
+    expect(chatState.reasoningLevel).toBe('low') // Tab B retains its own value
+  })
+
+  it('null sentinel resolves to the global default at read time (cold-start)', async () => {
+    // Import effectiveReasoningLevel to test resolution
+    const { effectiveReasoningLevel } = await import('@/lib/api/reasoningConfig.js')
+
+    await syncChatForActiveTab(TAB_A, { url: 'https://a.example' })
+    // Session starts with null sentinel
+    expect(chatState.reasoningLevel).toBeNull()
+
+    // Before settings are loaded, null resolves to provider-default
+    expect(effectiveReasoningLevel(chatState.reasoningLevel, {})).toBe('provider-default')
+    expect(effectiveReasoningLevel(chatState.reasoningLevel, null)).toBe('provider-default')
+
+    // After settings load with a non-Auto default, null resolves to it
+    const settingsWithDefault = { chat: { defaultReasoningLevel: 'high' } }
+    expect(effectiveReasoningLevel(chatState.reasoningLevel, settingsWithDefault)).toBe('high')
+
+    // Once the user explicitly picks a level, it overrides the default
+    chatState.reasoningLevel = 'medium'
+    expect(effectiveReasoningLevel(chatState.reasoningLevel, settingsWithDefault)).toBe('medium')
+  })
 })

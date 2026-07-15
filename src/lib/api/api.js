@@ -17,6 +17,10 @@ import {
   resolveAdapterCall,
   resolveProviderEntry,
 } from '@/lib/providers/providerRegistry.js'
+import {
+  buildReasoningRequestOptions,
+  normalizeTaskReasoningLevel,
+} from '@/lib/api/reasoningConfig.js'
 
 /**
  * Checks if the selected provider supports streaming.
@@ -39,7 +43,7 @@ export function providerSupportsStreaming(selectedProviderId) {
 /**
  * Resolves the provider and settings for summarization.
  * @param {object} userSettings - The current settings object
- * @returns {{ providerId: string, settings: object }} Resolved adapter provider ID and settings.
+ * @returns {{ providerId: string, settings: object, featureProviderId: string, modelId: string }} Resolved adapter provider ID, settings, and feature-level identifiers.
  * @throws {Error} If API key is not configured
  */
 export function resolveSummarizeProvider(userSettings) {
@@ -65,7 +69,15 @@ export function resolveSummarizeProvider(userSettings) {
     )
   }
 
-  return resolveAdapterCall(providerId, modelId, userSettings)
+  // Return both the adapter call result and the feature-level identifiers.
+  // featureProviderId is the original provider id (e.g. 'openai-compatible-profile-1'),
+  // while providerId from resolveAdapterCall is the collapsed adapter id (e.g. 'openaiCompatible').
+  // Reasoning lookup needs the feature-level id to pick the correct provider row.
+  return {
+    ...resolveAdapterCall(providerId, modelId, userSettings),
+    featureProviderId: providerId,
+    modelId,
+  }
 }
 
 
@@ -81,7 +93,14 @@ export async function summarizeContent(text, contentType, abortSignal = null) {
   await loadSettings()
 
   const userSettings = settings
-  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId } = resolveSummarizeProvider(userSettings)
+
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    modelId
+  )
 
   let systemInstruction, userPrompt
 
@@ -151,10 +170,10 @@ export async function summarizeContent(text, contentType, abortSignal = null) {
       resolvedSettings,
       systemInstruction,
       userPrompt,
-      { abortSignal }
+      { abortSignal, ...reasoningOptions }
     )
   } catch (e) {
-    console.error(`AI SDK Error for ${selectedProviderId}:`, e)
+    console.error(`AI SDK Error for ${providerId}:`, e)
     throw e
   }
 }
@@ -164,7 +183,14 @@ export async function* summarizeContentStream(text, contentType, abortSignal = n
   await loadSettings()
 
   const userSettings = settings
-  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId } = resolveSummarizeProvider(userSettings)
+
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    modelId
+  )
 
   // Check browser compatibility for streaming
   const browserCompatibility = getBrowserCompatibility()
@@ -259,7 +285,8 @@ export async function* summarizeContentStream(text, contentType, abortSignal = n
       userPrompt,
       {
         useSmoothing: browserCompatibility.streamingOptions.useSmoothing,
-        abortSignal
+        abortSignal,
+        ...reasoningOptions,
       }
     )
 
@@ -267,7 +294,7 @@ export async function* summarizeContentStream(text, contentType, abortSignal = n
       yield chunk
     }
   } catch (e) {
-    console.error(`AI SDK Stream Error for ${selectedProviderId}:`, e)
+    console.error(`AI SDK Stream Error for ${providerId}:`, e)
 
     // Check if this is an abort error - if so, just return (don't throw)
     if (e.name === 'AbortError' || e.message?.includes('aborted')) {
@@ -294,7 +321,14 @@ export async function enhancePrompt(userPrompt) {
   await loadSettings()
 
   const userSettings = settings
-  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId } = resolveSummarizeProvider(userSettings)
+
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    modelId
+  )
 
   const contentConfig = promptBuilders['promptEnhance']
 
@@ -313,10 +347,11 @@ export async function enhancePrompt(userPrompt) {
       providerId,
       resolvedSettings,
       systemInstruction,
-      enhancedPrompt
+      enhancedPrompt,
+      { ...reasoningOptions }
     )
   } catch (e) {
-    console.error(`AI SDK Error for ${selectedProviderId}:`, e)
+    console.error(`AI SDK Error for ${providerId}:`, e)
     throw e
   }
 }
@@ -331,7 +366,14 @@ export async function summarizeChapters(timestampedTranscript, abortSignal = nul
   await loadSettings()
 
   const userSettings = settings
-  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId } = resolveSummarizeProvider(userSettings)
+
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    modelId
+  )
 
   const chapterConfig = promptBuilders['chapter']
 
@@ -353,10 +395,10 @@ export async function summarizeChapters(timestampedTranscript, abortSignal = nul
       resolvedSettings,
       systemInstruction,
       userPrompt,
-      { abortSignal }
+      { abortSignal, ...reasoningOptions }
     )
   } catch (e) {
-    console.error(`AI SDK Error for ${selectedProviderId} (Chapters):`, e)
+    console.error(`AI SDK Error for ${providerId} (Chapters):`, e)
     throw e
   }
 }
@@ -366,7 +408,14 @@ export async function* summarizeChaptersStream(timestampedTranscript, abortSigna
   await loadSettings()
 
   const userSettings = settings
-  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId } = resolveSummarizeProvider(userSettings)
+
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    modelId
+  )
 
   // Check browser compatibility for streaming
   const browserCompatibility = getBrowserCompatibility()
@@ -398,7 +447,8 @@ export async function* summarizeChaptersStream(timestampedTranscript, abortSigna
       userPrompt,
       {
         useSmoothing: browserCompatibility.streamingOptions.useSmoothing,
-        abortSignal
+        abortSignal,
+        ...reasoningOptions,
       }
     )
 
@@ -407,7 +457,7 @@ export async function* summarizeChaptersStream(timestampedTranscript, abortSigna
     }
   } catch (e) {
     console.error(
-      `AI SDK Stream Error for ${selectedProviderId} (Chapters):`,
+      `AI SDK Stream Error for ${providerId} (Chapters):`,
       e
     )
 
@@ -435,7 +485,14 @@ export async function* summarizeContentStreamEnhanced(text, contentType) {
   await loadSettings()
 
   const userSettings = settings
-  const { providerId, settings: resolvedSettings } = resolveSummarizeProvider(userSettings)
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId: featureModelId } = resolveSummarizeProvider(userSettings)
+
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    featureModelId
+  )
 
   // Check browser compatibility for streaming
   const browserCompatibility = getBrowserCompatibility()
@@ -527,14 +584,14 @@ export async function* summarizeContentStreamEnhanced(text, contentType) {
       resolvedSettings,
       systemInstruction,
       userPrompt,
-      { useSmoothing: browserCompatibility.streamingOptions.useSmoothing }
+      { useSmoothing: browserCompatibility.streamingOptions.useSmoothing, ...reasoningOptions }
     )
 
     for await (const streamData of streamGenerator) {
       yield streamData
     }
   } catch (e) {
-    console.error(`AI SDK Enhanced Stream Error for ${selectedProviderId}:`, e)
+    console.error(`AI SDK Enhanced Stream Error for ${providerId}:`, e)
 
     // Add Firefox mobile specific error handling
     if (browserCompatibility.isFirefoxMobile && e.message.includes('flush')) {

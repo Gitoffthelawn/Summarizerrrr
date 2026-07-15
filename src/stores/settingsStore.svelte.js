@@ -26,7 +26,6 @@ const DEFAULT_SETTINGS = {
   geminiAdditionalApiKeys: [], // New storage for extra keys
   selectedGeminiModel: 'gemini-3-flash-preview',
   geminiEnableAutoFallback: true, // Enable auto-fallback for both modes
-  geminiThinkingLevel: 'minimal', // 'minimal' | 'medium' | 'high'
   openaiCompatibleApiKey: '',
   openaiCompatibleBaseUrl: '',
   selectedOpenAICompatibleModel: '',
@@ -147,6 +146,7 @@ const DEFAULT_SETTINGS = {
       customModel: 'gemma-4-26b-a4b-it',
       autoGenerate: true,
       defaultChatProvider: 'gemini',
+      reasoningLevel: 'off',
     },
     cloudSync: {
       enabled: true, // Default enabled for backward compatibility
@@ -155,6 +155,7 @@ const DEFAULT_SETTINGS = {
   summarize: {
     provider: 'gemini',
     model: 'gemini-3-flash-preview',
+    reasoningLevel: 'off',
   },
   chat: {
     provider: 'gemini',
@@ -320,6 +321,7 @@ function migrateFeatureModelSettings(cleanStoredSettings, isSummarizeAbsent, isC
     }
 
     settings.summarize = {
+      ...(settings.summarize || {}),
       provider,
       model,
     }
@@ -371,9 +373,13 @@ export function normalizeStoredSettings(rawSettings) {
   // 1. Sanitize the settings object
   let cleanSettings = sanitizeSettings(migratedSettings)
 
-  // 2. Determine if the summarize or chat blocks are absent *before* deep-merging defaults
-  const isSummarizeAbsent = cleanSettings.summarize === undefined
-  const isChatAbsent = cleanSettings.chat === undefined
+  // 2. Determine if the summarize or chat blocks are absent *before* deep-merging defaults.
+  // Test `provider`, not the block itself: migrateLegacyGeminiAdvanced synthesises a
+  // `summarize` block to carry the migrated reasoning level, and a block holding only
+  // that level must still be treated as absent so the legacy provider/model derivation
+  // in step 4 still runs.
+  const isSummarizeAbsent = cleanSettings.summarize?.provider === undefined
+  const isChatAbsent = cleanSettings.chat?.provider === undefined
 
   // 3. Deep-merge of the summarize and chat blocks with defaults
   if (!isSummarizeAbsent) {

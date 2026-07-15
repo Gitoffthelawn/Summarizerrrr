@@ -172,6 +172,7 @@ describe('Feature Model Migration & Normalization', () => {
     expect(settings.summarize).toEqual({
       provider: 'deepseek',
       model: 'deepseek-chat',
+      reasoningLevel: 'off',
     })
     expect(settings.chat).toEqual({
       provider: 'deepseek',
@@ -202,5 +203,23 @@ describe('Feature Model Migration & Normalization', () => {
     expect(settings.chat.provider).toBe('gemini')
     expect(settings.chat.model).toBe('gemini-3-flash-preview')
     expect(settings.chat.defaultReasoningLevel).toBe('provider-default')
+  })
+
+  it('preserves the legacy provider when geminiThinkingLevel forces a summarize block', () => {
+    // Regression: migrateLegacyGeminiAdvanced synthesises `summarize` to carry the
+    // migrated reasoning level. That must not be mistaken for a user-authored block,
+    // or the legacy provider/model derivation is skipped and the provider silently
+    // resets to Gemini.
+    const legacy = {
+      isAdvancedMode: true,
+      selectedProvider: 'deepseek',
+      selectedDeepseekModel: 'deepseek-chat',
+      geminiThinkingLevel: 'high',
+    }
+    const result = normalizeStoredSettings(legacy)
+    expect(result.summarize.provider).toBe('deepseek')
+    expect(result.summarize.model).toBe('deepseek-chat')
+    // and the migrated level survives the derivation
+    expect(result.summarize.reasoningLevel).toBe('medium')
   })
 })

@@ -1,3 +1,8 @@
+---
+type: plan
+status: done
+---
+
 # OpenRouter Catalog Cross-Reference — V1
 
 > **How to use this doc:** Self-contained execution plan, intended to be run in

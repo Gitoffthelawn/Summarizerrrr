@@ -16,7 +16,6 @@ export const VALID_SETTING_KEYS = [
   'geminiAdditionalApiKeys',
   'selectedGeminiModel',
   'geminiEnableAutoFallback',
-  'geminiThinkingLevel',
   'openaiCompatibleApiKey',
   'openaiCompatibleBaseUrl',
   'selectedOpenAICompatibleModel',
@@ -159,7 +158,8 @@ export function migrateLegacyGeminiAdvanced(raw) {
     raw.geminiAdvancedBackupModels === undefined &&
     raw.summarize?.provider !== 'geminiAdvanced' &&
     raw.chat?.provider !== 'geminiAdvanced' &&
-    raw.tools?.deepDive?.customProvider !== 'geminiAdvanced'
+    raw.tools?.deepDive?.customProvider !== 'geminiAdvanced' &&
+    !raw.geminiThinkingLevel
   ) {
     return raw
   }
@@ -190,11 +190,14 @@ export function migrateLegacyGeminiAdvanced(raw) {
     s.selectedGeminiModel = s.selectedGeminiAdvancedModel
   }
 
-  // --- 3. Thinking level: prefer active mode's value ---
-  if (s.geminiAdvancedThinkingLevel && !s.geminiThinkingLevel) {
-    s.geminiThinkingLevel = s.geminiAdvancedThinkingLevel
-  } else if (s.isAdvancedMode && s.geminiAdvancedThinkingLevel) {
-    s.geminiThinkingLevel = s.geminiAdvancedThinkingLevel
+  // --- 3. Thinking level migration ---
+  const legacyThinking = s.geminiThinkingLevel || s.geminiAdvancedThinkingLevel
+  if (legacyThinking) {
+    const mapped = legacyThinking === 'minimal' ? 'off' : 'medium'
+    s.summarize = {
+      ...(s.summarize || {}),
+      reasoningLevel: mapped,
+    }
   }
 
   // --- 4. Auto-fallback toggle ---
@@ -229,6 +232,7 @@ export function migrateLegacyGeminiAdvanced(raw) {
   delete s.geminiAdvancedThinkingLevel
   delete s.geminiAdvancedEnableAutoFallback
   delete s.geminiAdvancedBackupModels
+  delete s.geminiThinkingLevel
 
   return s
 }

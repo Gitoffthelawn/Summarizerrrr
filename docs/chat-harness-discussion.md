@@ -1,3 +1,8 @@
+---
+type: discussion
+status: draft
+---
+
 # Chat Harness — Discussion Notes (Context for Next Session)
 
 > **Status:** Discussion / design only. NOT approved for implementation, NO plan written yet.

@@ -7,6 +7,7 @@
   import TabMentionMenu from './TabMentionMenu.svelte'
   import ChatComposerInput from './ChatComposerInput.svelte'
   import ChatRichTextInput from './ChatRichTextInput.svelte'
+  import ChatReasoningSelect from './ChatReasoningSelect.svelte'
   import {
     chatState,
     chatTabsState,
@@ -18,6 +19,7 @@
     removeTabAttachment,
     dismissActiveSource,
     restoreActiveSource,
+    notifyChatDraftChanged,
   } from '@/stores/chatStore.svelte.js'
   import { skillService } from '@/lib/chat/skills/skillService.js'
   import { settings } from '@/stores/settingsStore.svelte.js'
@@ -27,8 +29,45 @@
     iconForSourceKind,
     activeSourceLabelForUrl,
   } from '@/services/chat/sourceResolution.js'
+  import {
+    getChatReasoningOptions,
+    effectiveReasoningLevel,
+  } from '@/lib/api/reasoningConfig.js'
 
   let { autofocus = false } = $props()
+
+  // --- Reasoning effort selector ---
+  // Derive the providerId from the active conversation, falling back to the
+  // user's chat settings before a conversation exists.
+  let activeProviderId = $derived(
+    chatState.conversation?.providerId || settings.chat?.provider || ''
+  )
+  let activeModelId = $derived(
+    chatState.conversation?.modelId || settings.chat?.model || null
+  )
+  let reasoningOptions = $derived(
+    getChatReasoningOptions(activeProviderId, activeModelId)
+  )
+  let displayedReasoningLevel = $derived(
+    effectiveReasoningLevel(chatState.reasoningLevel, settings)
+  )
+
+  // Narrow $effect: if the available options shrink and the current value is
+  // no longer valid, reset to Auto. This runs when a provider switch or
+  // restored conversation changes the allowed options.
+  $effect(() => {
+    const validValues = new Set(reasoningOptions.map((o) => o.value))
+    const current = effectiveReasoningLevel(chatState.reasoningLevel, settings)
+    if (!validValues.has(current)) {
+      chatState.reasoningLevel = 'provider-default'
+      notifyChatDraftChanged()
+    }
+  })
+
+  function handleReasoningChange(level) {
+    chatState.reasoningLevel = level
+    notifyChatDraftChanged()
+  }
 
   // The effective source kind for the current page. Precedence mirrors
   // chatService.prepareGroundedAttachments: skill sourceMode → auto.
@@ -270,23 +309,31 @@
         />
       {/if}
 
-      <button
-        type="button"
-        class="absolute bottom-1.5 right-1.5 z-20 flex size-10 items-center justify-center rounded-full transition-all duration-300 {chatState.isSending
-          ? 'bg-error text-whiteblack hover:bg-error/90'
-          : canSendChat()
-            ? 'dark:bg-white !bg-black !text-white ring-black hover:ring-2 dark:ring-white'
-            : '!scale-75 !bg-muted/30 text-muted cursor-not-allowed'}"
-        disabled={!chatState.isSending && !canSendChat()}
-        aria-label={chatState.isSending ? 'Stop generating' : 'Send message'}
-        onclick={handleSend}
-      >
-        {#if chatState.isSending}
-          <Icon icon="heroicons:stop-solid" width="18" height="18" />
-        {:else}
-          <Icon icon="heroicons:arrow-long-right" width="20" height="20" />
-        {/if}
-      </button>
+      <div class="absolute bottom-1.5 right-1.5 flex items-center gap-1.5">
+        <ChatReasoningSelect
+          value={displayedReasoningLevel}
+          options={reasoningOptions}
+          disabled={chatState.isSending}
+          onchange={handleReasoningChange}
+        />
+        <button
+          type="button"
+          class="z-20 flex size-10 items-center justify-center rounded-full transition-all duration-300 {chatState.isSending
+            ? 'bg-error text-whiteblack hover:bg-error/90'
+            : canSendChat()
+              ? 'dark:bg-white !bg-black !text-white ring-black hover:ring-2 dark:ring-white'
+              : '!scale-75 !bg-muted/30 text-muted cursor-not-allowed'}"
+          disabled={!chatState.isSending && !canSendChat()}
+          aria-label={chatState.isSending ? 'Stop generating' : 'Send message'}
+          onclick={handleSend}
+        >
+          {#if chatState.isSending}
+            <Icon icon="heroicons:stop-solid" width="18" height="18" />
+          {:else}
+            <Icon icon="heroicons:arrow-long-right" width="20" height="20" />
+          {/if}
+        </button>
+      </div>
     </div>
     {#if composerError}<p class="mt-1 text-xs text-error">
         {composerError}

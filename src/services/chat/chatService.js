@@ -14,6 +14,10 @@ import {
   getProvider,
 } from '@/lib/providers/providerRegistry.js'
 import { isOpenAICompatibleProfileId } from '@/lib/providers/openAICompatibleProfiles.js'
+import {
+  normalizeChatReasoningLevel,
+  buildReasoningRequestOptions,
+} from '@/lib/api/reasoningConfig.js'
 
 async function* defaultStreamRequest(request) {
   const {
@@ -255,12 +259,18 @@ export function createChatService({
         settings
       )
 
+      // Read the reasoning level snapshot from the user message (falls back
+      // to 'provider-default' for older records that lack the field).
+      const reasoningLevel = normalizeChatReasoningLevel(currentUserMessage.reasoningLevel)
+      const reasoningOptions = buildReasoningRequestOptions(resolvedAdapterId, reasoningLevel)
+
       for await (const event of streamRequest({
         providerId: resolvedAdapterId,
         settings: resolvedSettings,
         system: pipeline.system,
         messages: pipeline.messages,
         abortSignal: abortController.signal,
+        ...reasoningOptions,
       })) {
         if (event.isComplete) {
           usage = event.usage || null
@@ -273,6 +283,12 @@ export function createChatService({
               window: pipeline.capabilities?.contextWindowTokens,
               source: pipeline.capabilities?.source,
             })
+          }
+          // Merge any reasoning-related warnings from the AI SDK into context
+          // warnings so the user sees them alongside pipeline warnings.
+          if (event.reasoningWarnings?.length) {
+            const existing = pipeline.warnings || []
+            onWarnings?.([...existing, ...event.reasoningWarnings])
           }
           continue
         }
@@ -345,6 +361,7 @@ export function createChatService({
       settings,
       abortController = new AbortController(),
       sourceRequired = true,
+      reasoningLevel,
       onUserMessage,
       onChunk,
       onWarnings,
@@ -363,11 +380,13 @@ export function createChatService({
 
       const history = await repository.getGenerationPath(conversation.id)
 
+      const normalizedReasoningLevel = normalizeChatReasoningLevel(reasoningLevel)
       const userMessage = await repository.addMessage(conversation.id, {
         role: 'user',
         content: String(content || '').trim(),
         skillInvocation,
         attachmentRefs,
+        reasoningLevel: normalizedReasoningLevel,
       })
       onUserMessage?.(userMessage)
 
@@ -428,18 +447,20 @@ export function createChatService({
       return repository.archiveConversation(id)
     },
 
-    async edit({ conversation, messageId, content, settings, abortController, onChunk, onWarnings, onDiagnostics }) {
+    async edit({ conversation, messageId, content, reasoningLevel, settings, abortController, onChunk, onWarnings, onDiagnostics }) {
       const original = await repository.getMessage(messageId)
       if (!original) throw new Error('The message to edit was not found.')
       if (original.role !== 'user') throw new Error('Only user messages can be edited.')
 
       // Create a new user sibling with the same parentId as the edited message
+      const normalizedReasoningLevel = normalizeChatReasoningLevel(reasoningLevel)
       const newUser = await repository.addMessage(conversation.id, {
         role: 'user',
         content: String(content || '').trim(),
         skillInvocation: original.skillInvocation,
         attachmentRefs: original.attachmentRefs,
         parentId: original.parentId,
+        reasoningLevel: normalizedReasoningLevel,
       })
 
       const { history, currentUserMessage } = await repository.getGenerationContextForUser(newUser.id)
@@ -566,12 +587,17 @@ export function createChatService({
           settings
         )
 
+        // Reuse the originating user turn's reasoning snapshot for Continue.
+        const reasoningLevel = normalizeChatReasoningLevel(currentUserMessage.reasoningLevel)
+        const reasoningOptions = buildReasoningRequestOptions(resolvedAdapterId, reasoningLevel)
+
         for await (const event of streamRequest({
           providerId: resolvedAdapterId,
           settings: resolvedSettings,
           system: pipeline.system,
           messages: pipeline.messages,
           abortSignal: controller.signal,
+          ...reasoningOptions,
         })) {
           if (event.isComplete) {
             usage = event.usage || null
@@ -584,6 +610,11 @@ export function createChatService({
                 window: pipeline.capabilities?.contextWindowTokens,
                 source: pipeline.capabilities?.source,
               })
+            }
+            // Merge any reasoning-related warnings from the AI SDK.
+            if (event.reasoningWarnings?.length) {
+              const existing = pipeline.warnings || []
+              onWarnings?.([...existing, ...event.reasoningWarnings])
             }
             continue
           }

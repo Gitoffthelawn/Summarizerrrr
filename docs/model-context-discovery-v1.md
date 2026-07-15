@@ -1,3 +1,8 @@
+---
+type: plan
+status: done
+---
+
 # Automatic Model Context-Window Discovery — V1
 
 > **How to use this doc:** Self-contained execution plan, intended to be run in

@@ -1,3 +1,8 @@
+---
+type: plan
+status: done
+---
+
 # Chat message-graph roadmap
 
 **What this is:** a phased, self-contained implementation plan for evolving the chat harness from a flat linear

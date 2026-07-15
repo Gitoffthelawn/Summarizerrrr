@@ -189,6 +189,15 @@
         "youtube_comment": "YouTube Comment",
         "override_note": "* Active prompts override basic settings."
       },
+      "reasoning": {
+        "title": "Reasoning",
+        "off": "Off",
+        "off_desc": "Answer directly, fastest.",
+        "low": "Low",
+        "low_desc": "Light reasoning.",
+        "medium": "Medium",
+        "medium_desc": "Balanced depth and speed."
+      },
       "comment_limit": "YouTube Comment Limit",
       "comment_limit_desc": "Maximum number of comments to analyze.",
       "uses_gemini_basic": "Uses Gemini Basic"
@@ -215,13 +224,7 @@
       "select_model_label": "Gemini Advanced Model",
       "select_model_placeholder": "Select a model",
       "select_gemini_model_aria_label": "Select Gemini Model",
-      "auto_fallback_label": "Auto-Fallback on Overload",
-      "thinking_level": "Thinking Level",
-      "thinking_levels": {
-        "minimal": "Minimal",
-        "medium": "Medium",
-        "high": "High"
-      }
+      "auto_fallback_label": "Auto-Fallback on Overload"
     },
     "gemini_basic_config": {
       "api_key_label": "Gemini API Key",
@@ -229,13 +232,7 @@
       "select_model_label": "Select Gemini Model",
       "placeholder_additional_key": "Enter Additional Gemini API Key #{index}",
       "remove_api_key": "Remove API Key",
-      "add_key_for_higher_limit": "Add key for higher limit",
-      "thinking_level": "Thinking Level",
-      "thinking_levels": {
-        "minimal": "Minimal",
-        "medium": "Medium",
-        "high": "High"
-      }
+      "add_key_for_higher_limit": "Add key for higher limit"
     },
     "ollama_config": {
       "endpoint_label": "Ollama Endpoint",
@@ -309,7 +306,15 @@
         "ask_own_question_in_chat": "Ask your own question",
         "api_keys_info_restructured": "API Keys are managed globally. Go to the",
         "api_keys_link_text": "Providers & API Keys",
-        "api_keys_info_restructured_end": "tab to configure credentials."
+        "api_keys_info_restructured_end": "tab to configure credentials.",
+        "reasoning_title": "Reasoning",
+        "reasoning_description": "Control how much reasoning the model uses for Deep Dive questions.",
+        "reasoning_off": "Off",
+        "reasoning_off_desc": "Answer directly, fastest.",
+        "reasoning_low": "Low",
+        "reasoning_low_desc": "Light reasoning.",
+        "reasoning_medium": "Medium",
+        "reasoning_medium_desc": "Balanced depth and speed."
       }
     },
     "feature_model_picker": {

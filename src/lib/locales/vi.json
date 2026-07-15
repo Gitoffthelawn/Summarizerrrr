@@ -189,6 +189,15 @@
         "youtube_comment": "Bình luận YouTube",
         "override_note": "* Prompt tùy chỉnh sẽ ghi đè cài đặt mặc định."
       },
+      "reasoning": {
+        "title": "Suy luận",
+        "off": "Tắt",
+        "off_desc": "Trả lời trực tiếp, nhanh nhất.",
+        "low": "Thấp",
+        "low_desc": "Suy luận nhẹ.",
+        "medium": "Trung bình",
+        "medium_desc": "Cân bằng độ sâu và tốc độ."
+      },
       "comment_limit": "Giới hạn bình luận YouTube",
       "comment_limit_desc": "Số lượng bình luận tối đa để phân tích.",
       "uses_gemini_basic": "Sử dụng Gemini Cơ bản"
@@ -215,13 +224,7 @@
       "select_model_label": "Mô hình Gemini Advanced",
       "select_model_placeholder": "Chọn một mô hình",
       "select_gemini_model_aria_label": "Chọn mô hình Gemini",
-      "auto_fallback_label": "Tự động chuyển đổi khi quá tải",
-      "thinking_level": "Mức độ suy nghĩ",
-      "thinking_levels": {
-        "minimal": "Tối thiểu",
-        "medium": "Trung bình",
-        "high": "Cao"
-      }
+      "auto_fallback_label": "Tự động chuyển đổi khi quá tải"
     },
     "gemini_basic_config": {
       "api_key_label": "Khóa API Gemini",
@@ -229,13 +232,7 @@
       "select_model_label": "Chọn mô hình Gemini",
       "placeholder_additional_key": "Nhập khóa API Gemini bổ sung #{index}",
       "remove_api_key": "Xóa khóa API",
-      "add_key_for_higher_limit": "Thêm key để tăng giới hạn",
-      "thinking_level": "Mức độ suy nghĩ",
-      "thinking_levels": {
-        "minimal": "Tối thiểu",
-        "medium": "Trung bình",
-        "high": "Cao"
-      }
+      "add_key_for_higher_limit": "Thêm key để tăng giới hạn"
     },
     "ollama_config": {
       "endpoint_label": "Điểm cuối Ollama",
@@ -309,7 +306,15 @@
         "ask_own_question_in_chat": "Đặt câu hỏi của bạn",
         "api_keys_info_restructured": "API Keys được quản lý toàn cục. Đi tới tab",
         "api_keys_link_text": "Providers & API Keys",
-        "api_keys_info_restructured_end": "để cấu hình thông tin đăng nhập."
+        "api_keys_info_restructured_end": "để cấu hình thông tin đăng nhập.",
+        "reasoning_title": "Suy luận",
+        "reasoning_description": "Điều chỉnh mức độ suy luận cho câu hỏi Deep Dive.",
+        "reasoning_off": "Tắt",
+        "reasoning_off_desc": "Trả lời trực tiếp, nhanh nhất.",
+        "reasoning_low": "Thấp",
+        "reasoning_low_desc": "Suy luận nhẹ.",
+        "reasoning_medium": "Trung bình",
+        "reasoning_medium_desc": "Cân bằng độ sâu và tốc độ."
       }
     },
     "feature_model_picker": {

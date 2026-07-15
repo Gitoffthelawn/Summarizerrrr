@@ -1,3 +1,8 @@
+---
+type: plan
+status: done
+---
+
 # Chat Harness — Phased Implementation Plan
 
 > **Status:** Proposed implementation plan; no phase has been implemented.
