@@ -6,6 +6,15 @@ import ChatModelSelect from '../../../src/components/chat/ChatModelSelect.svelte
 // bits-ui scrollIntoView stub
 HTMLElement.prototype.scrollIntoView ||= vi.fn()
 
+const scrollLockMock = vi.hoisted(() => ({
+  acquire: vi.fn(),
+  release: vi.fn(),
+}))
+
+vi.mock('@/lib/ui/overlayScrollLock.js', () => ({
+  acquireOverlayScrollLock: scrollLockMock.acquire,
+}))
+
 // Mock svelte-i18n
 vi.mock('svelte-i18n', () => {
   const store = (/** @type {string} */ key, /** @type {object|undefined} */ opts) => {
@@ -99,6 +108,7 @@ function mountModelSelect(props = {}) {
 describe('ChatModelSelect', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    scrollLockMock.acquire.mockReturnValue(scrollLockMock.release)
     document.body.innerHTML = ''
     settingsMock = {
       chat: {
@@ -155,6 +165,22 @@ describe('ChatModelSelect', () => {
     expect(options).toContain('Gpt 5 mini')
     expect(options.some((label) => label.startsWith('Default'))).toBe(false)
     expect(options.some((label) => label.includes('Google Gemini'))).toBe(false)
+
+    host.remove()
+  })
+
+  it('locks the OverlayScrollbars viewport while the menu is open', () => {
+    const host = mountModelSelect()
+
+    host.querySelector('[data-testid="model-trigger"]').click()
+    flushSync()
+
+    expect(scrollLockMock.acquire).toHaveBeenCalledTimes(1)
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    flushSync()
+
+    expect(scrollLockMock.release).toHaveBeenCalledTimes(1)
 
     host.remove()
   })

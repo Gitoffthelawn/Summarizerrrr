@@ -8,6 +8,7 @@
   import { resolveProviderEntry, isProviderConfigured } from '@/lib/providers/providerRegistry.js'
   import { formatModelDisplayName } from '@/lib/chat/modelDisplayName.js'
   import { getChatReasoningOptions, effectiveReasoningLevel } from '@/lib/api/reasoningConfig.js'
+  import { acquireOverlayScrollLock } from '@/lib/ui/overlayScrollLock.js'
   import { _ } from 'svelte-i18n'
 
   let {
@@ -135,11 +136,28 @@
     browser.tabs.create({ url: browser.runtime.getURL('settings.html') + '?tab=chat' })
   }
 
+  let releaseScrollLock = null
+
+  function handleOpenChange(open) {
+    if (open) {
+      releaseScrollLock?.()
+      releaseScrollLock = acquireOverlayScrollLock()
+      return
+    }
+
+    releaseScrollLock?.()
+    releaseScrollLock = null
+  }
+
+  $effect(() => {
+    return () => releaseScrollLock?.()
+  })
+
   // Shared class for a menu row (model item, submenu trigger, manage item)
   const ROW = 'flex items-center gap-2 px-2.5 py-1.5 rounded-md cursor-pointer text-[13px] transition-colors hover:bg-surface-2 data-[highlighted]:bg-surface-2'
 </script>
 
-<DropdownMenu.Root>
+<DropdownMenu.Root onOpenChange={handleOpenChange}>
   <DropdownMenu.Trigger disabled={isDisabled}>
     {#snippet child({ props })}
       <button
