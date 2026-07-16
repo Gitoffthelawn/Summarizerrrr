@@ -69,6 +69,39 @@ export async function selectConversation(conversation) {
   return selectedConversation
 }
 
+function selectedConversationIndex() {
+  return conversationList.findIndex(
+    (conversation) => conversation.id === selectedConversationId,
+  )
+}
+
+export function canNavigatePreviousConversation() {
+  return selectedConversationIndex() > 0
+}
+
+export function canNavigateNextConversation() {
+  const currentIndex = selectedConversationIndex()
+  return currentIndex >= 0 && currentIndex < conversationList.length - 1
+}
+
+export async function navigatePreviousConversation() {
+  const currentIndex = selectedConversationIndex()
+  if (currentIndex <= 0) return false
+
+  await selectConversation(conversationList[currentIndex - 1])
+  return true
+}
+
+export async function navigateNextConversation() {
+  const currentIndex = selectedConversationIndex()
+  if (currentIndex < 0 || currentIndex >= conversationList.length - 1) {
+    return false
+  }
+
+  await selectConversation(conversationList[currentIndex + 1])
+  return true
+}
+
 export function clearConversationSelection() {
   selectedConversation = null
   selectedConversationId = null
@@ -116,4 +149,8 @@ export const conversationArchiveStore = {
   loadConversationArchive,
   selectConversation,
   clearConversationSelection,
+  navigatePreviousConversation,
+  navigateNextConversation,
+  canNavigatePreviousConversation,
+  canNavigateNextConversation,
 }

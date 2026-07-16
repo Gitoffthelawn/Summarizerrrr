@@ -162,7 +162,7 @@
     window.addEventListener('resize', handleResize)
 
     // Keyboard navigation for arrow keys
-    function handleKeydown(e) {
+    async function handleKeydown(e) {
       // Don't navigate if user is typing in an input/textarea
       const activeElement = document.activeElement
       const isTyping =
@@ -174,12 +174,12 @@
 
       if (e.key === 'ArrowLeft') {
         e.preventDefault()
-        if (archiveStore.navigatePrevious(activeTab)) {
+        if (await archiveStore.navigatePrevious(activeTab)) {
           window.scrollTo({ top: 0, behavior: 'smooth' })
         }
       } else if (e.key === 'ArrowRight') {
         e.preventDefault()
-        if (archiveStore.navigateNext(activeTab)) {
+        if (await archiveStore.navigateNext(activeTab)) {
           window.scrollTo({ top: 0, behavior: 'smooth' })
         }
       }
@@ -313,6 +313,7 @@
         messages={conversationArchiveStore.selectedMessages}
         sources={conversationArchiveStore.selectedSources}
         onRefresh={loadConversationArchive}
+        {isSidePanelVisible}
       />
     {:else}
       <SummaryDisplay

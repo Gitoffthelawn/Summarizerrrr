@@ -384,6 +384,7 @@
       "aria_label": "チャットモデル: {model}",
       "default_label": "デフォルト ({model})",
       "manage_models": "モデルの管理...",
+      "reasoning": "推論",
       "warning_unresolvable": "不明なプロファイル"
     }
   },

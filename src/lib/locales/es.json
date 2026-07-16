@@ -384,6 +384,7 @@
       "aria_label": "Modelo de chat: {model}",
       "default_label": "Predeterminado ({model})",
       "manage_models": "Administrar modelos...",
+      "reasoning": "Razonamiento",
       "warning_unresolvable": "Perfil desconocido"
     }
   },

@@ -384,6 +384,7 @@
       "aria_label": "채팅 모델: {model}",
       "default_label": "기본 ({model})",
       "manage_models": "모델 관리...",
+      "reasoning": "추론",
       "warning_unresolvable": "알 수 없는 프로필"
     }
   },

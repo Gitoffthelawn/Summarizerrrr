@@ -384,6 +384,7 @@
       "aria_label": "对话模型: {model}",
       "default_label": "默认 ({model})",
       "manage_models": "管理模型...",
+      "reasoning": "推理",
       "warning_unresolvable": "未知配置"
     }
   },

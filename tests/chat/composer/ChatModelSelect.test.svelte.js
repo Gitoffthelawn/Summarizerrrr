@@ -117,12 +117,12 @@ describe('ChatModelSelect', () => {
   it('renders trigger with provider icon and a decoded, truncated model name', () => {
     const host = mountModelSelect()
 
-    const trigger = host.querySelector('.model-trigger')
+    const trigger = host.querySelector('[data-testid="model-trigger"]')
     expect(trigger).toBeTruthy()
     expect(trigger.getAttribute('aria-label')).toContain('gemini-3-flash-preview')
 
     // Label should be truncated
-    const label = host.querySelector('.model-trigger-label')
+    const label = host.querySelector('[data-testid="model-name"]')
     expect(label.textContent).toBe('Gemini 3 fla...')
 
     host.remove()
@@ -132,9 +132,9 @@ describe('ChatModelSelect', () => {
     chatStateMock.isSending = true
     const host = mountModelSelect()
 
-    const trigger = host.querySelector('.model-trigger')
+    const trigger = host.querySelector('[data-testid="model-trigger"]')
     expect(trigger.getAttribute('disabled')).not.toBeNull()
-    expect(trigger.classList.contains('model-trigger-disabled')).toBe(true)
+    expect(trigger.className).toContain('pointer-events-none')
 
     host.remove()
   })
@@ -145,10 +145,10 @@ describe('ChatModelSelect', () => {
     ]
     const host = mountModelSelect()
 
-    host.querySelector('.model-trigger').click()
+    host.querySelector('[data-testid="model-trigger"]').click()
     flushSync()
 
-    const options = [...document.body.querySelectorAll('.model-option-label')]
+    const options = [...document.body.querySelectorAll('[data-testid="model-option-label"]')]
       .map((option) => option.textContent.trim())
 
     expect(options).toContain('Gemini 3 flash preview')
@@ -163,8 +163,37 @@ describe('ChatModelSelect', () => {
     configuredProviders.delete('gemini') // make gemini unconfigured
     const host = mountModelSelect()
 
-    const trigger = host.querySelector('.model-trigger')
-    expect(trigger.classList.contains('model-trigger-warning')).toBe(true)
+    const trigger = host.querySelector('[data-testid="model-trigger"]')
+    expect(trigger.getAttribute('data-warning')).toBe('true')
+
+    host.remove()
+  })
+
+  it('renders trigger with effort suffix when provider supports reasoning and effort is set to high', () => {
+    chatStateMock.reasoningLevel = 'high'
+    const host = mountModelSelect()
+
+    const trigger = host.querySelector('[data-testid="model-trigger"]')
+    expect(trigger.textContent).toContain('Gemini 3 fla...')
+    expect(trigger.textContent).toContain('High')
+
+    const effortLabel = host.querySelector('[data-testid="model-effort"]')
+    expect(effortLabel).toBeTruthy()
+    expect(effortLabel.textContent).toBe('High')
+
+    host.remove()
+  })
+
+  it('hides effort suffix when reasoning level is auto (provider-default)', () => {
+    chatStateMock.reasoningLevel = 'provider-default'
+    const host = mountModelSelect()
+
+    const trigger = host.querySelector('[data-testid="model-trigger"]')
+    expect(trigger.textContent).toContain('Gemini 3 fla...')
+    expect(trigger.textContent).not.toContain('Auto')
+
+    const effortLabel = host.querySelector('[data-testid="model-effort"]')
+    expect(effortLabel).toBeNull()
 
     host.remove()
   })

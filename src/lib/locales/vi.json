@@ -384,6 +384,7 @@
       "aria_label": "Mô hình chat: {model}",
       "default_label": "Mặc định ({model})",
       "manage_models": "Quản lý mô hình...",
+      "reasoning": "Suy luận",
       "warning_unresolvable": "Không rõ cấu hình"
     }
   },

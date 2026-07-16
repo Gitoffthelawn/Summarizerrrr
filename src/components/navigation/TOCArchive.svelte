@@ -18,14 +18,14 @@
   let canGoPrev = $derived(archiveStore.canNavigatePrevious(activeTab))
   let canGoNext = $derived(archiveStore.canNavigateNext(activeTab))
 
-  function handleNavigatePrev() {
-    if (archiveStore.navigatePrevious(activeTab)) {
+  async function handleNavigatePrev() {
+    if (await archiveStore.navigatePrevious(activeTab)) {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
 
-  function handleNavigateNext() {
-    if (archiveStore.navigateNext(activeTab)) {
+  async function handleNavigateNext() {
+    if (await archiveStore.navigateNext(activeTab)) {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }

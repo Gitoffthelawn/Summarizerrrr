@@ -42,7 +42,7 @@
 </script>
 
 <div
-  class="chat-composer-input w-full py-1.5 rounded-[1.625rem] pl-4 pr-14 bg-surface-2 flex items-center border border-muted/30 overflow-y-auto"
+  class="chat-composer-input flex w-full items-center overflow-y-auto"
 >
   <!-- svelte-ignore element_invalid_self_closing_tag -->
   <textarea

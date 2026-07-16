@@ -384,6 +384,7 @@
       "aria_label": "Modèle de chat : {model}",
       "default_label": "Par défaut ({model})",
       "manage_models": "Gérer les modèles...",
+      "reasoning": "Raisonnement",
       "warning_unresolvable": "Profil inconnu"
     }
   },

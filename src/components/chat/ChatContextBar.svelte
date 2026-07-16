@@ -110,7 +110,7 @@
       ></div>
       <div
         id="context-bar-panel"
-        class="relative z-20 mb-px flex flex-col gap-0.5 rounded-t-lg border border-b-0 border-border bg-surface-2 px-2 py-1.5"
+        class="relative z-20 mb-px flex flex-col gap-0.5 rounded-t-2xl bg-surface-2 px-2 py-1.5"
         transition:slideScaleFade={{ slideFrom: 'bottom', slideDistance: '0.5rem', startScale: 0.98, startOpacity: 0, duration: 200 }}
       >
         {#each sources as source (source.key)}
@@ -152,7 +152,7 @@
     {#if mode === 'title' && sources.length > 0}
       <!-- UI-1: Title mode — just favicon + title, not clickable -->
       <div
-        class="-mb-1.5 flex items-center gap-1.5 rounded-t-lg border border-b-0 border-border bg-surface-2 px-3 py-1.5 text-xs text-text-secondary"
+        class="flex items-center gap-1.5 rounded-t-2xl bg-surface-2 px-3 pt-1.5 pb-2.5 text-xs text-text-secondary"
         data-testid="context-bar-title"
       >
         <ChatSourceIcon
@@ -168,7 +168,7 @@
       <!-- UI-2: Summary mode — favicon stack + count + tokens, clickable -->
       <button
         type="button"
-        class="-mb-1.5 flex w-full items-center gap-1.5 rounded-t-lg border border-b-0 border-border bg-surface-2 px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-surface-1"
+        class="flex w-full items-center gap-1.5 rounded-t-2xl bg-surface-2 px-3 pt-1.5 pb-2.5 text-xs text-text-secondary transition-colors hover:bg-surface-1"
         aria-expanded={expanded}
         aria-controls="context-bar-panel"
         onclick={toggleExpand}
@@ -217,7 +217,7 @@
 
     <!-- Restore button (when active source is dismissed) -->
     {#if currentUrl && activeSourceDismissed}
-      <div class="-mb-1.5 flex items-center px-3 py-1.5">
+      <div class="flex items-center px-1 py-0.5">
         <button
           type="button"
           class="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-text-tertiary transition-colors hover:border-text-tertiary hover:text-text-secondary"

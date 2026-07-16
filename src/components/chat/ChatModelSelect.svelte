@@ -3,10 +3,11 @@
   import { DropdownMenu } from 'bits-ui'
   import Icon from '@iconify/svelte'
   import { browser } from 'wxt/browser'
-  import { chatState, setChatModel, getEffectiveChatModel } from '@/stores/chatStore.svelte.js'
+  import { chatState, setChatModel, getEffectiveChatModel, notifyChatDraftChanged } from '@/stores/chatStore.svelte.js'
   import { settings } from '@/stores/settingsStore.svelte.js'
   import { resolveProviderEntry, isProviderConfigured } from '@/lib/providers/providerRegistry.js'
   import { formatModelDisplayName } from '@/lib/chat/modelDisplayName.js'
+  import { getChatReasoningOptions, effectiveReasoningLevel } from '@/lib/api/reasoningConfig.js'
   import { _ } from 'svelte-i18n'
 
   let {
@@ -107,25 +108,56 @@
     setChatModel({ provider: item.provider, model: item.model })
   }
 
+  // --- Reasoning effort derivations ---
+  const activeProviderId = $derived(chatState.conversation?.providerId || settings.chat?.provider || '')
+  const activeModelId = $derived(chatState.conversation?.modelId || settings.chat?.model || null)
+  const reasoningOptions = $derived(getChatReasoningOptions(activeProviderId, activeModelId))
+  const displayedReasoningLevel = $derived(effectiveReasoningLevel(chatState.reasoningLevel, settings))
+  const currentChoice = $derived(reasoningOptions.find((o) => o.value === displayedReasoningLevel) || reasoningOptions[0])
+  const supportsReasoning = $derived(reasoningOptions.length > 1)
+  const showEffortSuffix = $derived(supportsReasoning && displayedReasoningLevel !== 'provider-default')
+
+  // Reset reasoning level when available options shrink (e.g. provider switch)
+  $effect(() => {
+    const validValues = new Set(reasoningOptions.map((o) => o.value))
+    if (!validValues.has(effectiveReasoningLevel(chatState.reasoningLevel, settings))) {
+      chatState.reasoningLevel = 'provider-default'
+      notifyChatDraftChanged()
+    }
+  })
+
+  function handleReasoningChange(level) {
+    chatState.reasoningLevel = level
+    notifyChatDraftChanged()
+  }
+
   function openSettings() {
     browser.tabs.create({ url: browser.runtime.getURL('settings.html') + '?tab=chat' })
   }
+
+  // Shared class for a menu row (model item, submenu trigger, manage item)
+  const ROW = 'flex items-center gap-2 px-2.5 py-1.5 rounded-md cursor-pointer text-[13px] transition-colors hover:bg-surface-2 data-[highlighted]:bg-surface-2'
 </script>
 
 <DropdownMenu.Root>
   <DropdownMenu.Trigger disabled={isDisabled}>
     {#snippet child({ props })}
       <button
-        class="model-trigger"
-        class:model-trigger-disabled={isDisabled}
-        class:model-trigger-warning={isEffectiveWarning}
+        class="inline-flex items-center gap-1 px-2 py-1 -ml-1 rounded-full text-xs leading-none font-medium whitespace-nowrap cursor-pointer transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]
+        {isEffectiveWarning ? 'text-warning hover:bg-warning/10' : 'text-text-secondary hover:text-text-primary hover:bg-surface-3'}
+        {isDisabled ? 'opacity-50 cursor-default pointer-events-none' : ''}"
+        data-testid="model-trigger"
+        data-warning={isEffectiveWarning}
         aria-label="{$_('chat.model_select.aria_label', { default: `Chat model: {model}`, values: { model: effectiveModel.model || 'Auto' } })}"
         {...props}
       >
-        <Icon icon={triggerIcon} width="14" height="14" class="model-trigger-icon" />
-        <span class="model-trigger-label">{triggerLabel}</span>
+        <Icon icon={triggerIcon} width="14" height="14" class="shrink-0" />
+        <span class="select-none" data-testid="model-name">{triggerLabel}</span>
+        {#if showEffortSuffix}
+          <span class="text-muted font-normal select-none" data-testid="model-effort">{currentChoice?.label}</span>
+        {/if}
         {#if !isDisabled}
-          <Icon icon="heroicons:chevron-up-down-16-solid" width="12" height="12" class="model-trigger-caret" />
+          <Icon icon="heroicons:chevron-up-down-16-solid" width="12" height="12" class="opacity-60" />
         {/if}
       </button>
     {/snippet}
@@ -133,7 +165,7 @@
 
   <DropdownMenu.Portal>
     <DropdownMenu.Content
-      class="model-menu"
+      class="bg-surface-1 dark:bg-surface-2 border border-border rounded-lg shadow-lg z-50 min-w-[220px] max-w-[320px] p-1"
       sideOffset={6}
       align="start"
       side="top"
@@ -142,185 +174,54 @@
         {@const details = resolveItemDetails(item)}
         {@const isActive = isSameModel(effectiveModel, item)}
         <DropdownMenu.Item
-          class="model-option {isActive ? 'model-option-active' : ''} {details.isWarning ? 'model-option-warning' : ''}"
+          class="{ROW} {details.isWarning ? 'text-warning' : 'text-text-primary'}"
           onSelect={() => handleSelect(item)}
         >
-          <div class="model-option-content">
-            <Icon icon={details.icon} width="14" height="14" class="model-option-icon" />
-            <span class="model-option-label truncate">{details.label}</span>
-            {#if isActive}
-              <Icon icon="heroicons:check" width="14" height="14" class="model-check-icon" />
-            {/if}
-          </div>
+          <Icon icon={details.icon} width="14" height="14" class="shrink-0 {details.isWarning ? 'text-warning' : 'text-muted'}" />
+          <span class="flex-1 text-left truncate" data-testid="model-option-label">{details.label}</span>
+          {#if isActive}
+            <Icon icon="heroicons:check" width="14" height="14" class="shrink-0 text-text-secondary" />
+          {/if}
         </DropdownMenu.Item>
       {/each}
 
-      <DropdownMenu.Separator class="model-separator" />
+      <DropdownMenu.Separator class="h-px bg-border my-1" />
+
+      {#if supportsReasoning}
+        <DropdownMenu.Sub>
+          <DropdownMenu.SubTrigger class="{ROW} text-text-primary data-[state=open]:bg-surface-2">
+            <Icon icon="heroicons:sparkles" width="14" height="14" class="shrink-0 text-muted" />
+            <span>{$_('chat.model_select.reasoning', { default: 'Reasoning' })}</span>
+            <span class="ml-auto text-muted text-xs">{currentChoice?.label}</span>
+            <Icon icon="heroicons:chevron-right-16-solid" width="14" height="14" class="shrink-0 text-muted" />
+          </DropdownMenu.SubTrigger>
+          <DropdownMenu.SubContent
+            class="bg-surface-1 dark:bg-surface-2 border border-border rounded-lg shadow-lg z-50 min-w-[160px] p-1"
+            sideOffset={4}
+          >
+            {#each reasoningOptions as option (option.value)}
+              <DropdownMenu.Item
+                class="{ROW} text-text-primary"
+                onSelect={() => handleReasoningChange(option.value)}
+              >
+                <span class="flex-1">{option.label}</span>
+                {#if option.value === displayedReasoningLevel}
+                  <Icon icon="heroicons:check" width="14" height="14" class="shrink-0 text-text-secondary" />
+                {/if}
+              </DropdownMenu.Item>
+            {/each}
+          </DropdownMenu.SubContent>
+        </DropdownMenu.Sub>
+        <DropdownMenu.Separator class="h-px bg-border my-1" />
+      {/if}
 
       <DropdownMenu.Item
-        class="model-option model-manage-option"
+        class="{ROW} text-text-primary"
         onSelect={openSettings}
       >
-        <div class="model-option-content">
-          <Icon icon="heroicons:cog-6-tooth" width="14" height="14" class="model-option-icon" />
-          <span class="model-option-label">{$_('chat.model_select.manage_models', { default: 'Manage models...' })}</span>
-        </div>
+        <Icon icon="heroicons:cog-6-tooth" width="14" height="14" class="shrink-0 text-muted" />
+        <span>{$_('chat.model_select.manage_models', { default: 'Manage models...' })}</span>
       </DropdownMenu.Item>
     </DropdownMenu.Content>
   </DropdownMenu.Portal>
 </DropdownMenu.Root>
-
-<style>
-  .model-trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    line-height: 1;
-    font-weight: 500;
-    color: var(--color-text-secondary);
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border);
-    cursor: pointer;
-    transition: all 150ms ease;
-    white-space: nowrap;
-  }
-
-  .model-trigger:hover:not(.model-trigger-disabled) {
-    color: var(--color-text-primary);
-    border-color: var(--color-muted);
-    background: color-mix(in srgb, var(--color-surface-2) 92%, var(--color-blackwhite) 8%);
-  }
-
-  .model-trigger:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
-  }
-
-  .model-trigger-disabled {
-    opacity: 0.5;
-    cursor: default;
-    pointer-events: none;
-  }
-
-  .model-trigger-warning {
-    border-color: var(--color-warning);
-    color: var(--color-warning);
-  }
-
-  .model-trigger-icon {
-    flex-shrink: 0;
-  }
-
-  .model-trigger-label {
-    user-select: none;
-  }
-
-  .model-trigger-caret {
-    opacity: 0.6;
-  }
-
-  :global(.model-menu) {
-    background: var(--color-surface-1);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-    z-index: 50;
-    min-width: 220px;
-    max-width: 320px;
-    padding: 4px;
-    animation: model-menu-in 120ms ease-out;
-  }
-
-  :global(.dark .model-menu) {
-    background: var(--color-surface-2);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  }
-
-  :global(.model-option) {
-    display: flex;
-    flex-direction: column;
-    padding: 8px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background 100ms ease;
-  }
-
-  :global(.model-option:hover),
-  :global(.model-option[data-highlighted]) {
-    background: var(--color-surface-2);
-  }
-
-  :global(.dark .model-option:hover),
-  :global(.dark .model-option[data-highlighted]) {
-    background: var(--color-surface-2);
-  }
-
-  :global(.model-option-active) {
-    background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface-2));
-  }
-
-  .model-option-content {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    gap: 8px;
-  }
-
-  .model-option-icon {
-    flex-shrink: 0;
-    color: var(--color-muted);
-  }
-
-  :global(.model-option-active .model-option-icon) {
-    color: var(--color-primary);
-  }
-
-  .model-option-label {
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--color-text-primary);
-    flex-grow: 1;
-    text-align: left;
-  }
-
-  :global(.model-option-active .model-option-label) {
-    color: var(--color-primary);
-  }
-
-  :global(.model-option-warning) {
-    color: var(--color-warning);
-  }
-
-  :global(.model-option-warning .model-option-label) {
-    color: var(--color-warning);
-  }
-
-  :global(.model-option-warning .model-option-icon) {
-    color: var(--color-warning);
-  }
-
-  .model-check-icon {
-    flex-shrink: 0;
-    color: var(--color-primary);
-  }
-
-  :global(.model-separator) {
-    height: 1px;
-    background: var(--color-border);
-    margin: 4px 0;
-  }
-
-  @keyframes model-menu-in {
-    from {
-      opacity: 0;
-      transform: translateY(4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-</style>

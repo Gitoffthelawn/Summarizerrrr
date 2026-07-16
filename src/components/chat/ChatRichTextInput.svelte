@@ -170,7 +170,7 @@
 
 <div class="relative w-full">
   <div
-    class="chat-rich-text-input w-full py-1.5 rounded-[1.625rem] pl-4 pr-14 bg-surface-2 flex items-center border border-muted/30 max-h-[220px] overflow-y-auto"
+    class="chat-rich-text-input flex w-full items-center max-h-[220px] overflow-y-auto"
   >
     <div bind:this={editorContainer} class="w-full"></div>
   </div>

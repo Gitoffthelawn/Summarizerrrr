@@ -384,6 +384,7 @@
       "aria_label": "Chat-Modell: {model}",
       "default_label": "Standard ({model})",
       "manage_models": "Modelle verwalten...",
+      "reasoning": "Begründung",
       "warning_unresolvable": "Unbekanntes Profil"
     }
   },

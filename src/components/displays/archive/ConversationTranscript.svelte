@@ -1,9 +1,15 @@
 <script>
   // @ts-nocheck
+  import { tick } from 'svelte'
   import Icon from '@iconify/svelte'
   import StreamingMarkdownV2 from '@/components/displays/ui/StreamingMarkdownV2.svelte'
+  import DisplaySettingsControls from '@/components/displays/ui/DisplaySettingsControls.svelte'
+  import TOC from '@/components/navigation/TOCArchive.svelte'
+  import TOCSidebar from '@/components/navigation/TOCSidebar.svelte'
   import { settings } from '@/stores/settingsStore.svelte.js'
+  import { getTocMode } from '@/stores/tocModeStore.svelte.js'
   import { formatDate } from '@/lib/utils/utils.js'
+  import { isRTLLanguage } from '@/lib/utils/rtlUtils.js'
   import {
     renameArchivedConversation,
     setArchivedConversationState,
@@ -12,9 +18,16 @@
     resumeArchivedConversation,
   } from '@/stores/conversationArchiveStore.svelte.js'
 
-  let { conversation, messages = [], sources = [], onRefresh = null } = $props()
+  let {
+    conversation,
+    messages = [],
+    sources = [],
+    onRefresh = null,
+    isSidePanelVisible = true,
+  } = $props()
   let title = $state('')
   let editing = $state(false)
+  let lastConversationId = $state(null)
   const sourcesById = $derived(
     new Map(sources.map((source) => [source.id, source])),
   )
@@ -25,6 +38,17 @@
     } catch {
       return ''
     }
+  })
+  const isRTL = $derived(isRTLLanguage(settings.summaryLang))
+  const isTocSidebar = $derived(getTocMode() === 'sidebar')
+  const contentGridClass = $derived.by(() => {
+    const start = isSidePanelVisible ? '!col-start-2' : 'col-start-1'
+    const mdSpan = isSidePanelVisible ? 'md:col-span-1' : 'md:col-span-2'
+    let xlSpan = 'xl:col-span-3'
+    if (isSidePanelVisible && isTocSidebar) xlSpan = 'xl:col-span-1'
+    else if (!isSidePanelVisible && isTocSidebar) xlSpan = 'xl:col-span-2'
+    else if (isSidePanelVisible && !isTocSidebar) xlSpan = 'xl:col-span-2'
+    return `${start} ${mdSpan} ${xlSpan}`
   })
 
   // Match SummaryDisplay typography controls
@@ -45,6 +69,15 @@
   $effect(() => {
     title = conversation?.title || ''
   })
+
+  $effect(() => {
+    const conversationId = conversation?.id
+    if (conversationId && conversationId !== lastConversationId) {
+      lastConversationId = conversationId
+      tick().then(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+    }
+  })
+
   async function update(action) {
     await action()
     await onRefresh?.()
@@ -59,14 +92,22 @@
   class="relative grid md:grid-cols-[minmax(20rem,20rem)_1fr] xl:grid-cols-[minmax(20rem,20rem)_1fr_minmax(20rem,20rem)]"
 >
   {#if conversation}
-    <div class="!col-start-2 md:col-span-1 xl:col-span-2">
+    <div class={contentGridClass}>
       <div
         class="prose px-8 md:px-16 {widthClasses[
           settings.widthIndex
         ]} mx-auto {fontSizeClasses[settings.fontSizeIndex]} {fontMap[
           settings.selectedFont
-        ]} pt-12 pb-[35vh] dark:prose-invert"
+        ]} pt-12 pb-[35vh] summary-content"
       >
+        <div
+          class="top-0 right-0 absolute {getTocMode() === 'sidebar'
+            ? 'xl:-translate-x-80'
+            : 'translate-x-0'}"
+        >
+          <DisplaySettingsControls />
+        </div>
+
         <!-- Header: centered meta + serif title -->
         <div class="flex flex-col gap-2">
           <div
@@ -121,7 +162,13 @@
         </div>
 
         <!-- Messages -->
-        <div class="not-prose mt-10 flex flex-col gap-6">
+        <div
+          id="conversation-content"
+          dir={isRTL ? 'rtl' : 'ltr'}
+          class="mt-10 flex flex-col gap-6 text-text-secondary {isRTL
+            ? 'rtl-content'
+            : ''}"
+        >
           {#each messages as message (message.id)}
             <section
               class="flex flex-col gap-2 {message.role === 'user'
@@ -130,12 +177,12 @@
             >
               {#if message.skillInvocation}
                 <span
-                  class="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-xs text-primary"
+                  class="not-prose rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-xs text-primary"
                   >Skill: {message.skillInvocation.skillId}</span
                 >
               {/if}
               {#if message.attachmentRefs?.length}
-                <div class="flex flex-wrap gap-1">
+                <div class="not-prose flex flex-wrap gap-1">
                   {#each message.attachmentRefs as sourceId}
                     <a
                       class="rounded-full border border-border bg-surface-2 px-2 py-1 text-xs text-text-secondary"
@@ -150,12 +197,12 @@
               {/if}
               {#if message.role === 'user'}
                 <div
-                  class="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary/10 px-3.5 py-2 text-sm"
+                  class="not-prose max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary/10 px-3.5 py-2 text-sm text-text-primary"
                 >
                   {message.content}
                 </div>
               {:else}
-                <div class="w-full text-sm">
+                <div class="w-full">
                   <StreamingMarkdownV2
                     sourceMarkdown={message.content}
                     enableCursor={false}
@@ -173,6 +220,7 @@
 
         <!-- Footer decoration + actions (matches SummaryDisplay) -->
         <div
+          id="footer"
           class="w-fit mx-auto relative mt-12 flex justify-center items-center gap-1.5"
         >
           <div class="absolute left-0">
@@ -251,6 +299,11 @@
         </div>
       </div>
     </div>
+    <TOC targetDivId="conversation-content" activeTab="conversations" />
+    <TOCSidebar
+      targetDivId="conversation-content"
+      activeTab="conversations"
+    />
   {:else}
     <p
       class="text-center flex flex-col gap-4 items-center justify-center text-text-secondary py-8 h-svh"

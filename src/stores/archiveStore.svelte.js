@@ -3,6 +3,12 @@ import {
   getAllSummaries,
   getAllHistory,
 } from '@/lib/db/indexedDBService'
+import {
+  navigatePreviousConversation,
+  navigateNextConversation,
+  canNavigatePreviousConversation,
+  canNavigateNextConversation,
+} from '@/stores/conversationArchiveStore.svelte.js'
 
 let archiveList = $state([])
 let historyList = $state([])
@@ -130,8 +136,10 @@ function selectTab(tabName) {
   }
 }
 
-function navigatePrevious(activeTab) {
-  if (activeTab === 'conversations') return false
+async function navigatePrevious(activeTab) {
+  if (activeTab === 'conversations') {
+    return navigatePreviousConversation()
+  }
   const currentList = activeTab === 'archive' ? archiveList : historyList
   if (currentList.length === 0 || !selectedSummaryId) return false
 
@@ -146,8 +154,10 @@ function navigatePrevious(activeTab) {
   return false
 }
 
-function navigateNext(activeTab) {
-  if (activeTab === 'conversations') return false
+async function navigateNext(activeTab) {
+  if (activeTab === 'conversations') {
+    return navigateNextConversation()
+  }
   const currentList = activeTab === 'archive' ? archiveList : historyList
   if (currentList.length === 0 || !selectedSummaryId) return false
 
@@ -163,7 +173,9 @@ function navigateNext(activeTab) {
 }
 
 function canNavigatePrevious(activeTab) {
-  if (activeTab === 'conversations') return false
+  if (activeTab === 'conversations') {
+    return canNavigatePreviousConversation()
+  }
   const currentList = activeTab === 'archive' ? archiveList : historyList
   if (currentList.length === 0 || !selectedSummaryId) return false
   const currentIndex = currentList.findIndex((s) => s.id === selectedSummaryId)
@@ -171,7 +183,9 @@ function canNavigatePrevious(activeTab) {
 }
 
 function canNavigateNext(activeTab) {
-  if (activeTab === 'conversations') return false
+  if (activeTab === 'conversations') {
+    return canNavigateNextConversation()
+  }
   const currentList = activeTab === 'archive' ? archiveList : historyList
   if (currentList.length === 0 || !selectedSummaryId) return false
   const currentIndex = currentList.findIndex((s) => s.id === selectedSummaryId)
