@@ -372,6 +372,14 @@
       "cache": "Cache",
       "source": "Source"
     },
+    "context_warning": {
+      "source_dropped": "\"{title}\" era demasiado largo para el contexto de este modelo y se omitió. La respuesta a continuación no se basa en él — intente con un modelo con una ventana de contexto más grande.",
+      "source_dropped_untitled": "Una fuente era demasiado larga para el contexto de este modelo y se omitió. La respuesta a continuación no se basa en ella.",
+      "source_truncated": "Solo parte de \"{title}\" cupo en el contexto de este modelo.",
+      "history_trimmed": "Se descartaron {count} turno(s) anterior(es) para ajustarse al contexto de este modelo.",
+      "source_unresolved": "No se pudo cargar una fuente adjuntada anteriormente.",
+      "input_too_large": "Su mensaje es demasiado largo para la ventana de contexto de este modelo, incluso si se eliminan todas las fuentes. Rételo o cambie a un modelo con un contexto más grande."
+    },
     "model_select": {
       "aria_label": "Modelo de chat: {model}",
       "default_label": "Predeterminado ({model})",

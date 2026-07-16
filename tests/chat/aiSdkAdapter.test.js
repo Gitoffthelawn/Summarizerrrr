@@ -78,12 +78,16 @@ function textStream(chunks) {
   })()
 }
 
+function fullStream(chunks) {
+  return textStream(chunks.map((text) => ({ type: 'text-delta', text })))
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.createGoogleGenerativeAI.mockReturnValue(() => directModel)
   mocks.generateText.mockResolvedValue({ text: 'complete response' })
   mocks.streamText.mockImplementation(() =>
-    Promise.resolve({ textStream: textStream(['one', 'two']) })
+    Promise.resolve({ fullStream: fullStream(['one', 'two']) })
   )
   mocks.requiresApiProxy.mockReturnValue(false)
   mocks.getBrowserCompatibility.mockReturnValue({
@@ -226,9 +230,26 @@ describe('AI SDK generation requests', () => {
     ])
   })
 
-  it('uses the one-chunk proxy stream contract', async () => {
+  it('throws provider error parts from the full stream instead of completing empty', async () => {
+    const providerError = new Error('Request too large for model')
+    mocks.streamText.mockResolvedValue({
+      fullStream: textStream([{ type: 'error', error: providerError }]),
+    })
+
+    await expect(
+      Array.fromAsync(
+        generateContentStreamEnhancedRequest({
+          providerId: 'gemini',
+          settings,
+          messages: [{ role: 'user', content: 'oversized request' }],
+        })
+      )
+    ).rejects.toBe(providerError)
+  })
+
+  it('uses the structured proxy stream contract', async () => {
     const proxyModel = {
-      streamText: vi.fn().mockResolvedValue({ textStream: textStream(['complete proxy text']) }),
+      streamText: vi.fn().mockResolvedValue({ fullStream: fullStream(['complete proxy text']) }),
     }
     mocks.requiresApiProxy.mockReturnValue(true)
     mocks.createOllamaProxyModel.mockReturnValue(proxyModel)
@@ -247,6 +268,45 @@ describe('AI SDK generation requests', () => {
         messages: [{ role: 'user', content: 'stream through proxy' }],
       })
     )
+  })
+
+  it('throws provider error parts from structured proxy streams', async () => {
+    const providerError = new Error('Local provider rejected the request')
+    const proxyModel = {
+      streamText: vi.fn().mockResolvedValue({
+        fullStream: textStream([{ type: 'error', error: providerError }]),
+      }),
+    }
+    mocks.requiresApiProxy.mockReturnValue(true)
+    mocks.createOllamaProxyModel.mockReturnValue(proxyModel)
+
+    await expect(
+      Array.fromAsync(
+        generateContentStreamRequest({
+          providerId: 'ollama',
+          settings: { selectedOllamaModel: 'local-model' },
+          messages: [{ role: 'user', content: 'trigger proxy error' }],
+        })
+      )
+    ).rejects.toBe(providerError)
+  })
+
+  it('keeps legacy text-only proxy streams compatible', async () => {
+    const proxyModel = {
+      streamText: vi.fn().mockResolvedValue({ textStream: textStream(['legacy proxy text']) }),
+    }
+    mocks.requiresApiProxy.mockReturnValue(true)
+    mocks.createOllamaProxyModel.mockReturnValue(proxyModel)
+
+    await expect(
+      Array.fromAsync(
+        generateContentStreamRequest({
+          providerId: 'ollama',
+          settings: { selectedOllamaModel: 'local-model' },
+          prompt: 'legacy proxy stream',
+        })
+      )
+    ).resolves.toEqual(['legacy proxy text'])
   })
 
   it('annotates Firefox mobile flush errors from enhanced streams', async () => {
@@ -297,7 +357,7 @@ describe('AI SDK generation requests', () => {
   it('surfaces reasoning-coercion warnings in the enhanced stream completion event', async () => {
     mocks.streamText.mockImplementation(() =>
       Promise.resolve({
-        textStream: textStream(['response text']),
+        fullStream: fullStream(['response text']),
         usage: Promise.resolve({ promptTokens: 10, completionTokens: 20 }),
         warnings: Promise.resolve([
           {
@@ -328,7 +388,7 @@ describe('AI SDK generation requests', () => {
   it('does not include non-reasoning warnings in reasoningWarnings', async () => {
     mocks.streamText.mockImplementation(() =>
       Promise.resolve({
-        textStream: textStream(['response']),
+        fullStream: fullStream(['response']),
         usage: Promise.resolve({ promptTokens: 5, completionTokens: 10 }),
         warnings: Promise.resolve([
           {

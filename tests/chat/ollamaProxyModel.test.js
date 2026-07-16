@@ -45,6 +45,11 @@ describe('Ollama proxy model', () => {
     const streamed = await model.streamText({ prompt: 'Stream request' })
     await expect(Array.fromAsync(streamed.textStream)).resolves.toEqual(['local answer'])
 
+    const structured = await model.streamText({ prompt: 'Structured stream request' })
+    await expect(Array.fromAsync(structured.fullStream)).resolves.toEqual([
+      { type: 'text-delta', text: 'local answer' },
+    ])
+
     const controller = new AbortController()
     mocks.sendMessage.mockReturnValue(new Promise(() => {}))
     const request = model.generateText({

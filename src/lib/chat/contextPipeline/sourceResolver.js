@@ -51,9 +51,13 @@ export async function resolveSources({
 
     if (!source) {
       unresolvedRefs.push(normalizedRef)
-      warnings.push(
-        `Could not resolve ${normalizedRef.isActive ? 'active' : 'attached'} source${normalizedRef.sourceId ? ` ${normalizedRef.sourceId}` : ''}`
-      )
+      warnings.push({
+        code: 'source_unresolved',
+        params: {
+          sourceId: normalizedRef.sourceId || null,
+          isActive: normalizedRef.isActive,
+        },
+      })
       return null
     }
 

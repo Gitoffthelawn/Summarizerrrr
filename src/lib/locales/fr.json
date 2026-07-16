@@ -372,6 +372,14 @@
       "cache": "Cache",
       "source": "Source"
     },
+    "context_warning": {
+      "source_dropped": "\"{title}\" était trop long pour le contexte de ce modèle et a été exclu. La réponse ci-dessous n'est pas basée sur celui-ci — essayez un modèle avec une fenêtre de contexte plus grande.",
+      "source_dropped_untitled": "Une source était trop longue pour le contexte de ce modèle et a été exclue. La réponse ci-dessous n'est pas basée sur celle-ci.",
+      "source_truncated": "Seule une partie de \"{title}\" entrait dans le contexte de ce modèle.",
+      "history_trimmed": "{count} échange(s) plus ancien(s) ont été abandonné(s) pour s'adapter au contexte de ce modèle.",
+      "source_unresolved": "Une source jointe précédemment n'a pas pu être chargée.",
+      "input_too_large": "Votre message est trop long pour la fenêtre de contexte de ce modèle, même en supprimant toutes les sources. Raccourcissez-le ou passez à un modèle avec un contexte plus large."
+    },
     "model_select": {
       "aria_label": "Modèle de chat : {model}",
       "default_label": "Par défaut ({model})",

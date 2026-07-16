@@ -372,6 +372,14 @@
       "cache": "Cache",
       "source": "Source"
     },
+    "context_warning": {
+      "source_dropped": "“{title}”超出了此模型的上下文限制，已被排除。以下回答未基于该内容，请尝试使用具有更大上下文窗口的模型。",
+      "source_dropped_untitled": "部分来源超出了此模型的上下文限制，已被排除。以下回答未基于该内容。",
+      "source_truncated": "“{title}”中只有一部分被包含在此模型的上下文中。",
+      "history_trimmed": "为了适应此模型的上下文限制，较旧的 {count} 轮对话已被忽略。",
+      "source_unresolved": "无法加载之前附加的来源。",
+      "input_too_large": "即使删除了所有来源，您的消息对于此模型的上下文窗口仍然过长。请缩短消息或切换到具有更大上下文窗口的模型。"
+    },
     "model_select": {
       "aria_label": "对话模型: {model}",
       "default_label": "默认 ({model})",

@@ -1,7 +1,7 @@
 <script>
   // @ts-nocheck
   import Icon from '@iconify/svelte'
-  import ChatFavicon from './ChatFavicon.svelte'
+  import ChatSourceIcon from './ChatSourceIcon.svelte'
   import { formatK } from '@/lib/utils/formatTokens.js'
   import {
     labelForSourceKind,
@@ -115,7 +115,7 @@
       >
         {#each sources as source (source.key)}
           <div class="flex items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-surface-1">
-            <ChatFavicon
+            <ChatSourceIcon
               favIconUrl={source.favIconUrl}
               fallbackIcon={iconForSourceKind(source.kind)}
               size={14}
@@ -155,7 +155,7 @@
         class="-mb-1.5 flex items-center gap-1.5 rounded-t-lg border border-b-0 border-border bg-surface-2 px-3 py-1.5 text-xs text-text-secondary"
         data-testid="context-bar-title"
       >
-        <ChatFavicon
+        <ChatSourceIcon
           favIconUrl={currentFavIconUrl}
           fallbackIcon={iconForSourceKind(activeSourceKind)}
           size={14}
@@ -183,7 +183,7 @@
               style:z-index={stackSources.length - i}
               style:position="relative"
             >
-              <ChatFavicon
+              <ChatSourceIcon
                 favIconUrl={source.favIconUrl}
                 fallbackIcon={iconForSourceKind(source.kind)}
                 size={14}

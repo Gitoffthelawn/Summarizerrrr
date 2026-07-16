@@ -78,5 +78,6 @@ export async function buildContextPipeline(input, dependencies) {
     sourceTokens: budget.sourceTokens || {},
     capabilities,
     unresolvedRefs: sourceResolution.unresolvedRefs,
+    rejected: budget.rejected,
   }
 }

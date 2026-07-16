@@ -2,7 +2,7 @@
   // @ts-nocheck
   import Icon from '@iconify/svelte'
   import StreamingMarkdownV2 from '@/components/displays/ui/StreamingMarkdownV2.svelte'
-  import ChatUserMarkdown from './ChatUserMarkdown.svelte'
+  import ChatUserBubble from './ChatUserBubble.svelte'
   import ChatMessageEditor from './ChatMessageEditor.svelte'
   import { settings } from '@/stores/settingsStore.svelte.js'
   import {
@@ -128,11 +128,7 @@
         />
       </div>
     {:else}
-      <div
-        class="max-w-[85%] rounded-2xl rounded-br-md border border-border bg-surface-2 px-3.5 py-2 text-sm wrap-anywhere text-text-primary"
-      >
-        <ChatUserMarkdown source={message.content} />
-      </div>
+      <ChatUserBubble {message} />
     {/if}
     {#if !isStreaming && !isEditing}
       <div class="mt-0.5 flex items-center justify-end gap-1">
@@ -196,9 +192,22 @@
         <span>Stopped</span>
       </div>
     {:else if isError}
-      <div class="flex items-center gap-1 text-xs text-error">
-        <Icon icon="heroicons:exclamation-circle" width="12" height="12" />
-        <span>{message.error?.message || 'Something went wrong.'}</span>
+      <div class="flex w-full items-start gap-1.5 text-xs text-error">
+        <Icon
+          icon="heroicons:exclamation-circle"
+          width="12"
+          height="12"
+          class="mt-1 shrink-0"
+        />
+        <div class="chat-error-markdown min-w-0 flex-1">
+          <StreamingMarkdownV2
+            sourceMarkdown={message.error?.message || 'Something went wrong.'}
+            enableCursor={false}
+            summaryLang={settings.summaryLang}
+            isLoading={false}
+            class="custom-markdown-style"
+          />
+        </div>
       </div>
     {/if}
 
@@ -313,3 +322,15 @@
     {/if}
   {/if}
 </div>
+
+<style>
+  .chat-error-markdown {
+    color: var(--color-error);
+    line-height: 1.35;
+  }
+
+  .chat-error-markdown :global(p) {
+    margin: 0;
+    color: inherit;
+  }
+</style>

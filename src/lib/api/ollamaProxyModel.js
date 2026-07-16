@@ -73,13 +73,18 @@ export function createOllamaProxyModel(settings) {
       // Fallback to blocking mode for content script
       const result = await this.generateText(config)
 
-      // Create a fake stream that yields the complete result
-      const fakeStream = (async function* () {
+      // Expose both the structured contract used by current callers and the
+      // legacy text-only contract for older consumers.
+      const textStream = (async function* () {
         yield result.text
+      })()
+      const fullStream = (async function* () {
+        yield { type: 'text-delta', text: result.text }
       })()
 
       return {
-        textStream: fakeStream,
+        fullStream,
+        textStream,
         usage: Promise.resolve({ totalTokens: 0 }),
         finishReason: Promise.resolve('stop'),
       }

@@ -1,6 +1,6 @@
 <script>
   // @ts-nocheck
-  import Icon from '@iconify/svelte'
+  import ChatSourceIcon from './ChatSourceIcon.svelte'
   import { tabMentionService } from '@/services/chat/tabMentionService.js'
   let { open = false, query = '', attachments = [], onSelect = null, onClose = null } = $props()
   let entries = $state([])
@@ -79,11 +79,11 @@
         title={entry.disabledReason || entry.url}
         onclick={() => select(entry)}
       >
-        {#if entry.isCommentEntry}
-          <Icon icon="heroicons:chat-bubble-left-right" width="16" height="16" />
-        {:else}
-          <Icon icon="heroicons:document-text" width="16" height="16" />
-        {/if}
+        <ChatSourceIcon
+          favIconUrl={entry.favIconUrl}
+          fallbackIcon="heroicons:document-text"
+          size={18}
+        />
         <span class="min-w-0 flex-1">
           <span class="block truncate font-medium">{entry.isCommentEntry ? entry.label : (entry.title || 'Untitled tab')}</span>
           <span class="block truncate text-xs text-text-secondary">
@@ -96,4 +96,3 @@
     {/each}
   </div>
 {/if}
-

@@ -372,6 +372,14 @@
       "cache": "Cache",
       "source": "Source"
     },
+    "context_warning": {
+      "source_dropped": "Nguồn \"{title}\" quá dài so với ngữ cảnh của mô hình này và đã bị bỏ qua. Câu trả lời bên dưới không dựa trên nguồn này — hãy thử một mô hình có cửa sổ ngữ cảnh lớn hơn.",
+      "source_dropped_untitled": "Một nguồn quá dài so với ngữ cảnh của mô hình này và đã bị bỏ qua. Câu trả lời bên dưới không dựa trên nguồn này.",
+      "source_truncated": "Chỉ một phần của \"{title}\" vừa với ngữ cảnh của mô hình này.",
+      "history_trimmed": "{count} lượt trò chuyện cũ hơn đã bị bỏ qua để phù hợp với ngữ cảnh của mô hình này.",
+      "source_unresolved": "Không thể tải nguồn được đính kèm trước đó.",
+      "input_too_large": "Tin nhắn của bạn quá dài so với cửa sổ ngữ cảnh của mô hình này, ngay cả khi đã xóa tất cả các nguồn. Hãy rút ngắn tin nhắn hoặc chuyển sang mô hình có ngữ cảnh lớn hơn."
+    },
     "model_select": {
       "aria_label": "Mô hình chat: {model}",
       "default_label": "Mặc định ({model})",

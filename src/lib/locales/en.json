@@ -372,6 +372,14 @@
       "cache": "Cache",
       "source": "Source"
     },
+    "context_warning": {
+      "source_dropped": "\"{title}\" was too long for this model's context and was left out. The answer below is not grounded in it — try a model with a larger context window.",
+      "source_dropped_untitled": "A source was too long for this model's context and was left out. The answer below is not grounded in it.",
+      "source_truncated": "Only part of \"{title}\" fitted in this model's context.",
+      "history_trimmed": "{count} older turn(s) were dropped to fit this model's context.",
+      "source_unresolved": "A source attached earlier could not be loaded.",
+      "input_too_large": "Your message is too long for this model's context window, even with every source removed. Shorten it or switch to a model with a larger context."
+    },
     "model_select": {
       "aria_label": "Chat model: {model}",
       "default_label": "Default ({model})",

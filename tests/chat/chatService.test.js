@@ -207,6 +207,35 @@ describe('chat orchestration', () => {
     expect(result.assistant).toMatchObject({ content: 'Partial', status: 'aborted' })
   })
 
+  it('persists streaming error as status error with details and returns it', async () => {
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const sourceService = {
+      getActiveTab: async () => ({ id: 1, title: 'Example' }),
+      getCachedActiveSource: async () => ({ source: activeSource }),
+    }
+    const service = createChatService({
+      repository,
+      sourceService,
+      buildPipeline: createPipelineProbe().build,
+      streamRequest: async function* () {
+        throw new Error('API limit reached')
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+    const result = await service.send({
+      conversation,
+      content: 'Hello',
+      settings,
+    })
+
+    expect(result.error).toBeDefined()
+    expect(result.error.message).toBe('API limit reached')
+    expect(result.assistant).toMatchObject({ status: 'error' })
+    expect(result.assistant.error.message).toBe('API limit reached')
+  })
+
   it('retries with the stored skill and attachment snapshots without duplicating the user record', async () => {
     const repository = createRepository()
     const attachedSource = source()

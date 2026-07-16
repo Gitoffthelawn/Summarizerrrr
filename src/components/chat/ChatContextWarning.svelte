@@ -1,6 +1,7 @@
 <script>
   // @ts-nocheck
   import Icon from '@iconify/svelte'
+  import { _ } from 'svelte-i18n'
 
   let { warnings = [] } = $props()
 </script>
@@ -19,7 +20,23 @@
           height="14"
           class="mt-0.5 shrink-0 text-warning"
         />
-        <span>{warning}</span>
+        <span class="break-words min-w-0 flex-1">
+          {#if typeof warning === 'string'}
+            {warning}
+          {:else}
+            {@const key = (warning.code === 'source_dropped' && !warning.params?.title)
+              ? 'source_dropped_untitled'
+              : warning.code}
+            {@const titleVal = warning.params?.title}
+            {#if titleVal}
+              {@const translated = $_(`chat.context_warning.${key}`, { values: { ...warning.params, title: '__TITLE__' } })}
+              {@const parts = translated.split('__TITLE__')}
+              {parts[0]}<span class="inline-block max-w-[200px] truncate align-bottom font-medium" title={titleVal}>{titleVal}</span>{parts[1] || ''}
+            {:else}
+              {$_(`chat.context_warning.${key}`, { values: warning.params })}
+            {/if}
+          {/if}
+        </span>
       </div>
     {/each}
   </div>

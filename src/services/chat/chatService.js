@@ -255,6 +255,13 @@ export function createChatService({
       )
       onWarnings?.(pipeline.warnings)
 
+      if (pipeline.rejected) {
+        const error = new Error("Your message is too long for this model's context window, even with every source removed. Shorten it or switch to a model with a larger context.")
+        error.code = pipeline.rejected.code
+        error.params = pipeline.rejected.params
+        throw error
+      }
+
       const { providerId: resolvedAdapterId, settings: resolvedSettings } = resolveAdapterCall(
         conversationProviderId,
         conversationModelId,

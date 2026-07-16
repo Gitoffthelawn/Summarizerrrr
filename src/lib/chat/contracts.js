@@ -87,12 +87,27 @@
  */
 
 /**
+ * @typedef {object} ChatContextWarning
+ * @property {'source_dropped' | 'source_truncated' | 'history_trimmed' | 'source_unresolved'} code
+ * @property {Record<string, unknown>} params
+ */
+
+/**
+ * @typedef {object} ContextPipelineRejection
+ * @property {'input_too_large'} code
+ * @property {object} params
+ * @property {number} params.minimumRequired
+ * @property {number} params.inputBudgetTokens
+ */
+
+/**
  * @typedef {object} ContextAssemblyDiagnostics
  * @property {number} estimatedInputTokens
  * @property {string[]} includedSourceIds
  * @property {string[]} droppedSourceIds
  * @property {number} trimmedTurnCount
- * @property {string[]} warnings
+ * @property {Array<ChatContextWarning | string>} warnings
+ * @property {ContextPipelineRejection} [rejected]
  */
 
 /**

@@ -4,6 +4,7 @@ import {
   budgetContext,
 } from '@/lib/chat/contextPipeline/index.js'
 import { estimateTokens } from '@/lib/chat/contextPipeline/contextBudgeter.js'
+import { formatSource } from '@/lib/chat/contextPipeline/sourceFormatter.js'
 import {
   getProviderCapabilities,
   registerModelCapability,
@@ -190,7 +191,7 @@ describe('Context Pipeline', () => {
       history,
       conversationSources: [],
       attachmentSources: [],
-      contextWindowTokens: 160,
+      contextWindowTokens: 200,
       requestedOutputTokens: 50,
     })
 
@@ -259,14 +260,15 @@ describe('Context Pipeline', () => {
       attachmentSources: [
         { id: 'dropped-tab-source', isActive: false, condensedContent: 't'.repeat(100) },
       ],
-      contextWindowTokens: 200,
+      contextWindowTokens: 300,
       requestedOutputTokens: 100,
     })
 
     expect(budget.includedSourceIds).toEqual(['large-active-source'])
     expect(budget.droppedSourceIds).toEqual(['dropped-tab-source'])
     expect(budget.conversationSources[0].truncated).toBe(true)
-    expect(budget.warnings.join('\n')).toContain('Truncated active source large-active-source')
+    expect(budget.warnings).toContainEqual(expect.objectContaining({ code: 'source_truncated' }))
+    expect(budget.warnings).toContainEqual(expect.objectContaining({ code: 'source_dropped' }))
   })
 
   it('sourceTokens has an entry per included source matching estimateTokens of selected content', () => {
@@ -290,7 +292,7 @@ describe('Context Pipeline', () => {
     expect(budget.includedSourceIds).toContain('active-source')
     expect(budget.sourceTokens).toHaveProperty('active-source')
     // The token count must equal estimateTokens of the selected content
-    const expectedTokens = estimateTokens(budget.conversationSources[0].selectedContent)
+    const expectedTokens = estimateTokens(formatSource(source, budget.conversationSources[0].selectedContent))
     expect(budget.sourceTokens['active-source']).toBe(expectedTokens)
   })
 
@@ -345,6 +347,142 @@ describe('Context Pipeline', () => {
       sourceId: 'article-source',
       tokens: expect.any(Number),
     })
+  })
+
+  it('does not under-estimate CJK content', () => {
+    expect(estimateTokens('汉'.repeat(1000))).toBeGreaterThanOrEqual(900)
+  })
+
+  it('does not under-estimate accented Vietnamese', () => {
+    const text = 'Tiếng Việt có dấu '.repeat(50)
+    const oldEstimate = Math.ceil(text.length / 4)
+    expect(estimateTokens(text)).toBeGreaterThanOrEqual(Math.ceil(oldEstimate * 1.35))
+  })
+
+  it('leaves plain English estimates unchanged', () => {
+    const text = 'This is a normal English sentence that should be estimated exactly the same as before.'
+    expect(estimateTokens(text)).toBe(Math.ceil(text.length / 4))
+  })
+
+  it('charges the source wrapper to the budget', () => {
+    const source = {
+      id: 'active-source',
+      isActive: true,
+      rawContent: 'r'.repeat(340),
+    }
+    const budget = budgetContext({
+      system: 'Persona',
+      currentUserMessage: { content: 'Hi' },
+      skillInvocation: null,
+      history: [],
+      conversationSources: [source],
+      attachmentSources: [],
+      contextWindowTokens: 300,
+      requestedOutputTokens: 100,
+    })
+    expect(budget.conversationSources[0].truncated).toBe(true)
+  })
+
+  it('lets a source use the window that history is not using on turn 1', () => {
+    const source = {
+      id: 'large-source',
+      isActive: true,
+      rawContent: 'r'.repeat(360_000),
+    }
+    const budget = budgetContext({
+      system: 'Persona',
+      currentUserMessage: { content: 'Hi' },
+      skillInvocation: null,
+      history: [],
+      conversationSources: [source],
+      attachmentSources: [],
+      contextWindowTokens: 128_000,
+      requestedOutputTokens: 4_000,
+    })
+
+    expect(budget.includedSourceIds).toContain('large-source')
+    expect(budget.conversationSources[0].truncated).toBe(false)
+  })
+
+  it('reserves budget for history while letting sources exceed the old 60% cap', () => {
+    const source = {
+      id: 'big-source',
+      isActive: true,
+      rawContent: 'r'.repeat(360_000),
+    }
+    const history = [
+      { sequence: 1, role: 'user', content: 'hello' },
+      { sequence: 2, role: 'assistant', content: 'hi' },
+    ]
+    const budget = budgetContext({
+      system: 'Persona',
+      currentUserMessage: { content: 'Hi' },
+      skillInvocation: null,
+      history,
+      conversationSources: [source],
+      attachmentSources: [],
+      contextWindowTokens: 128_000,
+      requestedOutputTokens: 4_000,
+    })
+
+    expect(budget.sourceTokens['big-source']).toBeGreaterThan(124_000 * 0.6)
+    expect(budget.history.length).toBe(2)
+  })
+
+  it('renders sources in caller order regardless of which one is active', () => {
+    const sourceA = {
+      id: 'source-a',
+      isActive: true,
+      rawContent: 'Content A',
+    }
+    const sourceB = {
+      id: 'source-b',
+      isActive: false,
+      rawContent: 'Content B',
+    }
+
+    const budget1 = budgetContext({
+      system: 'Persona',
+      currentUserMessage: { content: 'Hi' },
+      skillInvocation: null,
+      history: [],
+      conversationSources: [sourceA, sourceB],
+      attachmentSources: [],
+      contextWindowTokens: 16_384,
+      requestedOutputTokens: 4_000,
+    })
+
+    const budget2 = budgetContext({
+      system: 'Persona',
+      currentUserMessage: { content: 'Hi' },
+      skillInvocation: null,
+      history: [],
+      conversationSources: [{ ...sourceA, isActive: false }, { ...sourceB, isActive: true }],
+      attachmentSources: [],
+      contextWindowTokens: 16_384,
+      requestedOutputTokens: 4_000,
+    })
+
+    expect(budget1.conversationSources.map((s) => s.id)).toEqual(['source-a', 'source-b'])
+    expect(budget2.conversationSources.map((s) => s.id)).toEqual(['source-a', 'source-b'])
+  })
+
+  it('rejects a request that cannot fit even with every source dropped', () => {
+    const budget = budgetContext({
+      system: 'Persona',
+      currentUserMessage: { content: 'Q'.repeat(5_000) },
+      skillInvocation: null,
+      history: [],
+      conversationSources: [],
+      attachmentSources: [],
+      contextWindowTokens: 1000,
+      requestedOutputTokens: 100,
+    })
+
+    expect(budget.rejected).toBeDefined()
+    expect(budget.rejected.code).toBe('input_too_large')
+    expect(budget.rejected.params.minimumRequired).toBeGreaterThan(900)
+    expect(budget.rejected.params.inputBudgetTokens).toBe(900)
   })
 })
 

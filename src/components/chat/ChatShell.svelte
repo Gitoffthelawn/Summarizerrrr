@@ -1,6 +1,5 @@
 <script>
   // @ts-nocheck
-  import ChatEmptyState from './ChatEmptyState.svelte'
   import ChatMessageList from './ChatMessageList.svelte'
   import ChatComposer from './ChatComposer.svelte'
   import ChatContextWarning from './ChatContextWarning.svelte'
@@ -14,9 +13,19 @@
   let composerRef = $state()
   let composerBlockHeight = $state(0)
 
-  function focusComposer() {
-    composerRef?.focus()
-  }
+  const hasMatchingInlineError = $derived.by(() => {
+    const errorMessage = chatState.error?.message
+    if (!errorMessage) return false
+
+    const latestMessage =
+      chatState.streamingMessage || chatState.messages.at(-1)
+
+    return Boolean(
+      latestMessage?.role === 'assistant' &&
+        latestMessage.status === 'error' &&
+      latestMessage.error?.message === errorMessage,
+    )
+  })
 </script>
 
 <div class="flex w-full flex-1 flex-col" data-testid="chat-shell">
@@ -24,9 +33,7 @@
     class="flex w-full flex-1 flex-col"
     style="padding-bottom: {composerBlockHeight}px"
   >
-    {#if chatState.messages.length === 0 && !chatState.streamingMessage}
-      <ChatEmptyState onFocusComposer={focusComposer} />
-    {:else}
+    {#if chatState.messages.length > 0 || chatState.streamingMessage}
       <ChatMessageList
         messages={chatState.messages}
         streamingMessage={chatState.streamingMessage}
@@ -43,7 +50,7 @@
   >
     <div class="flex flex-col gap-2 px-3">
       <ChatContextWarning warnings={chatState.contextWarnings} />
-      {#if chatState.error}
+      {#if chatState.error && !hasMatchingInlineError}
         <ErrorDisplay error={chatState.error} />
       {/if}
     </div>

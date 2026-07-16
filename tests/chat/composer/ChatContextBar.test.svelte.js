@@ -98,6 +98,45 @@ describe('ChatContextBar', () => {
     host.remove()
   })
 
+  it('uses the YouTube favicon in the context bar after attaching comments', () => {
+    const host = createHost()
+
+    mount(ChatContextBar, {
+      target: host,
+      props: {
+        currentUrl: 'https://example.com/page',
+        currentTitle: 'Active page',
+        currentFavIconUrl: null,
+        activeSourceKind: 'webpage',
+        activeSourceDismissed: false,
+        pendingAttachments: [
+          {
+            tabId: 301,
+            title: 'YouTube Comments',
+            hostname: 'youtube.com',
+            favIconUrl: 'https://www.youtube.com/favicon.ico',
+            sourceKind: 'youtubeComments',
+            estimatedTokens: 1200,
+            estimating: false,
+          },
+        ],
+      },
+    })
+    flushSync()
+
+    const summaryBar = host.querySelector('[data-testid="context-bar-summary"]')
+    expect(summaryBar?.querySelector('img')?.getAttribute('src')).toBe('https://www.youtube.com/favicon.ico')
+    expect(summaryBar?.querySelector('[data-youtube-comments-icon="true"]')).toBeNull()
+
+    summaryBar.click()
+    flushSync()
+    const panel = host.querySelector('#context-bar-panel')
+    expect(panel?.querySelector('img')?.getAttribute('src')).toBe('https://www.youtube.com/favicon.ico')
+    expect(panel?.querySelector('[data-youtube-comments-icon="true"]')).toBeNull()
+
+    host.remove()
+  })
+
   it('click expands to show per-source detail; ✕ calls correct callbacks', async () => {
     const onDismiss = vi.fn()
     const onRemoveAttachment = vi.fn()

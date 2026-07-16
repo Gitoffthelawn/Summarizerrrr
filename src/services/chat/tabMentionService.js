@@ -43,6 +43,7 @@ export function createTabMentionService({ browserApi = browser, isFirefox = () =
       const needle = query.toLowerCase().trim()
       return tabs
         .map(decorateTab)
+        .filter((tab) => !tab.disabledReason)
         .filter((tab) => !needle || `${tab.title} ${tab.hostname}`.toLowerCase().includes(needle))
     },
 
@@ -56,10 +57,12 @@ export function createTabMentionService({ browserApi = browser, isFirefox = () =
      *
      * @param {string} [query]
      * @param {{ attachments?: Array<{tabId: number, sourceKind?: string}> }} [opts]
-     * @returns {Promise<Array<{id: number|string, title: string, url: string, hostname: string, disabledReason: string|null, kind?: string, isCommentEntry?: boolean, label?: string}>>}
+     * @returns {Promise<Array<{id: number|string, title: string, url: string, hostname: string, favIconUrl?: string|null, disabledReason: string|null, kind?: string, isCommentEntry?: boolean, label?: string}>>}
      */
     async listMentionSources(query = '', { attachments = [] } = {}) {
-      const allTabs = (await browserApi.tabs.query({ currentWindow: true })).map(decorateTab)
+      const allTabs = (await browserApi.tabs.query({ currentWindow: true }))
+        .map(decorateTab)
+        .filter((tab) => !tab.disabledReason)
       const needle = query.toLowerCase().trim()
 
       const tabs = allTabs.filter(
@@ -85,6 +88,7 @@ export function createTabMentionService({ browserApi = browser, isFirefox = () =
           title,
           url: tab.url,
           hostname: tab.hostname,
+          favIconUrl: tab.favIconUrl ?? null,
           label,
           disabledReason: alreadyAttached ? 'Comments already attached for this video.' : null,
           kind: SOURCE_KINDS.youtubeComments,

@@ -14,9 +14,9 @@ describe('tab mentions', () => {
   it('surfaces a Comments entry for every open YouTube tab using its real title', async () => {
     const service = createTabMentionService({
       browserApi: { tabs: { query: async () => [
-        { id: 1, title: 'Rick Astley - Never Gonna Give You Up', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+        { id: 1, title: 'Rick Astley - Never Gonna Give You Up', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', favIconUrl: 'https://www.youtube.com/favicon.ico' },
         { id: 2, title: 'Some Article', url: 'https://example.com/post' },
-        { id: 3, title: 'Why Vietnam Is Quietly Becoming', url: 'https://www.youtube.com/watch?v=abc' },
+        { id: 3, title: 'Why Vietnam Is Quietly Becoming', url: 'https://www.youtube.com/watch?v=abc', favIconUrl: 'data:image/png;base64,eW91dHViZQ==' },
       ] } },
       isFirefox: () => false,
     })
@@ -27,6 +27,10 @@ describe('tab mentions', () => {
       'Why Vietnam Is Quietly Becoming',
     ])
     expect(comments.map((c) => c.tabId)).toEqual([1, 3])
+    expect(comments.map((c) => c.favIconUrl)).toEqual([
+      'https://www.youtube.com/favicon.ico',
+      'data:image/png;base64,eW91dHViZQ==',
+    ])
     expect(comments.every((c) => c.kind === 'youtubeComments')).toBe(true)
   })
 
@@ -47,6 +51,24 @@ describe('tab mentions', () => {
   it('rejects restricted and PDF pages before capture', () => {
     expect(unsupportedTabReason('chrome://settings')).toContain('cannot be attached')
     expect(unsupportedTabReason('https://example.com/file.pdf')).toContain('PDF')
+  })
+
+  it('hides restricted and PDF pages from tab mention results', async () => {
+    const service = createTabMentionService({
+      browserApi: { tabs: { query: async () => [
+        { id: 1, title: 'Attachable article', url: 'https://example.com/article' },
+        { id: 2, title: 'Settings', url: 'chrome://settings' },
+        { id: 3, title: 'PDF', url: 'https://example.com/file.pdf' },
+      ] } },
+      isFirefox: () => false,
+    })
+
+    await expect(service.listTabs('')).resolves.toEqual([
+      expect.objectContaining({ id: 1 }),
+    ])
+    await expect(service.listMentionSources('')).resolves.toEqual([
+      expect.objectContaining({ id: 1 }),
+    ])
   })
 
   it('captures the explicit target tab without querying the active tab', async () => {

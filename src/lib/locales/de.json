@@ -372,6 +372,14 @@
       "cache": "Cache",
       "source": "Source"
     },
+    "context_warning": {
+      "source_dropped": "\"{title}\" war zu lang für den Kontext dieses Modells und wurde weggelassen. Die folgende Antwort basiert nicht darauf — versuchen Sie ein Modell mit einem größeren Kontextfenster.",
+      "source_dropped_untitled": "Eine Quelle war zu lang für den Kontext dieses Modells und wurde weggelassen. Die folgende Antwort basiert nicht darauf.",
+      "source_truncated": "Nur ein Teil von \"{title}\" passte in den Kontext dieses Modells.",
+      "history_trimmed": "{count} ältere(r) Chat-Verlauf/Verläufe wurden verworfen, um in den Kontext dieses Modells zu passen.",
+      "source_unresolved": "Eine zuvor angehängte Quelle konnte nicht geladen werden.",
+      "input_too_large": "Ihre Nachricht ist zu lang für das Kontextfenster dieses Modells, selbst wenn alle Quellen entfernt werden. Kürzen Sie sie oder wechseln Sie zu einem Modell mit einem größeren Kontext."
+    },
     "model_select": {
       "aria_label": "Chat-Modell: {model}",
       "default_label": "Standard ({model})",

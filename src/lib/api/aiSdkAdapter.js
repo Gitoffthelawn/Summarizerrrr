@@ -517,6 +517,48 @@ export async function* generateContentStream(
   )
 }
 
+function normalizeProviderStreamError(error) {
+  if (error instanceof Error) return error
+
+  const normalized = new Error(
+    typeof error === 'string'
+      ? error
+      : error?.message || 'The provider stream failed without an error message.'
+  )
+  if (error !== undefined) normalized.cause = error
+  return normalized
+}
+
+/**
+ * Read text from either an AI SDK structured stream or a legacy proxy stream.
+ * Structured streams are preferred because their error parts would otherwise
+ * be filtered out by textStream.
+ */
+async function* readProviderStream(result) {
+  if (result?.fullStream) {
+    for await (const part of result.fullStream) {
+      if (part?.type === 'error') {
+        throw normalizeProviderStreamError(part.error)
+      }
+
+      if (part?.type === 'text-delta') {
+        yield part.text
+      }
+    }
+    return
+  }
+
+  // Compatibility for older/custom proxies that only expose textStream.
+  if (result?.textStream) {
+    for await (const chunk of result.textStream) {
+      yield chunk
+    }
+    return
+  }
+
+  throw new Error('The provider did not return a readable text stream.')
+}
+
 /**
  * Stream content from a normalized prompt or messages request.
  * @param {import('../chat/contracts.js').GenerationRequest & object} request
@@ -620,8 +662,9 @@ export async function* generateContentStreamRequest(request) {
           ...(abortSignal && { abortSignal }),
         })
 
-        // Yield chunks from proxy stream - now with full <think> content
-        for await (const chunk of result.textStream) {
+        // Prefer a structured proxy stream so error parts reach the UI. Older
+        // custom proxies remain compatible through the textStream fallback.
+        for await (const chunk of readProviderStream(result)) {
           yield chunk
         }
       } else {
@@ -652,14 +695,8 @@ export async function* generateContentStreamRequest(request) {
 
         const result = await streamText(streamConfig)
 
-        // Use smoothTextStream if available and supported by browser
-        const streamToUse =
-          shouldUseSmoothing && result.smoothTextStream
-            ? result.smoothTextStream
-            : result.textStream
-
-        // Yield full chunks including <think> tags (no extraction)
-        for await (const chunk of streamToUse) {
+        // Consume the structured stream so provider errors are not discarded.
+        for await (const chunk of readProviderStream(result)) {
           yield chunk
         }
 
