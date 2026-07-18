@@ -192,10 +192,10 @@
       ></div>
       <div
         id="context-bar-panel"
-        class="relative z-20 mb-px flex flex-col gap-0.5 rounded-t-lg bg-surface-2 px-2 py-1.5"
+        class="absolute bottom-full left-0 right-0 z-20 mb-px flex flex-col border border-border/40 bg-surface-2 px-0.5 py-0.5"
         transition:slideScaleFade={{
           slideFrom: 'bottom',
-          slideDistance: '0.5rem',
+          slideDistance: '0.25rem',
           startScale: 0.98,
           startOpacity: 0,
           duration: 200,
@@ -203,7 +203,7 @@
       >
         {#each sources as source (source.key)}
           <div
-            class="flex items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-surface-1"
+            class="flex items-center gap-2 px-2.5 py-1.5 text-xs hover:bg-surface-1"
           >
             <ChatSourceIcon
               favIconUrl={source.favIconUrl}
@@ -269,11 +269,11 @@
     {#if mode === 'title' && sources.length > 0}
       <!-- UI-1: one source — title, lazy token state, and direct remove/lock. -->
       <div
-        class="flex relative items-center gap-1.5 rounded-t-lg bg-surface-2 border border-border/40 px-3 pt-1.5 pb-3 text-xs text-text-secondary"
+        class="flex relative items-center gap-1.5 bg-surface-2 border border-border/40 px-3 pt-1.5 pb-3 text-xs text-text-secondary"
         data-testid="context-bar-title"
       >
         <div
-          class="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-linear-to-t from-black/20 to-black/0"
+          class="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-5 bg-linear-to-t from-black/25 to-black/0"
         ></div>
         <ChatSourceIcon
           favIconUrl={sources[0].favIconUrl}
@@ -326,12 +326,15 @@
       <!-- UI-2: Summary mode — favicon stack + count + tokens, clickable -->
       <button
         type="button"
-        class="flex w-full items-center gap-1.5 rounded-t-lg bg-surface-2 px-3 pt-1.5 pb-2.5 text-xs text-text-secondary transition-colors hover:bg-surface-1"
+        class="flex w-full relative items-center gap-1.5 bg-surface-2 border border-border/40 px-3 pt-1.5 pb-3 text-xs text-text-secondary transition-colors"
         aria-expanded={expanded}
         aria-controls="context-bar-panel"
         onclick={toggleExpand}
         data-testid="context-bar-summary"
       >
+        <div
+          class="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-5 bg-linear-to-t from-black/25 to-black/0"
+        ></div>
         <!-- Favicon stack -->
         <div class="flex shrink-0 items-center">
           {#each stackSources as source, i (source.key)}

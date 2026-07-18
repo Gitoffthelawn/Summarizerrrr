@@ -46,9 +46,9 @@
 
   <div
     bind:clientHeight={composerBlockHeight}
-    class="fixed bottom-0 left-0 z-30 w-full min-w-[22.5rem]"
+    class="fixed bottom-0 left-0 z-30 w-full"
   >
-    <div class="flex flex-col gap-2 px-3">
+    <div class="flex flex-col gap-2 px-4 max-w-[52rem] mx-auto">
       <ChatContextWarning warnings={chatState.contextWarnings} />
       {#if chatState.error && !hasMatchingInlineError}
         <ErrorDisplay error={chatState.error} />

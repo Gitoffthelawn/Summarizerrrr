@@ -692,28 +692,6 @@
       onOpenConversation={openConversation}
       onShowLegacySummary={() => (showLegacySummary = true)}
     />
-    <div
-      class="flex items-center justify-between px-2 py-1 border-b border-border"
-    >
-      <BitsTooltip.Provider>
-        <Tooltip content={$t('archive.open_archive')} side="right" align="start">
-          {#snippet children({ builder })}
-            <button
-              {...builder}
-              onclick={() => {
-                browser.tabs.create({ url: browser.runtime.getURL('archive.html') })
-              }}
-              class="p-1 setting-animation transition-colors hover:bg-surface-2 rounded-full hover:text-text-primary text-text-secondary"
-            >
-              <Icon icon="solar:history-linear" width="22" height="22" />
-            </button>
-          {/snippet}
-        </Tooltip>
-      </BitsTooltip.Provider>
-      <div class="size-6 text-text-secondary">
-        <SettingButton />
-      </div>
-    </div>
   </div>
 
   {#if needsApiKeySetup()()}

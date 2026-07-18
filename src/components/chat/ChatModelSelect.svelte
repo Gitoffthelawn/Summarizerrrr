@@ -248,7 +248,7 @@
             class="shrink-0 {details.isWarning ? 'text-warning' : 'text-muted'}"
           />
           <span
-            class="flex-1 text-left text-sm truncate"
+            class="flex-1 text-left text-xs truncate"
             data-testid="model-option-label">{details.label}</span
           >
           {#if isActive}
@@ -267,12 +267,12 @@
       {#if supportsReasoning}
         <DropdownMenu.Sub>
           <DropdownMenu.SubTrigger
-            class="{ROW} text-text-primary data-[state=open]:bg-surface-2"
+            class="{ROW} text-text-primary text-xs data-[state=open]:bg-surface-2"
           >
             <Icon
               icon="heroicons:sparkles"
-              width="14"
-              height="14"
+              width="12"
+              height="12"
               class="shrink-0 text-muted"
             />
             <span
@@ -280,13 +280,11 @@
                 default: 'Reasoning',
               })}</span
             >
-            <span class="ml-auto text-muted text-xs"
-              >{currentChoice?.label}</span
-            >
+            <span class="ml-auto text-muted">{currentChoice?.label}</span>
             <Icon
               icon="heroicons:chevron-right-16-solid"
-              width="14"
-              height="14"
+              width="12"
+              height="12"
               class="shrink-0 text-muted"
             />
           </DropdownMenu.SubTrigger>
@@ -299,12 +297,12 @@
                 class="{ROW} text-text-primary"
                 onSelect={() => handleReasoningChange(option.value)}
               >
-                <span class="flex-1">{option.label}</span>
+                <span class="flex-1 text-xs">{option.label}</span>
                 {#if option.value === displayedReasoningLevel}
                   <Icon
                     icon="heroicons:check"
-                    width="14"
-                    height="14"
+                    width="12"
+                    height="12"
                     class="shrink-0 text-text-secondary"
                   />
                 {/if}
@@ -316,13 +314,13 @@
       {/if}
 
       <DropdownMenu.Item
-        class="{ROW} text-text-primary"
+        class="{ROW} text-text-primary text-xs"
         onSelect={openSettings}
       >
         <Icon
           icon="heroicons:cog-6-tooth"
-          width="14"
-          height="14"
+          width="12"
+          height="12"
           class="shrink-0 text-muted"
         />
         <span

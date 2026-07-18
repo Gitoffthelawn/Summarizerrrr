@@ -3,7 +3,7 @@
   import Icon from '@iconify/svelte'
   import ChatSkillChip from './ChatSkillChip.svelte'
   import ChatContextBar from './ChatContextBar.svelte'
-  import ChatContextDonut from './ChatContextDonut.svelte'
+  import ChatContextGauge from './ChatContextGauge.svelte'
   import ChatModelSelect from './ChatModelSelect.svelte'
   import SkillPicker from './SkillPicker.svelte'
   import TabMentionMenu from './TabMentionMenu.svelte'
@@ -240,7 +240,7 @@
   })
 </script>
 
-<div class="flex w-full flex-col gap-2 px-3 pt-2 pb-3">
+<div class="flex w-full flex-col gap-2 px-4 pt-2 pb-3 max-w-[52rem] mx-auto">
   {#if chatState.selectedSkill}
     <div class="flex flex-wrap items-center gap-1.5">
       <ChatSkillChip skill={chatState.selectedSkill} onClear={clearSkill} />
@@ -294,8 +294,13 @@
         class="w-3 h-0.5 z-8 absolute bg-white shadow-[0_-2px_6px_#fff,0_-1px_3px_#ffffffa5] rounded-t-sm bottom-0 -translate-y-1.75 translate-x-0.5 rotate-45"
       ></div>
       <div
-        class="relative flex flex-col border border-border bg-surface-2 px-4 py-2.5"
+        class="relative flex flex-col border border-border bg-surface-2 px-3 py-1"
       >
+        <!-- Context window gauge: top-right corner energy bar -->
+        <div class="absolute -top-3 right-px z-20">
+          <ChatContextGauge usage={donutUsage} {pendingEstimate} />
+        </div>
+
         {#if !editorError}
           {#key chatTabsState.activeSessionTabId}
             <ChatRichTextInput
@@ -326,7 +331,6 @@
         <div class="flex items-center justify-between gap-1.5">
           <ChatModelSelect />
           <div class="flex items-center gap-1.5">
-            <!-- <ChatContextDonut usage={donutUsage} {pendingEstimate} /> -->
             <button
               type="button"
               class="z-20 flex size-8 shrink-0 items-center justify-center transition-all duration-300 {chatState.isSending
@@ -369,3 +373,6 @@
       </p>{/if}
   </div>
 </div>
+<div
+  class="pointer-events-none z-[-1] absolute inset-x-0 bottom-0 h-44 bg-linear-to-t from-surface-1 from-20% via-surface-1 via-70% to-transparent"
+></div>

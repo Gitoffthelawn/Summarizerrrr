@@ -274,40 +274,25 @@
   }
 
   /* === Table Styling - Horizontal Scroll === */
-  /* Note: Scrolling is now handled by TableRenderer wrapper */
+  /* Scrolling is handled by the TableRenderer wrapper. */
   .markdown-container-v2 :global(table) {
-    width: 100%;
-    /* border: 1px solid var(--color-border); -> Moved to wrapper */
-    /* border-radius: 0.5em; -> Moved to wrapper */
+    width: auto;
+    min-width: 100%;
+    table-layout: auto;
     padding: 0.5em 0;
-    /* scrollbar-width: thin; -> Moved to wrapper */
-    /* scrollbar-color: transparent transparent; -> Moved to wrapper */
   }
-
-  /* Remove these display overrides as we want standard table behavior inside the wrapper */
-  /*
-  .markdown-container-v2 :global(table thead),
-  .markdown-container-v2 :global(table tbody),
-  .markdown-container-v2 :global(table tr) {
-    display: table;
-    width: 100%;
-    table-layout: fixed;
-  }
-  */
-
-  /* Kept for context but commented out as wrapper handles it
-  .markdown-container-v2 :global(table:hover) {
-    scrollbar-color: var(--color-border) transparent;
-  }
-  */
 
   .markdown-container-v2 :global(th) {
     min-width: 60px;
     white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
   }
 
   .markdown-container-v2 :global(td) {
     min-width: 60px;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
 
   /* Padding cho cell đầu và cuối của mỗi row */

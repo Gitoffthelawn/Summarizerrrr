@@ -73,7 +73,7 @@
 </script>
 
 <div
-  class="flex w-full flex-col gap-5 px-4 py-4"
+  class="flex w-full flex-col gap-5 px-6 pt-8 pb-4 max-w-[52rem] mx-auto"
 >
   {#if chatState.hasEarlierMessages}
     <div class="flex justify-center py-2">
