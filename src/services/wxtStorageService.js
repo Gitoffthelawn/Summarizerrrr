@@ -29,3 +29,10 @@ export const cleanupStorage = storage.defineItem('local:lastCleanupDate', {
 export const openrouterCatalogStorage = storage.defineItem('local:openrouterCatalog', {
   fallback: { fetchedAt: 0, entries: {} }, // entries: { "<vendor>:<slug>": contextWindowTokens }
 })
+
+// Context windows discovered from a provider's /models response, cached so the
+// exact limits survive reloads instead of being re-fetched every session.
+// entries: { "<providerId>:<modelId>": { contextWindowTokens, defaultOutputTokens? } }
+export const modelCapabilitiesStorage = storage.defineItem('local:modelCapabilities', {
+  fallback: { updatedAt: 0, entries: {} },
+})

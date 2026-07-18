@@ -1,6 +1,7 @@
 <script>
   // @ts-nocheck
   import Icon from '@iconify/svelte'
+  import { _ } from 'svelte-i18n'
   import StreamingMarkdownV2 from '@/components/displays/ui/StreamingMarkdownV2.svelte'
   import ChatUserBubble from './ChatUserBubble.svelte'
   import ChatMessageEditor from './ChatMessageEditor.svelte'
@@ -13,6 +14,8 @@
     deleteChatMessage,
   } from '@/stores/chatStore.svelte.js'
   import { conversationRepository } from '@/lib/db/conversationRepository.js'
+  import { getElapsedDisplay } from '@/lib/utils/utils.js'
+  import { nowState } from '@/stores/nowStore.svelte.js'
   import ChatDeepDive from './ChatDeepDive.svelte'
   import ChatSourceDrawer from './ChatSourceDrawer.svelte'
 
@@ -109,6 +112,26 @@
     if (completionTokens != null) parts.push(`${completionTokens} out`)
     return parts.length > 0 ? parts.join(' · ') : null
   })
+
+  const timeLabel = $derived.by(() => {
+    const elapsed = getElapsedDisplay(message.createdAt, nowState.value)
+    if (!elapsed) return null
+    switch (elapsed.mode) {
+      case 'just-now':
+        return $_('chat.time.justNow', { default: 'Just now' })
+      case 'minutes':
+        return $_('chat.time.minutesAgo', {
+          default: `${elapsed.minutes}m ago`,
+          values: { count: elapsed.minutes },
+        })
+      case 'clock':
+        return elapsed.clock
+      case 'datetime':
+        return elapsed.label
+      default:
+        return null
+    }
+  })
 </script>
 
 <div
@@ -132,6 +155,12 @@
     {/if}
     {#if !isStreaming && !isEditing}
       <div class="mt-0.5 flex items-center justify-end gap-1">
+        {#if timeLabel}
+          <span class="mr-1 flex items-center gap-1 text-[11px] text-text-secondary/60" title={message.createdAt}>
+            <Icon icon="heroicons:clock" width="12" height="12" />
+            {timeLabel}
+          </span>
+        {/if}
         {#if hasSiblings}
           <div class="flex items-center gap-1 select-none text-xs text-text-secondary">
             <button
@@ -285,7 +314,7 @@
         </button>
       </div>
 
-      {#if modelLabel || usageLabel}
+      {#if modelLabel || usageLabel || timeLabel}
         <div class="flex items-center gap-2 text-[11px] text-text-secondary/60">
           {#if modelLabel}
             <span class="flex items-center gap-1">
@@ -297,6 +326,12 @@
             <span class="flex items-center gap-1">
               <Icon icon="heroicons:chart-bar" width="12" height="12" />
               {usageLabel}
+            </span>
+          {/if}
+          {#if timeLabel}
+            <span class="flex items-center gap-1" title={message.createdAt}>
+              <Icon icon="heroicons:clock" width="12" height="12" />
+              {timeLabel}
             </span>
           {/if}
         </div>

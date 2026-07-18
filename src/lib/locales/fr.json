@@ -360,6 +360,10 @@
     }
   },
   "chat": {
+    "time": {
+      "justNow": "À l'instant",
+      "minutesAgo": "il y a {count} min"
+    },
     "context_donut": {
       "aria_usage": "Context window usage:",
       "aria_unknown": "Context usage not known yet",

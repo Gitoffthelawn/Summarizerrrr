@@ -30,6 +30,7 @@ function createHost() {
 describe('ChatContextBar', () => {
   it('renders title mode when active page only with no tokens', () => {
     const host = createHost()
+    const onDismiss = vi.fn()
 
     mount(ChatContextBar, {
       target: host,
@@ -40,6 +41,7 @@ describe('ChatContextBar', () => {
         activeSourceKind: 'webpage',
         activeSourceDismissed: false,
         pendingAttachments: [],
+        onDismissActiveSource: onDismiss,
       },
     })
     flushSync()
@@ -54,6 +56,67 @@ describe('ChatContextBar', () => {
     // Not a button — title mode is not clickable
     const summaryButton = host.querySelector('[data-testid="context-bar-summary"]')
     expect(summaryButton).toBeNull()
+
+    // A single uncommitted source is directly removable without opening a panel.
+    const remove = host.querySelector('[data-testid="context-bar-single-remove"]')
+    expect(remove).not.toBeNull()
+    remove.click()
+    expect(onDismiss).toHaveBeenCalledOnce()
+
+    host.remove()
+  })
+
+  it('keeps one measured source in title mode and shows its token estimate', () => {
+    const host = createHost()
+
+    mount(ChatContextBar, {
+      target: host,
+      props: {
+        currentUrl: 'https://example.com/page',
+        currentTitle: 'Measured Page',
+        activeSourceKind: 'webpage',
+        activeSourceEstimate: {
+          url: 'https://example.com/page',
+          sourceKind: 'webpage',
+          estimatedTokens: 2400,
+          estimating: false,
+        },
+      },
+    })
+    flushSync()
+
+    expect(host.querySelector('[data-testid="context-bar-title"]')).not.toBeNull()
+    expect(host.querySelector('[data-testid="context-bar-summary"]')).toBeNull()
+    expect(host.querySelector('[data-testid="context-bar-tokens"]')?.textContent).toContain('~2.4K tokens')
+
+    host.remove()
+  })
+
+  it('renders a committed single source as locked with no remove button', () => {
+    const host = createHost()
+
+    mount(ChatContextBar, {
+      target: host,
+      props: {
+        currentUrl: 'https://example.com/page',
+        currentTitle: 'Committed Page',
+        activeSourceKind: 'webpage',
+        committedSources: [{
+          sourceId: 'source-1',
+          url: 'https://example.com/page',
+          title: 'Committed Page',
+          sourceKind: 'webpage',
+          estimatedTokens: 1800,
+          locked: true,
+        }],
+      },
+    })
+    flushSync()
+
+    expect(host.querySelector('[data-testid="context-bar-title"]')).not.toBeNull()
+    expect(host.querySelector('[data-testid="context-source-locked"]')).not.toBeNull()
+    expect(host.querySelector('[data-testid="context-bar-single-remove"]')).toBeNull()
+    expect(host.querySelector('button[aria-label^="Remove"]')).toBeNull()
 
     host.remove()
   })

@@ -1,10 +1,17 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   normalizeModelSlug,
   buildCatalog,
   lookupCatalogWindow,
   PROVIDER_VENDOR_MAP,
 } from '../../src/lib/chat/openrouterCatalog.js'
+import {
+  getProviderCapabilities,
+  setOpenrouterCatalog,
+  clearOpenrouterCatalog,
+  registerModelCapability,
+  clearDiscoveredCapabilities,
+} from '../../src/lib/chat/providerCapabilities.js'
 
 // ---------------------------------------------------------------------------
 // normalizeModelSlug
@@ -103,6 +110,7 @@ describe('lookupCatalogWindow', () => {
     'deepseek:deepseek-chat': 64000,
     'google:gemini-2-5-pro': 1000000,
     'anthropic:claude-3-5-sonnet': 200000,
+    'x-ai:grok-2': 131072,
   }
 
   it('returns context window for a mapped provider', () => {
@@ -134,6 +142,27 @@ describe('lookupCatalogWindow', () => {
     expect(lookupCatalogWindow(catalog, 'chatgpt', null)).toBeNull()
     expect(lookupCatalogWindow(catalog, 'chatgpt', undefined)).toBeNull()
   })
+
+  // --- OpenRouter-specific tests ---
+
+  it('resolves OpenRouter model with vendor-prefixed id', () => {
+    expect(lookupCatalogWindow(catalog, 'openrouter', 'openai/gpt-4o')).toBe(128000)
+    expect(lookupCatalogWindow(catalog, 'openrouter', 'x-ai/grok-2')).toBe(131072)
+    expect(lookupCatalogWindow(catalog, 'openrouter', 'deepseek/deepseek-chat')).toBe(64000)
+  })
+
+  it('returns null for OpenRouter model without slash (bare id)', () => {
+    expect(lookupCatalogWindow(catalog, 'openrouter', 'gpt-4o')).toBeNull()
+  })
+
+  it('handles uppercase vendor in OpenRouter model id (lowercased)', () => {
+    expect(lookupCatalogWindow(catalog, 'openrouter', 'OpenAI/gpt-4o')).toBe(128000)
+    expect(lookupCatalogWindow(catalog, 'openrouter', 'X-AI/grok-2')).toBe(131072)
+  })
+
+  it('returns null for OpenRouter model not in catalog', () => {
+    expect(lookupCatalogWindow(catalog, 'openrouter', 'unknown-vendor/mystery-model')).toBeNull()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -157,6 +186,69 @@ describe('PROVIDER_VENDOR_MAP', () => {
     expect(PROVIDER_VENDOR_MAP).not.toHaveProperty('openaiCompatible')
     expect(PROVIDER_VENDOR_MAP).not.toHaveProperty('groq')
     expect(PROVIDER_VENDOR_MAP).not.toHaveProperty('cerebras')
+    // OpenRouter is handled via the special branch in lookupCatalogWindow,
+    // NOT via PROVIDER_VENDOR_MAP.
     expect(PROVIDER_VENDOR_MAP).not.toHaveProperty('openrouter')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Capabilities resolution — catalog as pre-API source for OpenRouter
+// ---------------------------------------------------------------------------
+
+describe('OpenRouter capabilities resolution via catalog', () => {
+  afterEach(() => {
+    clearOpenrouterCatalog()
+    clearDiscoveredCapabilities()
+  })
+
+  it('resolves from openrouter-catalog when catalog is set', () => {
+    setOpenrouterCatalog({
+      'x-ai:grok-2': 131072,
+      'openai:gpt-5-2': 1050000,
+    })
+
+    const caps = getProviderCapabilities('openrouter', 'x-ai/grok-2')
+    expect(caps.contextWindowTokens).toBe(131072)
+    expect(caps.source).toBe('openrouter-catalog')
+
+    const caps2 = getProviderCapabilities('openrouter', 'openai/gpt-5.2')
+    expect(caps2.contextWindowTokens).toBe(1050000)
+    expect(caps2.source).toBe('openrouter-catalog')
+  })
+
+  it('falls back to default when catalog has no match', () => {
+    setOpenrouterCatalog({ 'x-ai:grok-2': 131072 })
+
+    const caps = getProviderCapabilities('openrouter', 'unknown/model-x')
+    expect(caps.source).toBe('default-fallback')
+  })
+
+  it('discovered overrides catalog ("đè tem sau")', () => {
+    // Catalog provides an initial value.
+    setOpenrouterCatalog({ 'x-ai:grok-2': 131072 })
+
+    // Discovery provides an exact value — should take precedence.
+    registerModelCapability('openrouter', 'x-ai/grok-2', {
+      contextWindowTokens: 131200,
+    })
+
+    const caps = getProviderCapabilities('openrouter', 'x-ai/grok-2')
+    expect(caps.contextWindowTokens).toBe(131200)
+    expect(caps.source).toBe('discovered')
+  })
+
+  it('falls back to catalog when discovered is cleared', () => {
+    setOpenrouterCatalog({ 'x-ai:grok-2': 131072 })
+    registerModelCapability('openrouter', 'x-ai/grok-2', {
+      contextWindowTokens: 131200,
+    })
+
+    // Clear discovered — should fall back to catalog.
+    clearDiscoveredCapabilities()
+
+    const caps = getProviderCapabilities('openrouter', 'x-ai/grok-2')
+    expect(caps.contextWindowTokens).toBe(131072)
+    expect(caps.source).toBe('openrouter-catalog')
   })
 })

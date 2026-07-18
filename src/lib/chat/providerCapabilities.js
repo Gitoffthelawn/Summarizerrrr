@@ -47,6 +47,41 @@ export function clearDiscoveredCapabilities() {
 }
 
 /**
+ * Snapshot the discovered registry as a JSON-serializable object, keyed
+ * `${providerId}:${modelId}`. Used to persist limits across reloads.
+ * @returns {Record<string, {contextWindowTokens: number, defaultOutputTokens?: number}>}
+ */
+export function getDiscoveredCapabilitiesSnapshot() {
+  /** @type {Record<string, {contextWindowTokens: number, defaultOutputTokens?: number}>} */
+  const snapshot = {}
+  for (const [key, value] of discoveredCapabilities) {
+    snapshot[key] = { ...value }
+  }
+  return snapshot
+}
+
+/**
+ * Merge persisted capabilities back into the runtime registry (e.g. at startup).
+ * Entries already present win, so a stale cache never clobbers a limit
+ * discovered live this session. Keys are `${providerId}:${modelId}`.
+ * @param {Record<string, {contextWindowTokens?: number, defaultOutputTokens?: number}>} entries
+ */
+export function mergeDiscoveredCapabilities(entries) {
+  if (!entries || typeof entries !== 'object') return
+  for (const [key, value] of Object.entries(entries)) {
+    if (discoveredCapabilities.has(key)) continue
+    const contextWindowTokens = Number(value?.contextWindowTokens)
+    if (!Number.isFinite(contextWindowTokens) || contextWindowTokens <= 0) continue
+    discoveredCapabilities.set(key, {
+      contextWindowTokens,
+      ...(Number.isFinite(Number(value?.defaultOutputTokens))
+        ? { defaultOutputTokens: Number(value.defaultOutputTokens) }
+        : {}),
+    })
+  }
+}
+
+/**
  * OpenRouter catalog cross-reference — a plain object keyed
  * `"<vendor>:<normalizedSlug>"` → `contextWindowTokens`, or `null` when not
  * hydrated yet.  Set by Phase 3's hydration / fetch helpers.

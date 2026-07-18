@@ -21,6 +21,10 @@
     activeSourceKind = null,
     /** @type {boolean} */
     activeSourceDismissed = false,
+    /** @type {object|null} Lazy current-page token estimate. */
+    activeSourceEstimate = null,
+    /** @type {Array} Sources already included in the active AI context path. */
+    committedSources = [],
     /** @type {Array} */
     pendingAttachments = [],
     /** @type {Record<string,number>|null} Per-source token map from Phase 3 diagnostics. */
@@ -35,26 +39,96 @@
 
   let expanded = $state(false)
 
+  function normalizeUrl(url) {
+    try {
+      const normalized = new URL(url)
+      normalized.hash = ''
+      return normalized.toString()
+    } catch {
+      return String(url || '')
+    }
+  }
+
+  function isCurrentSource(source) {
+    return Boolean(
+      currentUrl &&
+        normalizeUrl(source.url || source.normalizedUrl) ===
+          normalizeUrl(currentUrl) &&
+        (!source.sourceKind ||
+          !activeSourceKind ||
+          source.sourceKind === activeSourceKind),
+    )
+  }
+
+  const hasCommittedCurrent = $derived(committedSources.some(isCurrentSource))
+
   // Build a unified sources list from active page + pending attachments
   const sources = $derived.by(() => {
     const list = []
+    const committedIds = new Set(
+      committedSources.map((source) => source.sourceId).filter(Boolean),
+    )
+    const committedCurrent = committedSources.find(isCurrentSource)
 
-    // Active page (if present and not dismissed)
-    if (activeSourceKind && !activeSourceDismissed) {
+    // Keep the current page first. Once it has entered AI context, reuse the
+    // committed record so the row becomes locked instead of rendering twice.
+    if (committedCurrent) {
+      list.push({
+        key: `committed-${committedCurrent.sourceId}`,
+        title: currentTitle || committedCurrent.title,
+        favIconUrl: currentFavIconUrl || committedCurrent.favIconUrl,
+        kind: committedCurrent.sourceKind || activeSourceKind,
+        tokens:
+          committedCurrent.estimatedTokens ??
+          sourceTokens?.[committedCurrent.sourceId] ??
+          null,
+        estimating: false,
+        isActivePage: true,
+        locked: true,
+        onRemove: null,
+      })
+    } else if (activeSourceKind && !activeSourceDismissed) {
+      const estimateMatches =
+        activeSourceEstimate &&
+        normalizeUrl(activeSourceEstimate.url) === normalizeUrl(currentUrl) &&
+        activeSourceEstimate.sourceKind === activeSourceKind
       list.push({
         key: 'active-page',
         title: currentTitle || activeSourceLabelForUrl(currentUrl || ''),
         favIconUrl: currentFavIconUrl,
         kind: activeSourceKind,
-        tokens: sourceTokens?.['active-page'] ?? null,
-        estimating: false,
+        tokens: estimateMatches ? activeSourceEstimate.estimatedTokens : null,
+        estimating: estimateMatches ? activeSourceEstimate.estimating : false,
         isActivePage: true,
-        onRemove: onDismissActiveSource,
+        locked: estimateMatches
+          ? Boolean(activeSourceEstimate.submitted)
+          : false,
+        onRemove:
+          estimateMatches && activeSourceEstimate.submitted
+            ? null
+            : onDismissActiveSource,
+      })
+    }
+
+    for (const source of committedSources) {
+      if (source === committedCurrent) continue
+      list.push({
+        key: `committed-${source.sourceId}`,
+        title: source.title || 'Context source',
+        favIconUrl: source.favIconUrl ?? null,
+        kind: source.sourceKind,
+        tokens:
+          source.estimatedTokens ?? sourceTokens?.[source.sourceId] ?? null,
+        estimating: false,
+        isActivePage: false,
+        locked: true,
+        onRemove: null,
       })
     }
 
     // Pending attachments
     for (const att of pendingAttachments) {
+      if (att.sourceId && committedIds.has(att.sourceId)) continue
       list.push({
         key: `${att.tabId}-${att.sourceKind || 'auto'}`,
         title: att.title || att.hostname || 'Attached tab',
@@ -63,19 +137,27 @@
         tokens: att.estimatedTokens,
         estimating: att.estimating ?? false,
         isActivePage: false,
-        onRemove: () => onRemoveAttachment(att.tabId, att.sourceKind),
+        locked: Boolean(att.submitted),
+        onRemove: att.submitted
+          ? null
+          : () => onRemoveAttachment(att.tabId, att.sourceKind),
       })
     }
 
     return list
   })
 
-  const knownTokens = $derived(sources.reduce((sum, s) => sum + (s.tokens || 0), 0))
+  const knownTokens = $derived(
+    sources.reduce((sum, s) => sum + (s.tokens || 0), 0),
+  )
   const addedCount = $derived(sources.filter((s) => !s.isActivePage).length)
 
-  // UI-1 → UI-2 flips only when tokens are actually known, or more than the
-  // active page is in context. It never flips by *measuring* anything.
-  const mode = $derived(knownTokens > 0 || addedCount > 0 ? 'summary' : 'title')
+  // A single source stays directly manageable. Only multiple sources open the
+  // expandable manager, regardless of whether token measurement has completed.
+  const mode = $derived(sources.length > 1 ? 'summary' : 'title')
+  const canRestoreActive = $derived(
+    Boolean(currentUrl && activeSourceDismissed && !hasCommittedCurrent),
+  )
 
   // First 3 sources for the favicon stack
   const stackSources = $derived(sources.slice(0, 3))
@@ -110,39 +192,74 @@
       ></div>
       <div
         id="context-bar-panel"
-        class="relative z-20 mb-px flex flex-col gap-0.5 rounded-t-2xl bg-surface-2 px-2 py-1.5"
-        transition:slideScaleFade={{ slideFrom: 'bottom', slideDistance: '0.5rem', startScale: 0.98, startOpacity: 0, duration: 200 }}
+        class="relative z-20 mb-px flex flex-col gap-0.5 rounded-t-lg bg-surface-2 px-2 py-1.5"
+        transition:slideScaleFade={{
+          slideFrom: 'bottom',
+          slideDistance: '0.5rem',
+          startScale: 0.98,
+          startOpacity: 0,
+          duration: 200,
+        }}
       >
         {#each sources as source (source.key)}
-          <div class="flex items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-surface-1">
+          <div
+            class="flex items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-surface-1"
+          >
             <ChatSourceIcon
               favIconUrl={source.favIconUrl}
               fallbackIcon={iconForSourceKind(source.kind)}
               size={14}
             />
-            <span class="min-w-0 flex-1 truncate text-text-secondary" title={source.title}>
+            <span
+              class="min-w-0 flex-1 truncate text-text-secondary"
+              title={source.title}
+            >
               {source.title}
             </span>
             {#if source.kind}
-              <span class="shrink-0 text-[10px] text-text-tertiary">{labelForSourceKind(source.kind)}</span>
+              <span class="shrink-0 text-[10px] text-text-tertiary"
+                >{labelForSourceKind(source.kind)}</span
+              >
             {/if}
             <span class="shrink-0 tabular-nums text-text-tertiary">
               {#if source.estimating}
-                <Icon icon="solar:loader-2-bold" width="12" height="12" class="animate-spin" />
+                <Icon
+                  icon="solar:loader-2-bold"
+                  width="12"
+                  height="12"
+                  class="animate-spin"
+                />
               {:else if source.tokens != null}
                 ~{formatK(source.tokens)}
               {:else}
                 —
               {/if}
             </span>
-            <button
-              type="button"
-              class="shrink-0 rounded-full p-0.5 text-text-tertiary hover:bg-surface-3 hover:text-text-primary"
-              aria-label="Remove {source.title}"
-              onclick={(e) => { e.stopPropagation(); source.onRemove() }}
-            >
-              <Icon icon="tabler:x" width="12" height="12" />
-            </button>
+            {#if source.locked}
+              <span
+                class="shrink-0 text-text-tertiary"
+                title="Already included in AI context"
+                data-testid="context-source-locked"
+              >
+                <Icon
+                  icon="heroicons:lock-closed-solid"
+                  width="12"
+                  height="12"
+                />
+              </span>
+            {:else if source.onRemove}
+              <button
+                type="button"
+                class="shrink-0 rounded-full p-0.5 text-text-tertiary hover:bg-surface-3 hover:text-text-primary"
+                aria-label="Remove {source.title}"
+                onclick={(e) => {
+                  e.stopPropagation()
+                  source.onRemove()
+                }}
+              >
+                <Icon icon="tabler:x" width="12" height="12" />
+              </button>
+            {/if}
           </div>
         {/each}
       </div>
@@ -150,25 +267,66 @@
 
     <!-- Context bar -->
     {#if mode === 'title' && sources.length > 0}
-      <!-- UI-1: Title mode — just favicon + title, not clickable -->
+      <!-- UI-1: one source — title, lazy token state, and direct remove/lock. -->
       <div
-        class="flex items-center gap-1.5 rounded-t-2xl bg-surface-2 px-3 pt-1.5 pb-2.5 text-xs text-text-secondary"
+        class="flex relative items-center gap-1.5 rounded-t-lg bg-surface-2 border border-border/40 px-3 pt-1.5 pb-3 text-xs text-text-secondary"
         data-testid="context-bar-title"
       >
+        <div
+          class="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-linear-to-t from-black/20 to-black/0"
+        ></div>
         <ChatSourceIcon
-          favIconUrl={currentFavIconUrl}
-          fallbackIcon={iconForSourceKind(activeSourceKind)}
+          favIconUrl={sources[0].favIconUrl}
+          fallbackIcon={iconForSourceKind(sources[0].kind)}
           size={14}
         />
-        <span class="min-w-0 truncate">
-          {currentTitle || activeSourceLabelForUrl(currentUrl || '')}
+        <span class="min-w-0 flex-1 truncate" title={sources[0].title}>
+          {sources[0].title}
         </span>
+        {#if sources[0].estimating}
+          <Icon
+            icon="solar:loader-2-bold"
+            width="12"
+            height="12"
+            class="shrink-0 animate-spin text-text-tertiary"
+            data-testid="context-bar-estimating"
+          />
+        {:else if sources[0].tokens != null}
+          <span
+            class="shrink-0 tabular-nums text-text-tertiary"
+            data-testid="context-bar-tokens"
+          >
+            ~{formatK(sources[0].tokens)} tokens
+          </span>
+        {/if}
+        {#if sources[0].locked}
+          <span
+            class="shrink-0 text-text-tertiary"
+            title="Already included in AI context"
+            data-testid="context-source-locked"
+          >
+            <Icon icon="heroicons:lock-closed-solid" width="12" height="12" />
+          </span>
+        {:else if sources[0].onRemove}
+          <button
+            type="button"
+            class="shrink-0 rounded-full p-0.5 text-text-tertiary hover:bg-surface-3 hover:text-text-primary"
+            aria-label="Remove {sources[0].title}"
+            onclick={(event) => {
+              event.stopPropagation()
+              sources[0].onRemove()
+            }}
+            data-testid="context-bar-single-remove"
+          >
+            <Icon icon="tabler:x" width="12" height="12" />
+          </button>
+        {/if}
       </div>
     {:else if mode === 'summary'}
       <!-- UI-2: Summary mode — favicon stack + count + tokens, clickable -->
       <button
         type="button"
-        class="flex w-full items-center gap-1.5 rounded-t-2xl bg-surface-2 px-3 pt-1.5 pb-2.5 text-xs text-text-secondary transition-colors hover:bg-surface-1"
+        class="flex w-full items-center gap-1.5 rounded-t-lg bg-surface-2 px-3 pt-1.5 pb-2.5 text-xs text-text-secondary transition-colors hover:bg-surface-1"
         aria-expanded={expanded}
         aria-controls="context-bar-panel"
         onclick={toggleExpand}
@@ -193,7 +351,10 @@
         </div>
 
         {#if addedCount > 0}
-          <span class="shrink-0 text-text-tertiary" data-testid="context-bar-tab-count">
+          <span
+            class="shrink-0 text-text-tertiary"
+            data-testid="context-bar-tab-count"
+          >
             + {addedCount} tab{addedCount !== 1 ? 's' : ''}
           </span>
         {/if}
@@ -201,7 +362,10 @@
         <span class="flex-1"></span>
 
         {#if knownTokens > 0}
-          <span class="shrink-0 tabular-nums text-text-tertiary" data-testid="context-bar-tokens">
+          <span
+            class="shrink-0 tabular-nums text-text-tertiary"
+            data-testid="context-bar-tokens"
+          >
             ~{formatK(knownTokens)} tokens
           </span>
         {/if}
@@ -210,13 +374,15 @@
           icon="heroicons:chevron-up"
           width="12"
           height="12"
-          class="shrink-0 text-text-tertiary transition-transform {expanded ? '' : 'rotate-180'}"
+          class="shrink-0 text-text-tertiary transition-transform {expanded
+            ? ''
+            : 'rotate-180'}"
         />
       </button>
     {/if}
 
     <!-- Restore button (when active source is dismissed) -->
-    {#if currentUrl && activeSourceDismissed}
+    {#if canRestoreActive}
       <div class="flex items-center px-1 py-0.5">
         <button
           type="button"

@@ -69,10 +69,17 @@
     field-sizing: content-box;
     overflow-y: auto;
     transition: all 0.2s ease-in-out;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
   }
 
   .chat-composer-input textarea::-webkit-scrollbar {
     width: 4px;
+    background: transparent;
+  }
+
+  .chat-composer-input textarea::-webkit-scrollbar-track {
+    background: transparent;
   }
 
   .chat-composer-input textarea::-webkit-scrollbar-thumb {

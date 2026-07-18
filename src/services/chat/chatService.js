@@ -131,7 +131,7 @@ export function createChatService({
     }
   }
 
-  async function prepareGroundedAttachments(existingAttachments, sourceRequired, { skillInvocation, settings, onWarnings } = {}) {
+  async function prepareGroundedAttachments(existingAttachments, sourceRequired, { skillInvocation, settings, onWarnings, activeSource } = {}) {
     const attachmentRefs = []
     const warnings = []
     const commentLimit = settings?.commentLimit
@@ -150,6 +150,20 @@ export function createChatService({
     // Explicit kinds (e.g. 'youtubeComments') pass through; 'auto' or absent →
     // resolveAutoSourceKind (transcript on YouTube, course transcript, webpage).
     const mode = skillInvocation?.sourceMode || 'auto'
+    const preparedKind = activeSource?.sourceKind || null
+    if (activeSource?.sourceId) {
+      if (!attachmentRefs.includes(activeSource.sourceId)) attachmentRefs.push(activeSource.sourceId)
+      onWarnings?.(warnings)
+      return attachmentRefs
+    }
+    if (activeSource?.tabId && activeSource?.url) {
+      const kind = preparedKind || (mode === 'auto' ? resolveAutoSourceKind(activeSource.url) : mode)
+      const captured = await sourceService.captureTabSource(activeSource, kind, { commentLimit })
+      if (!attachmentRefs.includes(captured.source.id)) attachmentRefs.push(captured.source.id)
+      onWarnings?.(warnings)
+      return attachmentRefs
+    }
+
     const activeTab = await sourceService.getActiveTab()
     const sourceKind = mode === 'auto' ? resolveAutoSourceKind(activeTab.url) : mode
 
@@ -373,6 +387,7 @@ export function createChatService({
       content,
       skillInvocation = null,
       pendingAttachments = [],
+      activeSource = null,
       settings,
       abortController = new AbortController(),
       sourceRequired = true,
@@ -388,7 +403,12 @@ export function createChatService({
 
       let attachmentRefs
       try {
-        attachmentRefs = await prepareGroundedAttachments(pendingAttachments, sourceRequired, { skillInvocation, settings, onWarnings })
+        attachmentRefs = await prepareGroundedAttachments(pendingAttachments, sourceRequired, {
+          skillInvocation,
+          settings,
+          onWarnings,
+          activeSource,
+        })
       } catch (error) {
         throw handleError(error, { source: 'chatCapture' })
       }

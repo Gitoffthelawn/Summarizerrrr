@@ -3,8 +3,6 @@
   import { Popover, Tooltip as BitsTooltip } from 'bits-ui'
   import Tooltip from '@/components/ui/Tooltip.svelte'
   import { formatK } from '@/lib/utils/formatTokens.js'
-  import { resolveProviderEntry } from '@/lib/providers/providerRegistry.js'
-  import { settings } from '@/stores/settingsStore.svelte.js'
   import { _ } from 'svelte-i18n'
 
   let {
@@ -14,36 +12,20 @@
     pendingEstimate = 0,
   } = $props()
 
-  const SOURCE_LABELS = {
-    'discovered': 'exact',
-    'openrouter-catalog': 'catalog',
-    'known-model': 'curated',
-    'default-fallback': 'estimated',
-  }
+  // Total tokens consumed in this turn: input (promptTokens) + output (completionTokens).
+  // Both count against the model's context window simultaneously.
+  const totalUsed = $derived((usage?.used || 0) + (usage?.output || 0))
 
-  // Fill against the input budget (window minus the reserved output), which is
-  // what actually constrains the input. Fall back to `window` if unavailable.
-  const capacity = $derived(usage?.inputBudget > 0 ? usage.inputBudget : usage?.window)
+
 
   const percent = $derived(
-    usage && capacity > 0
-      ? Math.min(100, Math.max(0, Math.round((usage.used / capacity) * 100)))
+    usage && usage.window > 0
+      ? Math.min(100, Math.max(0, Math.round((totalUsed / usage.window) * 100)))
       : 0
   )
 
   const level = $derived(
     percent >= 95 ? 'error' : percent >= 80 ? 'warning' : 'normal'
-  )
-
-  const sourceLabel = $derived(SOURCE_LABELS[usage?.source] || usage?.source || '')
-
-  // Resolve the provider entry for the model label in the popover.
-  const providerEntry = $derived(
-    usage?.providerId ? resolveProviderEntry(usage.providerId, settings) : null
-  )
-
-  const providerWarning = $derived(
-    usage?.providerId && !providerEntry
   )
 
   // SVG donut geometry
@@ -128,10 +110,8 @@
         <div class="donut-row">
           <span class="donut-label">{$_('chat.context_donut.model', { default: 'Model' })}</span>
           <span class="donut-value">
-            {#if providerWarning}
-              <span class="donut-warning">{$_('chat.context_donut.unknown_provider', { default: 'Unknown provider' })}</span>
-            {:else if usage?.modelId}
-              {providerEntry?.label ? `${providerEntry.label} · ` : ''}{usage.modelId}
+            {#if usage?.modelId}
+              {usage.modelId}
             {:else}
               <span class="donut-muted">—</span>
             {/if}
@@ -142,13 +122,7 @@
           <!-- Context window: used / window -->
           <div class="donut-row">
             <span class="donut-label">{$_('chat.context_donut.context_window', { default: 'Context window' })}</span>
-            <span class="donut-value tabular-nums">{formatK(usage.used)} / {formatK(usage.window)}</span>
-          </div>
-
-          <!-- Input budget: used / capacity -->
-          <div class="donut-row">
-            <span class="donut-label">{$_('chat.context_donut.input_budget', { default: 'Input budget' })}</span>
-            <span class="donut-value tabular-nums">{formatK(usage.used)} / {formatK(capacity)}</span>
+            <span class="donut-value tabular-nums">{formatK(totalUsed)} / {formatK(usage.window)}</span>
           </div>
 
           <!-- Input -->
@@ -175,16 +149,7 @@
             </div>
           {/if}
 
-          <!-- Source badge -->
-          {#if sourceLabel}
-            <div class="donut-row donut-row-source">
-              <span class="donut-label">{$_('chat.context_donut.source', { default: 'Source' })}</span>
-              <span
-                class="donut-source-badge"
-                class:donut-source-estimated={usage.source === 'default-fallback'}
-              >{sourceLabel}</span>
-            </div>
-          {/if}
+
         {/if}
       </div>
     </Popover.Content>
@@ -275,27 +240,8 @@
     color: var(--color-muted);
   }
 
-  .donut-warning {
-    color: var(--color-warning);
-    font-style: italic;
-  }
 
-  .donut-source-badge {
-    font-size: 0.625rem;
-    padding: 1px 4px;
-    border-radius: 2px;
-    color: var(--color-muted);
-  }
 
-  .donut-source-estimated {
-    background: color-mix(in srgb, var(--color-warning) 10%, transparent);
-  }
-
-  .donut-row-source {
-    margin-top: 2px;
-    padding-top: 4px;
-    border-top: 1px solid var(--color-border);
-  }
 
   @keyframes donut-popover-in {
     from {

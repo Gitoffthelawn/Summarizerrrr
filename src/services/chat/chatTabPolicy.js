@@ -36,7 +36,12 @@ export function abortChatTabSession(session) {
 
 export function updateChatSessionUrl(session, nextUrl) {
   if (!session || !nextUrl) return false
+  if (session.currentUrl === nextUrl) return false
   session.currentUrl = nextUrl
+  // Page capture is URL-scoped. Navigation only refreshes metadata; extraction
+  // remains lazy until the user types again on the new page.
+  if ('activeSourceEstimate' in session) session.activeSourceEstimate = null
+  if ('activeSourceDismissed' in session) session.activeSourceDismissed = false
   return true
 }
 

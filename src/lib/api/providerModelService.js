@@ -1,4 +1,5 @@
 import { registerModelCapability } from '@/lib/chat/providerCapabilities.js'
+import { persistDiscoveredCapabilities } from '@/lib/chat/modelCapabilityCache.js'
 
 export const PROVIDER_CONFIG = {
   chatgpt: {
@@ -199,6 +200,7 @@ export async function fetchProviderModels(
       : await requestModels(config.url, cleanApiKey, fetchFn)
     registerCapabilitiesFromBody(config.capabilityProviderId || providerId, body)
     const models = normalizeModels(providerId, body)
+    void persistDiscoveredCapabilities()
     return models.length ? models : FALLBACK_PROVIDER_MODELS[providerId]
   } catch (error) {
     if (!config.publicUrl) throw error
@@ -206,6 +208,7 @@ export async function fetchProviderModels(
     const body = await requestModels(config.publicUrl, '', fetchFn)
     registerCapabilitiesFromBody(config.capabilityProviderId || providerId, body)
     const models = normalizeModels(providerId, body)
+    void persistDiscoveredCapabilities()
     return models.length ? models : FALLBACK_PROVIDER_MODELS[providerId]
   }
 }

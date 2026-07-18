@@ -3,17 +3,26 @@
   import { DropdownMenu } from 'bits-ui'
   import Icon from '@iconify/svelte'
   import { browser } from 'wxt/browser'
-  import { chatState, setChatModel, getEffectiveChatModel, notifyChatDraftChanged } from '@/stores/chatStore.svelte.js'
+  import {
+    chatState,
+    setChatModel,
+    getEffectiveChatModel,
+    notifyChatDraftChanged,
+  } from '@/stores/chatStore.svelte.js'
   import { settings } from '@/stores/settingsStore.svelte.js'
-  import { resolveProviderEntry, isProviderConfigured } from '@/lib/providers/providerRegistry.js'
+  import {
+    resolveProviderEntry,
+    isProviderConfigured,
+  } from '@/lib/providers/providerRegistry.js'
   import { formatModelDisplayName } from '@/lib/chat/modelDisplayName.js'
-  import { getChatReasoningOptions, effectiveReasoningLevel } from '@/lib/api/reasoningConfig.js'
+  import {
+    getChatReasoningOptions,
+    effectiveReasoningLevel,
+  } from '@/lib/api/reasoningConfig.js'
   import { acquireOverlayScrollLock } from '@/lib/ui/overlayScrollLock.js'
   import { _ } from 'svelte-i18n'
 
-  let {
-    disabled = false,
-  } = $props()
+  let { disabled = false } = $props()
 
   const isDisabled = $derived(disabled || chatState.isSending)
 
@@ -21,30 +30,27 @@
   const effectiveModel = $derived(getEffectiveChatModel())
 
   const effectiveEntry = $derived(
-    effectiveModel.provider ? resolveProviderEntry(effectiveModel.provider, settings) : null
+    effectiveModel.provider
+      ? resolveProviderEntry(effectiveModel.provider, settings)
+      : null,
   )
 
   const isEffectiveUnconfigured = $derived(
-    effectiveModel.provider && !isProviderConfigured(effectiveModel.provider, settings)
+    effectiveModel.provider &&
+      !isProviderConfigured(effectiveModel.provider, settings),
   )
 
-  const isEffectiveWarning = $derived(!effectiveEntry || isEffectiveUnconfigured)
+  const isEffectiveWarning = $derived(
+    !effectiveEntry || isEffectiveUnconfigured,
+  )
 
   // Trigger label and icon
-  const triggerLabel = $derived(truncateModelName(formatModelDisplayName(effectiveModel.model)))
+  const triggerLabel = $derived(formatModelDisplayName(effectiveModel.model))
   const triggerIcon = $derived(
     isEffectiveWarning
       ? 'heroicons:exclamation-triangle-16-solid'
-      : effectiveEntry?.iconifyIcon || 'heroicons:cpu-chip-20-solid'
+      : effectiveEntry?.iconifyIcon || 'heroicons:cpu-chip-20-solid',
   )
-
-  // Formatter for model trigger
-  function truncateModelName(name) {
-    if (name.length > 15) {
-      return name.substring(0, 12) + '...'
-    }
-    return name
-  }
 
   // Model comparison helper
   function isSameModel(a, b) {
@@ -54,7 +60,8 @@
   // Resolve metadata for any list item
   function resolveItemDetails(item) {
     const entry = resolveProviderEntry(item.provider, settings)
-    const isUnconfigured = item.provider && !isProviderConfigured(item.provider, settings)
+    const isUnconfigured =
+      item.provider && !isProviderConfigured(item.provider, settings)
     const isWarning = !entry || isUnconfigured
 
     const label = formatModelDisplayName(item.model)
@@ -77,7 +84,7 @@
 
     const defaultItem = {
       provider: defProv,
-      model: defaultModelId
+      model: defaultModelId,
     }
     items.push(defaultItem)
 
@@ -87,17 +94,19 @@
       if (!isSameModel(qm, defaultItem)) {
         items.push({
           provider: qm.provider,
-          model: qm.model
+          model: qm.model,
         })
       }
     }
 
     // C. Conversation's current pair if not in A or B
-    const isCurrentInList = isSameModel(effectiveModel, defaultItem) || quickList.some(qm => isSameModel(effectiveModel, qm))
+    const isCurrentInList =
+      isSameModel(effectiveModel, defaultItem) ||
+      quickList.some((qm) => isSameModel(effectiveModel, qm))
     if (!isCurrentInList && effectiveModel.provider && effectiveModel.model) {
       items.push({
         provider: effectiveModel.provider,
-        model: effectiveModel.model
+        model: effectiveModel.model,
       })
     }
 
@@ -110,18 +119,35 @@
   }
 
   // --- Reasoning effort derivations ---
-  const activeProviderId = $derived(chatState.conversation?.providerId || settings.chat?.provider || '')
-  const activeModelId = $derived(chatState.conversation?.modelId || settings.chat?.model || null)
-  const reasoningOptions = $derived(getChatReasoningOptions(activeProviderId, activeModelId))
-  const displayedReasoningLevel = $derived(effectiveReasoningLevel(chatState.reasoningLevel, settings))
-  const currentChoice = $derived(reasoningOptions.find((o) => o.value === displayedReasoningLevel) || reasoningOptions[0])
+  const activeProviderId = $derived(
+    chatState.conversation?.providerId || settings.chat?.provider || '',
+  )
+  const activeModelId = $derived(
+    chatState.conversation?.modelId || settings.chat?.model || null,
+  )
+  const reasoningOptions = $derived(
+    getChatReasoningOptions(activeProviderId, activeModelId),
+  )
+  const displayedReasoningLevel = $derived(
+    effectiveReasoningLevel(chatState.reasoningLevel, settings),
+  )
+  const currentChoice = $derived(
+    reasoningOptions.find((o) => o.value === displayedReasoningLevel) ||
+      reasoningOptions[0],
+  )
   const supportsReasoning = $derived(reasoningOptions.length > 1)
-  const showEffortSuffix = $derived(supportsReasoning && displayedReasoningLevel !== 'provider-default')
+  const showEffortSuffix = $derived(
+    supportsReasoning && displayedReasoningLevel !== 'provider-default',
+  )
 
   // Reset reasoning level when available options shrink (e.g. provider switch)
   $effect(() => {
     const validValues = new Set(reasoningOptions.map((o) => o.value))
-    if (!validValues.has(effectiveReasoningLevel(chatState.reasoningLevel, settings))) {
+    if (
+      !validValues.has(
+        effectiveReasoningLevel(chatState.reasoningLevel, settings),
+      )
+    ) {
       chatState.reasoningLevel = 'provider-default'
       notifyChatDraftChanged()
     }
@@ -133,7 +159,9 @@
   }
 
   function openSettings() {
-    browser.tabs.create({ url: browser.runtime.getURL('settings.html') + '?tab=chat' })
+    browser.tabs.create({
+      url: browser.runtime.getURL('settings.html') + '?tab=chat',
+    })
   }
 
   let releaseScrollLock = null
@@ -154,28 +182,44 @@
   })
 
   // Shared class for a menu row (model item, submenu trigger, manage item)
-  const ROW = 'flex items-center gap-2 px-2.5 py-1.5 rounded-md cursor-pointer text-[13px] transition-colors hover:bg-surface-2 data-[highlighted]:bg-surface-2'
+  const ROW =
+    'flex items-center gap-2 px-2.5 py-1.5 rounded-md cursor-pointer text-sm transition-colors hover:bg-surface-2 data-[highlighted]:bg-surface-2'
 </script>
 
 <DropdownMenu.Root onOpenChange={handleOpenChange}>
   <DropdownMenu.Trigger disabled={isDisabled}>
     {#snippet child({ props })}
       <button
-        class="inline-flex items-center gap-1 px-2 py-1 -ml-1 rounded-full text-xs leading-none font-medium whitespace-nowrap cursor-pointer transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]
-        {isEffectiveWarning ? 'text-warning hover:bg-warning/10' : 'text-text-secondary hover:text-text-primary hover:bg-surface-3'}
+        class="inline-flex items-center gap-1 px-2 py-1 -ml-1 rounded-full text-xs leading-none font-medium whitespace-nowrap cursor-pointer transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary
+        {isEffectiveWarning
+          ? 'text-warning hover:bg-warning/10'
+          : 'text-text-secondary hover:text-text-primary hover:bg-surface-3'}
         {isDisabled ? 'opacity-50 cursor-default pointer-events-none' : ''}"
         data-testid="model-trigger"
         data-warning={isEffectiveWarning}
-        aria-label="{$_('chat.model_select.aria_label', { default: `Chat model: {model}`, values: { model: effectiveModel.model || 'Auto' } })}"
+        aria-label={$_('chat.model_select.aria_label', {
+          default: `Chat model: {model}`,
+          values: { model: effectiveModel.model || 'Auto' },
+        })}
         {...props}
       >
-        <Icon icon={triggerIcon} width="14" height="14" class="shrink-0" />
-        <span class="select-none" data-testid="model-name">{triggerLabel}</span>
+        <Icon icon={triggerIcon} width="12" height="12" class="shrink-0" />
+        <span class="max-w-32 truncate select-none" data-testid="model-name"
+          >{triggerLabel}</span
+        >
         {#if showEffortSuffix}
-          <span class="text-muted font-normal select-none" data-testid="model-effort">{currentChoice?.label}</span>
+          <span
+            class="text-muted font-normal select-none"
+            data-testid="model-effort">{currentChoice?.label}</span
+          >
         {/if}
         {#if !isDisabled}
-          <Icon icon="heroicons:chevron-up-down-16-solid" width="12" height="12" class="opacity-60" />
+          <Icon
+            icon="heroicons:chevron-up-down-16-solid"
+            width="12"
+            height="12"
+            class="opacity-60"
+          />
         {/if}
       </button>
     {/snippet}
@@ -183,7 +227,7 @@
 
   <DropdownMenu.Portal>
     <DropdownMenu.Content
-      class="bg-surface-1 dark:bg-surface-2 border border-border rounded-lg shadow-lg z-50 min-w-[220px] max-w-[320px] p-1"
+      class="bg-surface-1 dark:bg-surface-2 border border-border rounded-lg shadow-lg z-50 min-w-48 max-w-72 p-1"
       sideOffset={6}
       align="start"
       side="top"
@@ -192,13 +236,28 @@
         {@const details = resolveItemDetails(item)}
         {@const isActive = isSameModel(effectiveModel, item)}
         <DropdownMenu.Item
-          class="{ROW} {details.isWarning ? 'text-warning' : 'text-text-primary'}"
+          class="{ROW} {details.isWarning
+            ? 'text-warning'
+            : 'text-text-primary'}"
           onSelect={() => handleSelect(item)}
         >
-          <Icon icon={details.icon} width="14" height="14" class="shrink-0 {details.isWarning ? 'text-warning' : 'text-muted'}" />
-          <span class="flex-1 text-left truncate" data-testid="model-option-label">{details.label}</span>
+          <Icon
+            icon={details.icon}
+            width="12"
+            height="12"
+            class="shrink-0 {details.isWarning ? 'text-warning' : 'text-muted'}"
+          />
+          <span
+            class="flex-1 text-left text-sm truncate"
+            data-testid="model-option-label">{details.label}</span
+          >
           {#if isActive}
-            <Icon icon="heroicons:check" width="14" height="14" class="shrink-0 text-text-secondary" />
+            <Icon
+              icon="heroicons:check"
+              width="12"
+              height="12"
+              class="shrink-0 text-text-secondary"
+            />
           {/if}
         </DropdownMenu.Item>
       {/each}
@@ -207,14 +266,32 @@
 
       {#if supportsReasoning}
         <DropdownMenu.Sub>
-          <DropdownMenu.SubTrigger class="{ROW} text-text-primary data-[state=open]:bg-surface-2">
-            <Icon icon="heroicons:sparkles" width="14" height="14" class="shrink-0 text-muted" />
-            <span>{$_('chat.model_select.reasoning', { default: 'Reasoning' })}</span>
-            <span class="ml-auto text-muted text-xs">{currentChoice?.label}</span>
-            <Icon icon="heroicons:chevron-right-16-solid" width="14" height="14" class="shrink-0 text-muted" />
+          <DropdownMenu.SubTrigger
+            class="{ROW} text-text-primary data-[state=open]:bg-surface-2"
+          >
+            <Icon
+              icon="heroicons:sparkles"
+              width="14"
+              height="14"
+              class="shrink-0 text-muted"
+            />
+            <span
+              >{$_('chat.model_select.reasoning', {
+                default: 'Reasoning',
+              })}</span
+            >
+            <span class="ml-auto text-muted text-xs"
+              >{currentChoice?.label}</span
+            >
+            <Icon
+              icon="heroicons:chevron-right-16-solid"
+              width="14"
+              height="14"
+              class="shrink-0 text-muted"
+            />
           </DropdownMenu.SubTrigger>
           <DropdownMenu.SubContent
-            class="bg-surface-1 dark:bg-surface-2 border border-border rounded-lg shadow-lg z-50 min-w-[160px] p-1"
+            class="bg-surface-1 dark:bg-surface-2 border border-border rounded-lg shadow-lg z-50 min-w-24 p-1"
             sideOffset={4}
           >
             {#each reasoningOptions as option (option.value)}
@@ -224,7 +301,12 @@
               >
                 <span class="flex-1">{option.label}</span>
                 {#if option.value === displayedReasoningLevel}
-                  <Icon icon="heroicons:check" width="14" height="14" class="shrink-0 text-text-secondary" />
+                  <Icon
+                    icon="heroicons:check"
+                    width="14"
+                    height="14"
+                    class="shrink-0 text-text-secondary"
+                  />
                 {/if}
               </DropdownMenu.Item>
             {/each}
@@ -237,8 +319,17 @@
         class="{ROW} text-text-primary"
         onSelect={openSettings}
       >
-        <Icon icon="heroicons:cog-6-tooth" width="14" height="14" class="shrink-0 text-muted" />
-        <span>{$_('chat.model_select.manage_models', { default: 'Manage models...' })}</span>
+        <Icon
+          icon="heroicons:cog-6-tooth"
+          width="14"
+          height="14"
+          class="shrink-0 text-muted"
+        />
+        <span
+          >{$_('chat.model_select.manage_models', {
+            default: 'Manage models...',
+          })}</span
+        >
       </DropdownMenu.Item>
     </DropdownMenu.Content>
   </DropdownMenu.Portal>

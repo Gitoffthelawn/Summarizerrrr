@@ -12,6 +12,7 @@ import {
   resolveFeatureModel,
   resolveConversationModel,
 } from '@/lib/providers/featureModelResolver.js'
+import { resolveAutoSourceKind } from '@/services/chat/sourceResolution.js'
 
 /** Number of messages to show in the visible window — pagination decoupled from context. */
 const VISIBLE_MESSAGE_WINDOW = 25
@@ -41,6 +42,10 @@ function createChatSessionState() {
     composerText: '',
     selectedSkill: null,
     pendingAttachments: [],
+    /** Lazy estimate for the current browser page; populated only after user input. */
+    activeSourceEstimate: null,
+    /** Sources already recorded in the active AI generation path. These are immutable in the composer. */
+    committedSources: [],
     /** Sticky opt-out: when true, the current page is NOT grounded into the chat. */
     activeSourceDismissed: false,
     isSending: false,
@@ -81,7 +86,22 @@ export const chatTabsState = $state({
   version: 0,
 })
 
+/**
+ * Reactive signal bumped whenever the model-capability registry gains data
+ * (discovery from a provider's /models API, or hydration of the persisted
+ * cache). The context donut reads `version` so its pre-send preview of the
+ * selected model's context window refreshes once real limits arrive — the
+ * registry itself is a plain Map and can't drive Svelte reactivity.
+ */
+export const capabilitiesState = $state({ version: 0 })
+
+/** Bump {@link capabilitiesState} so capability-derived UI recomputes. */
+export function bumpCapabilitiesVersion() {
+  capabilitiesState.version += 1
+}
+
 const tabSessions = new Map() // tabId -> plain session snapshot
+const activeEstimateJobs = new Map() // `${tabId}|${url}|${kind}` -> Promise
 let activeTabId = null
 
 function markChatTabsChanged() {
@@ -145,6 +165,96 @@ export function notifyChatDraftChanged() {
   markChatTabsChanged()
 }
 
+function normalizeSourceUrl(url) {
+  try {
+    const normalized = new URL(url)
+    normalized.hash = ''
+    return normalized.toString()
+  } catch {
+    return String(url || '')
+  }
+}
+
+function activeEstimateKey(tabId, url, sourceKind) {
+  return `${tabId}|${normalizeSourceUrl(url)}|${sourceKind}`
+}
+
+function effectiveActiveSourceKind() {
+  const mode = chatState.selectedSkill?.sourceMode
+  if (mode && mode !== 'auto') return mode
+  return resolveAutoSourceKind(chatState.currentUrl || '')
+}
+
+/**
+ * Capture and estimate the current page after the user has shown intent to chat.
+ * The explicit tab snapshot prevents a late async result from being attributed
+ * to whichever browser tab happens to be active when extraction finishes.
+ */
+export function ensureActiveSourceEstimate(sourceKind = effectiveActiveSourceKind()) {
+  const targetTabId = activeTabId ?? chatTabsState.activeBrowserTabId
+  const owner = readSession(targetTabId)
+  const url = owner?.currentUrl
+  if (targetTabId == null || !url || owner.activeSourceDismissed) return Promise.resolve(null)
+
+  const kind = sourceKind || resolveAutoSourceKind(url)
+  const key = activeEstimateKey(targetTabId, url, kind)
+  const current = owner.activeSourceEstimate
+  if (current?.key === key) {
+    if (current.estimating) return activeEstimateJobs.get(key) || Promise.resolve(null)
+    if (current.sourceId || current.estimatedTokens != null) return Promise.resolve(current)
+  }
+
+  writeSession(targetTabId, {
+    activeSourceEstimate: {
+      key,
+      tabId: targetTabId,
+      url,
+      title: owner.currentTitle,
+      favIconUrl: owner.currentFavIconUrl,
+      sourceKind: kind,
+      sourceId: null,
+      estimatedTokens: null,
+      estimating: true,
+      submitted: false,
+    },
+  })
+
+  const job = (async () => {
+    try {
+      const { source } = await chatSourceService.captureTabSource(
+        { tabId: targetTabId, url, title: owner.currentTitle },
+        kind,
+      )
+      const latest = readSession(targetTabId)
+      if (latest?.activeSourceEstimate?.key !== key) return null
+      const estimate = {
+        ...latest.activeSourceEstimate,
+        sourceId: source?.id || null,
+        estimatedTokens: estimateTokens(source?.rawContent || ''),
+        estimating: false,
+      }
+      writeSession(targetTabId, { activeSourceEstimate: estimate })
+      return estimate
+    } catch {
+      const latest = readSession(targetTabId)
+      if (latest?.activeSourceEstimate?.key === key) {
+        writeSession(targetTabId, {
+          activeSourceEstimate: {
+            ...latest.activeSourceEstimate,
+            estimatedTokens: null,
+            estimating: false,
+          },
+        })
+      }
+      return null
+    } finally {
+      if (activeEstimateJobs.get(key) === job) activeEstimateJobs.delete(key)
+    }
+  })()
+  activeEstimateJobs.set(key, job)
+  return job
+}
+
 export function canSendChat() {
   return Boolean(chatState.composerText.trim() || chatState.selectedSkill) && !chatState.isSending
 }
@@ -173,18 +283,21 @@ export async function addTabAttachment(tab) {
     // measured — not the visible page text).
     chatState.pendingAttachments = [...chatState.pendingAttachments, { ...attachment, estimatedTokens: null, estimating: true }]
     markChatTabsChanged()
-    estimateAttachmentTokens(attachment)
+    estimateAttachmentTokens(attachment, activeTabId)
   }
   return attachment
 }
 
 /** Reactively patch a single pending attachment matched by (tabId, sourceKind). */
-function patchPendingAttachment(tabId, sourceKind, patch) {
-  chatState.pendingAttachments = chatState.pendingAttachments.map((item) =>
+function patchPendingAttachment(ownerTabId, tabId, sourceKind, patch) {
+  const owner = readSession(ownerTabId)
+  if (!owner) return
+  const pendingAttachments = owner.pendingAttachments.map((item) =>
     item.tabId === tabId && (item.sourceKind || undefined) === (sourceKind || undefined)
       ? { ...item, ...patch }
       : item
   )
+  writeSession(ownerTabId, { pendingAttachments })
 }
 
 /**
@@ -194,13 +307,17 @@ function patchPendingAttachment(tabId, sourceKind, patch) {
  * the eventual send does not re-extract. Fails silently: a chip without an
  * estimate is fine.
  */
-async function estimateAttachmentTokens(attachment) {
+async function estimateAttachmentTokens(attachment, ownerTabId) {
   try {
     const { source } = await chatSourceService.captureTabSource(attachment, attachment.sourceKind)
     const tokens = estimateTokens(source?.rawContent || '')
-    patchPendingAttachment(attachment.tabId, attachment.sourceKind, { estimatedTokens: tokens, estimating: false })
+    patchPendingAttachment(ownerTabId, attachment.tabId, attachment.sourceKind, {
+      sourceId: source?.id || null,
+      estimatedTokens: tokens,
+      estimating: false,
+    })
   } catch {
-    patchPendingAttachment(attachment.tabId, attachment.sourceKind, { estimatedTokens: null, estimating: false })
+    patchPendingAttachment(ownerTabId, attachment.tabId, attachment.sourceKind, { estimatedTokens: null, estimating: false })
   }
 }
 
@@ -223,14 +340,62 @@ export function restoreActiveSource() {
   markChatTabsChanged()
 }
 
+async function resolveCommittedSources(messages) {
+  const refsById = new Map()
+  for (const message of messages || []) {
+    for (const ref of message.groundingRefs || []) {
+      if (!ref?.sourceId) continue
+      const previous = refsById.get(ref.sourceId)
+      refsById.set(ref.sourceId, {
+        sourceId: ref.sourceId,
+        tokens: ref.tokens ?? previous?.tokens ?? null,
+      })
+    }
+  }
+
+  // Older stored conversations may predate persisted groundingRefs. Their user
+  // attachmentRefs are the best available evidence that a source was submitted.
+  if (refsById.size === 0) {
+    for (const message of messages || []) {
+      for (const sourceId of message.attachmentRefs || []) {
+        if (sourceId && !refsById.has(sourceId)) refsById.set(sourceId, { sourceId, tokens: null })
+      }
+    }
+  }
+
+  const ids = [...refsById.keys()]
+  if (ids.length === 0) return []
+  const records = await conversationRepository.getSourcesByIds(ids)
+  const recordsById = new Map(records.map((source) => [source.id, source]))
+  return ids.flatMap((sourceId) => {
+    const source = recordsById.get(sourceId)
+    if (!source) return []
+    const ref = refsById.get(sourceId)
+    return [{
+      sourceId,
+      tabId: source.tabIdHint ?? null,
+      url: source.url || source.normalizedUrl || null,
+      normalizedUrl: source.normalizedUrl || normalizeSourceUrl(source.url),
+      title: source.title || source.normalizedUrl || 'Context source',
+      favIconUrl: null,
+      sourceKind: source.sourceType || null,
+      estimatedTokens: ref?.tokens ?? estimateTokens(source.rawContent || ''),
+      locked: true,
+    }]
+  })
+}
+
 async function reloadActivePath(tabId, result) {
   const owner = readSession(tabId)
   if (!owner.conversation) return
   const fullPath = await conversationRepository.getGenerationPath(owner.conversation.id)
+  const committedSources = await resolveCommittedSources(fullPath)
   const hasEarlier = fullPath.length > VISIBLE_MESSAGE_WINDOW
   const windowed = hasEarlier ? fullPath.slice(-VISIBLE_MESSAGE_WINDOW) : fullPath
   writeSession(tabId, {
     messages: windowed,
+    committedSources,
+    pendingAttachments: [],
     hasEarlierMessages: hasEarlier,
     streamingMessage: null,
     error: result?.error || null,
@@ -317,12 +482,14 @@ export async function openConversation(id) {
   await conversationRepository.recoverStreamingMessages(id)
 
   const fullPath = await conversationRepository.getGenerationPath(id)
+  const committedSources = await resolveCommittedSources(fullPath)
   const hasEarlier = fullPath.length > VISIBLE_MESSAGE_WINDOW
   const windowed = hasEarlier ? fullPath.slice(-VISIBLE_MESSAGE_WINDOW) : fullPath
   writeSession(activeTabId, {
     activeConversationId: id,
     conversation,
     messages: windowed,
+    committedSources,
     hasEarlierMessages: hasEarlier,
     error: null,
     contextWarnings: [],
@@ -422,11 +589,13 @@ export async function syncChatForActiveTab(tabId, { url = null, title = undefine
           // Recovery-on-open for tab restore
           await conversationRepository.recoverStreamingMessages(conversationId)
           const fullPath = await conversationRepository.getGenerationPath(conversationId)
+          const committedSources = await resolveCommittedSources(fullPath)
           const hasEarlier = fullPath.length > VISIBLE_MESSAGE_WINDOW
           const windowed = hasEarlier ? fullPath.slice(-VISIBLE_MESSAGE_WINDOW) : fullPath
           session.activeConversationId = conversation.id
           session.conversation = conversation
           session.messages = windowed
+          session.committedSources = committedSources
           session.hasEarlierMessages = hasEarlier
           // Only repaint if the user is still on this tab after the async load.
           if (activeTabId === tabId) projectSessionToView(session)
@@ -477,6 +646,19 @@ export async function sendChatMessage(content = chatState.composerText) {
   // When the user has dismissed the page context, don't ground the active tab.
   // Explicit @ attachments (if any) are still captured.
   const sourceRequired = !chatState.activeSourceDismissed
+  const activeSourceKind =
+    skillInvocation?.sourceMode && skillInvocation.sourceMode !== 'auto'
+      ? skillInvocation.sourceMode
+      : resolveAutoSourceKind(owner.currentUrl || '')
+  const preparedActiveSource = sourceRequired
+    ? {
+        tabId: targetTabId,
+        url: owner.currentUrl,
+        title: owner.currentTitle,
+        sourceKind: activeSourceKind,
+        sourceId: null,
+      }
+    : null
 
   writeSession(targetTabId, {
     error: null,
@@ -487,22 +669,40 @@ export async function sendChatMessage(content = chatState.composerText) {
   })
 
   try {
+    // If the user submits immediately after the first character, share the same
+    // in-flight extraction instead of starting a second capture in chatService.
+    // isSending is already true here, preventing a second submit while capture
+    // is still resolving.
+    if (sourceRequired && (String(content || '').trim() || skillInvocation)) {
+      const estimate = await ensureActiveSourceEstimate(activeSourceKind)
+      if (preparedActiveSource) preparedActiveSource.sourceId = estimate?.sourceId || null
+    }
+    if (abortController.signal.aborted) return null
+
     const result = await chatService.send({
       conversation,
       messages: history,
       content,
       skillInvocation,
       pendingAttachments,
+      activeSource: preparedActiveSource,
       sourceRequired,
-      reasoningLevel: effectiveReasoningLevel(chatState.reasoningLevel, settings),
+      reasoningLevel: effectiveReasoningLevel(owner.reasoningLevel, settings),
       settings,
       abortController,
       onUserMessage: (message) => {
+        const session = readSession(targetTabId)
         writeSession(targetTabId, {
-          messages: [...readSession(targetTabId).messages, message],
+          messages: [...session.messages, message],
           composerText: '',
           selectedSkill: null,
-          pendingAttachments: [],
+          pendingAttachments: session.pendingAttachments.map((attachment) => ({
+            ...attachment,
+            submitted: true,
+          })),
+          activeSourceEstimate: session.activeSourceEstimate
+            ? { ...session.activeSourceEstimate, submitted: true }
+            : null,
         })
       },
       onChunk: (message) => {

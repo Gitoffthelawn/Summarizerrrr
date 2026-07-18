@@ -360,6 +360,10 @@
     }
   },
   "chat": {
+    "time": {
+      "justNow": "たった今",
+      "minutesAgo": "{count}分前"
+    },
     "context_donut": {
       "aria_usage": "Context window usage:",
       "aria_unknown": "Context usage not known yet",

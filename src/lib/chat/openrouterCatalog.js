@@ -122,15 +122,44 @@ export function buildCatalog(body) {
  *   provider excluded.
  */
 export function lookupCatalogWindow(catalog, providerId, modelId) {
-  const vendor = PROVIDER_VENDOR_MAP[providerId]
-  if (!vendor) return null // provider not in the allowlist (e.g. ollama)
-
   if (!catalog || typeof catalog !== 'object') return null
   if (typeof modelId !== 'string' || !modelId) return null
+
+  // OpenRouter model ids are already vendor-prefixed (e.g. 'openai/gpt-5.2',
+  // 'x-ai/grok-2'), so extract the vendor directly from the id.
+  let vendor
+  if (providerId === 'openrouter') {
+    const slashIdx = modelId.indexOf('/')
+    if (slashIdx === -1) return null // bare id (rare) — can't resolve vendor
+    vendor = modelId.slice(0, slashIdx).toLowerCase()
+  } else {
+    vendor = PROVIDER_VENDOR_MAP[providerId]
+    if (!vendor) return null // provider not in the allowlist (e.g. ollama)
+  }
 
   const key = `${vendor}:${normalizeModelSlug(modelId)}`
   const value = catalog[key]
   return typeof value === 'number' && value > 0 ? value : null
+}
+
+// ---------------------------------------------------------------------------
+// Reactive signal bump (keeps donut preview in sync)
+// ---------------------------------------------------------------------------
+
+/**
+ * Nudge the reactive capability signal so the context donut preview recomputes
+ * when the catalog arrives.  Lazy-imported and best-effort — the store pulls in
+ * browser-only deps, so failures are swallowed in unit tests.
+ */
+async function bumpCatalogCapabilitiesSignal() {
+  try {
+    const { bumpCapabilitiesVersion } = await import(
+      '@/stores/chatStore.svelte.js'
+    )
+    bumpCapabilitiesVersion()
+  } catch {
+    // No reactive store available (e.g. unit tests) — nothing to refresh.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -166,6 +195,9 @@ export async function fetchAndStoreCatalog(fetchFn = fetch) {
 
     // Push into the live resolver immediately.
     setOpenrouterCatalog(entries)
+
+    // Bump so capability-derived UI (context donut) recomputes.
+    await bumpCatalogCapabilitiesSignal()
   } catch (error) {
     // Offline / network error must never break chat.
     console.warn('[openrouterCatalog] fetch failed:', error)
@@ -190,6 +222,7 @@ export async function hydrateCatalogFromStorage() {
     // Push whatever we have into the resolver (even if empty — harmless).
     if (entries && typeof entries === 'object' && Object.keys(entries).length > 0) {
       setOpenrouterCatalog(entries)
+      await bumpCatalogCapabilitiesSignal()
     }
 
     // Refresh in the background if stale or empty.

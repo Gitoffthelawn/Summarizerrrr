@@ -10,6 +10,7 @@ export { resolveSources } from './sourceResolver.js'
 export {
   DEFAULT_RESPONSE_BEHAVIOR,
   SOURCE_GUARDRAIL,
+  buildCurrentDateContext,
   buildThinSystemInstruction,
   escapeSourceValue,
   formatSkillInvocation,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildThinSystemInstruction,
+  buildCurrentDateContext,
   DEFAULT_RESPONSE_BEHAVIOR,
   SOURCE_GUARDRAIL,
 } from '@/lib/chat/contextPipeline/sourceFormatter.js'
@@ -127,6 +128,35 @@ describe('buildThinSystemInstruction', () => {
   it('states the skill > persona > defaults precedence order', () => {
     const system = buildThinSystemInstruction({})
     expect(system).toContain('attached skill first, then persona style, then these defaults')
+  })
+
+  it('grounds the model in the current date, between baseline and persona', () => {
+    const now = new Date(2026, 6, 17, 14, 30, 0) // 2026-07-17, local
+    const system = buildThinSystemInstruction({ content: 'Cite sources.' }, now)
+
+    const dateIdx = system.indexOf('Current date:')
+    const baselineIdx = system.indexOf(DEFAULT_RESPONSE_BEHAVIOR)
+    const personaIdx = system.indexOf('Cite sources.')
+
+    expect(dateIdx).toBeGreaterThan(baselineIdx)
+    expect(personaIdx).toBeGreaterThan(dateIdx)
+    expect(system).toContain('2026-07-17')
+  })
+
+  it('keeps the date at DAY granularity so the cached prefix stays stable', () => {
+    // Two different clock times on the SAME day must yield an identical system
+    // prompt — otherwise the provider-cached prefix breaks every turn.
+    const morning = new Date(2026, 6, 17, 8, 5, 0)
+    const evening = new Date(2026, 6, 17, 23, 59, 0)
+    const persona = { content: 'Be concise.' }
+
+    expect(buildThinSystemInstruction(persona, morning)).toBe(
+      buildThinSystemInstruction(persona, evening),
+    )
+
+    // And it must not leak a clock time.
+    const dateLine = buildCurrentDateContext(morning)
+    expect(dateLine).not.toMatch(/\d{1,2}:\d{2}/)
   })
 })
 

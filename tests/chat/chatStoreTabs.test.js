@@ -24,6 +24,10 @@ vi.mock('@/lib/db/conversationRepository.js', () => ({
       ...metadata,
       updatedAt: new Date().toISOString(),
     })),
+    getConversation: vi.fn(),
+    recoverStreamingMessages: vi.fn(async () => 0),
+    getGenerationPath: vi.fn(),
+    getSourcesByIds: vi.fn(),
   },
 }))
 
@@ -42,6 +46,8 @@ import {
   setChatModel,
   getEffectiveChatModel,
   startConversationForActiveTab,
+  ensureActiveSourceEstimate,
+  openConversation,
 } from '@/stores/chatStore.svelte.js'
 import { conversationRepository } from '@/lib/db/conversationRepository.js'
 import { chatService } from '@/services/chat/chatService.js'
@@ -347,5 +353,74 @@ describe('active-tab identity — title + favicon (Phase 1)', () => {
     updateChatTabMetadata(TAB_B, { favIconUrl: 'https://b.example/favicon.ico' })
 
     expect(chatSourceService.captureTabSource).not.toHaveBeenCalled()
+  })
+
+  it('captures and estimates only when explicitly triggered, then resets on navigation', async () => {
+    chatSourceService.captureTabSource.mockResolvedValueOnce({
+      source: { id: 'source-a', rawContent: 'Readable page content '.repeat(80) },
+    })
+    await syncChatForActiveTab(TAB_A, {
+      url: 'https://a.example/one',
+      title: 'Page A',
+      favIconUrl: 'https://a.example/favicon.ico',
+    })
+
+    expect(chatSourceService.captureTabSource).not.toHaveBeenCalled()
+    const estimatePromise = ensureActiveSourceEstimate('webpage')
+    expect(chatState.activeSourceEstimate.estimating).toBe(true)
+    await estimatePromise
+
+    expect(chatSourceService.captureTabSource).toHaveBeenCalledOnce()
+    expect(chatSourceService.captureTabSource).toHaveBeenCalledWith(
+      { tabId: TAB_A, url: 'https://a.example/one', title: 'Page A' },
+      'webpage',
+    )
+    expect(chatState.activeSourceEstimate.sourceId).toBe('source-a')
+    expect(chatState.activeSourceEstimate.estimatedTokens).toBeGreaterThan(0)
+
+    handleChatTabNavigation(TAB_A, 'https://a.example/two')
+    expect(chatState.activeSourceEstimate).toBeNull()
+    expect(chatSourceService.captureTabSource).toHaveBeenCalledOnce()
+  })
+})
+
+describe('committed context sources', () => {
+  it('hydrates grounded sources as locked composer context', async () => {
+    conversationRepository.getConversation.mockResolvedValueOnce({
+      id: 'conversation-grounded',
+      deleted: false,
+    })
+    conversationRepository.getGenerationPath.mockResolvedValueOnce([
+      { id: 'user-1', role: 'user', attachmentRefs: ['source-1'] },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        groundingRefs: [{ sourceId: 'source-1', tokens: 321 }],
+      },
+    ])
+    conversationRepository.getSourcesByIds.mockResolvedValueOnce([
+      {
+        id: 'source-1',
+        tabIdHint: TAB_A,
+        url: 'https://a.example/article',
+        normalizedUrl: 'https://a.example/article',
+        title: 'Grounded article',
+        sourceType: 'webpage',
+        rawContent: 'Article body',
+      },
+    ])
+
+    await syncChatForActiveTab(TAB_A, { url: 'https://a.example/article' })
+    await openConversation('conversation-grounded')
+
+    expect(chatState.committedSources).toEqual([
+      expect.objectContaining({
+        sourceId: 'source-1',
+        title: 'Grounded article',
+        sourceKind: 'webpage',
+        estimatedTokens: 321,
+        locked: true,
+      }),
+    ])
   })
 })

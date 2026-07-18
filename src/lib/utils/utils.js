@@ -12,6 +12,46 @@ export function formatDate(isoString) {
   })
 }
 
+/**
+ * Describe how long ago `createdAt` was, for the chat turn footer. Returns a
+ * structured result (not a translated string) so the component owns i18n.
+ * Under 1 hour → relative minutes; from 1 hour → absolute clock time (24h),
+ * with the date prepended once it is no longer the same calendar day.
+ * @param {string | number | Date} createdAt
+ * @param {number} now Epoch ms; injectable for deterministic tests.
+ * @returns {{mode:'just-now'} | {mode:'minutes',minutes:number} | {mode:'clock',clock:string} | {mode:'datetime',label:string} | null}
+ */
+export function getElapsedDisplay(createdAt, now = Date.now()) {
+  if (!createdAt) return null
+  const then = new Date(createdAt).getTime()
+  if (Number.isNaN(then)) return null
+
+  const diffMs = now - then
+  if (diffMs < 60_000) return { mode: 'just-now' }
+
+  const diffMinutes = Math.floor(diffMs / 60_000)
+  if (diffMinutes < 60) return { mode: 'minutes', minutes: diffMinutes }
+
+  const thenDate = new Date(then)
+  const nowDate = new Date(now)
+  const sameDay =
+    thenDate.getFullYear() === nowDate.getFullYear() &&
+    thenDate.getMonth() === nowDate.getMonth() &&
+    thenDate.getDate() === nowDate.getDate()
+
+  if (sameDay) {
+    return {
+      mode: 'clock',
+      clock: thenDate.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }),
+    }
+  }
+  return { mode: 'datetime', label: formatDate(createdAt) }
+}
+
 export function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     var r = (Math.random() * 16) | 0,

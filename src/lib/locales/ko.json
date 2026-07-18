@@ -360,6 +360,10 @@
     }
   },
   "chat": {
+    "time": {
+      "justNow": "방금",
+      "minutesAgo": "{count}분 전"
+    },
     "context_donut": {
       "aria_usage": "Context window usage:",
       "aria_unknown": "Context usage not known yet",

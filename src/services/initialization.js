@@ -11,6 +11,7 @@ import {
 } from '../stores/themeStore.svelte.js'
 import { useOverlayScrollbars } from 'overlayscrollbars-svelte'
 import { hydrateCatalogFromStorage } from '../lib/chat/openrouterCatalog.js'
+import { hydrateModelCapabilitiesFromStorage } from '../lib/chat/modelCapabilityCache.js'
 
 function applyFontToDocument(font) {
   if (document.body) {
@@ -39,8 +40,9 @@ export async function initializeApp() {
   await loadSettings()
   await initializeTheme()
 
-  // Hydrate OpenRouter catalog (fire-and-forget — must not block startup).
+  // Hydrate cached context-window data (fire-and-forget — must not block startup).
   hydrateCatalogFromStorage()
+  hydrateModelCapabilitiesFromStorage()
 
   // Apply initial theme and font
   applyThemeToDocument(themeSettings.theme)

@@ -110,12 +110,41 @@ function buildPreferenceInstructions(persona) {
 }
 
 /**
- * @param {string | {content?: string, language?: string, tone?: string | null} | undefined | null} persona
+ * Grounds the model in the current calendar date. Deliberately DAY-granularity
+ * (no clock time): the thin system prompt is the head of the provider-cached
+ * prefix, so a value that changes every request would break the cache on every
+ * turn. A date string stays byte-identical for all turns within the same local
+ * day, so caching keeps hitting while the model still knows "today".
+ * @param {Date} now
  */
-export function buildThinSystemInstruction(persona) {
+export function buildCurrentDateContext(now = new Date()) {
+  let readable
+  let timeZone = ''
+  try {
+    readable = now.toLocaleDateString(undefined, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+  } catch {
+    readable = now.toDateString()
+  }
+  const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const zoneSuffix = timeZone ? ` — ${timeZone}` : ''
+  return `Current date: ${readable} (${iso}${zoneSuffix}). This is the user's local date; use it as the reference for "today" and any relative dates.`
+}
+
+/**
+ * @param {string | {content?: string, language?: string, tone?: string | null} | undefined | null} persona
+ * @param {Date} now Injectable clock; keep DAY-stable so the cached prefix survives (see buildCurrentDateContext).
+ */
+export function buildThinSystemInstruction(persona, now = new Date()) {
   const normalized = typeof persona === 'string' ? { content: persona } : persona || {}
   return [
     DEFAULT_RESPONSE_BEHAVIOR,
+    buildCurrentDateContext(now),
     normalized.content?.trim(),
     buildPreferenceInstructions(normalized),
     SOURCE_GUARDRAIL,

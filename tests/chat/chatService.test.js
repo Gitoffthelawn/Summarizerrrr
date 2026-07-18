@@ -161,6 +161,50 @@ describe('chat orchestration', () => {
     expect(probe.calls[1].input.conversationSourceRefs).toEqual(['source-1'])
   })
 
+  it('uses the prepared tab source when the browser activates another tab before send assembly', async () => {
+    const repository = createRepository()
+    const prepared = source('prepared-source')
+    repository.sources.set(prepared.id, prepared)
+    let activeTabReads = 0
+    const sourceService = {
+      getActiveTab: async () => {
+        activeTabReads += 1
+        return { id: 44, url: 'https://example.com', title: 'Original tab' }
+      },
+      getCachedActiveSource: async () => {
+        throw new Error('Prepared source should avoid resolving the newly active tab')
+      },
+      captureActiveSource: async () => {
+        throw new Error('Prepared source should avoid recapturing the newly active tab')
+      },
+    }
+    const service = createChatService({
+      repository,
+      sourceService,
+      buildPipeline: createPipelineProbe().build,
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+    const result = await service.send({
+      conversation,
+      content: 'Use the original tab',
+      settings,
+      activeSource: {
+        tabId: 44,
+        url: 'https://example.com',
+        sourceKind: 'webpage',
+        sourceId: prepared.id,
+      },
+    })
+
+    expect(activeTabReads).toBe(1) // conversation start only
+    expect(result.assistant).toMatchObject({ content: 'Answer' })
+    const messages = await repository.listMessagesByConversation(conversation.id)
+    expect(messages.find((message) => message.role === 'user')?.attachmentRefs).toEqual([prepared.id])
+  })
+
   it('stores long source snapshots without creating a truncated condensed copy', async () => {
     const repository = createRepository()
     const content = `${'Complete source content. '.repeat(800)}THE FINAL SECTION`

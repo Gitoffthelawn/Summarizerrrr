@@ -19,7 +19,7 @@
     onskillchange = null,
     oniniterror = null,
     onkeydown = null,
-    'aria-label': ariaLabel = 'Chat message'
+    'aria-label': ariaLabel = 'Chat message',
   } = $props()
 
   let editorContainer = $state(null)
@@ -86,15 +86,15 @@
               onmentionchange?.({ open, query, range, clientRect })
             },
             // Return true to consume the key so the editor doesn't act on it.
-            onMentionKeyDown: (event) => onkeydown?.(event) ?? false
+            onMentionKeyDown: (event) => onkeydown?.(event) ?? false,
           }),
           SkillSuggestionExtension.configure({
             onSkillStateChange: ({ open, query, range, clientRect }) => {
               localSkillOpen = open
               onskillchange?.({ open, query, range, clientRect })
             },
-            onSkillKeyDown: (event) => onkeydown?.(event) ?? false
-          })
+            onSkillKeyDown: (event) => onkeydown?.(event) ?? false,
+          }),
         ],
         content: value,
         contentType: 'markdown',
@@ -102,10 +102,11 @@
         autofocus: autofocus ? 'end' : false,
         editorProps: {
           attributes: {
-            class: 'w-full text-sm text-text-primary placeholder:text-muted pl-1 py-2 focus:outline-0 focus-visible:outline-0 focus:ring-0 transition-colors shadow-none duration-200 resize-none overflow-y-auto disabled:opacity-60 min-h-[24px]',
+            class:
+              'w-full text-sm text-text-primary placeholder:text-muted pl-1 py-2 focus:outline-0 focus-visible:outline-0 focus:ring-0 transition-colors shadow-none duration-200 resize-none overflow-y-auto disabled:opacity-60 min-h-[24px]',
             'aria-label': ariaLabel,
             role: 'textbox',
-            'aria-multiline': 'true'
+            'aria-multiline': 'true',
           },
           handleKeyDown(view, event) {
             if (!editor) return false
@@ -124,7 +125,7 @@
               isComposing: event.isComposing,
               keyCode: event.keyCode,
               blockType,
-              disabled
+              disabled,
             })
 
             if (action === 'submit') {
@@ -143,14 +144,14 @@
               }
             }
             return false
-          }
+          },
         },
         onUpdate() {
           if (!isUpdatingFromProp) {
             const markdown = editor.getMarkdown()
             onchange?.(markdown)
           }
-        }
+        },
       })
     } catch (err) {
       if (editor) {
@@ -170,15 +171,37 @@
 
 <div class="relative w-full">
   <div
-    class="chat-rich-text-input flex w-full items-center max-h-[220px] overflow-y-auto"
+    class="chat-rich-text-input flex w-full items-start max-h-[220px] overflow-y-auto"
   >
     <div bind:this={editorContainer} class="w-full"></div>
   </div>
+  <div
+    class="pointer-events-none absolute inset-x-0 top-0 z-10 h-2 bg-linear-to-b from-surface-2 to-surface-2/0"
+  ></div>
+  <div
+    class="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-2 bg-linear-to-t from-surface-2 to-surface-2/0"
+  ></div>
 </div>
 
 <style>
   .chat-rich-text-input {
     position: relative;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
+  .chat-rich-text-input::-webkit-scrollbar {
+    width: 6px;
+    background: transparent;
+  }
+
+  .chat-rich-text-input::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .chat-rich-text-input::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 9999px;
   }
 
   :global(.tiptap) {
@@ -240,6 +263,7 @@
     content: attr(data-placeholder);
     float: left;
     color: var(--color-text-muted, #9ca3af);
+    opacity: 0.4;
     pointer-events: none;
     height: 0;
   }
