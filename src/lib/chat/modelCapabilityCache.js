@@ -7,25 +7,15 @@
  * discovery. These helpers snapshot the registry to storage after discovery and
  * merge it back at startup, so exact limits are available immediately.
  *
- * Storage and providerCapabilities are imported lazily so the pure registry can
- * be unit-tested without triggering `browser.runtime` side effects.
+ * Storage goes through `lib/config/storagePort.js` and the reactive capability
+ * signal through `lib/chat/capabilitiesSignal.js` — both resolve lazily, so the
+ * pure registry stays unit-testable without triggering `browser.runtime` side
+ * effects, and `lib/` never imports `services/` or `stores/` (see the layering
+ * table in CLAUDE.md).
  */
 
-/**
- * Nudge the reactive capability signal so capability-derived UI (the context
- * donut's pre-send preview) recomputes. Lazy-imported and best-effort — the
- * store pulls in browser-only deps, so failures are swallowed in tests.
- */
-async function bumpCapabilitiesSignal() {
-  try {
-    const { bumpCapabilitiesVersion } = await import(
-      '@/stores/chatStore.svelte.js'
-    )
-    bumpCapabilitiesVersion()
-  } catch {
-    // No reactive store available (e.g. unit tests) — nothing to refresh.
-  }
-}
+import { getStorage } from '@/lib/config/storagePort.js'
+import { notifyCapabilitiesChanged } from '@/lib/chat/capabilitiesSignal.js'
 
 /**
  * Persist the current runtime registry snapshot to storage. Fire-and-forget
@@ -41,11 +31,9 @@ export async function persistDiscoveredCapabilities() {
     if (Object.keys(entries).length === 0) return
 
     // The registry already holds these limits; refresh capability UI now.
-    await bumpCapabilitiesSignal()
+    await notifyCapabilitiesChanged()
 
-    const { modelCapabilitiesStorage } = await import(
-      '@/services/wxtStorageService.js'
-    )
+    const { modelCapabilitiesStorage } = await getStorage()
     await modelCapabilitiesStorage.setValue({ updatedAt: Date.now(), entries })
   } catch (error) {
     console.warn('[modelCapabilityCache] persist failed:', error)
@@ -58,9 +46,7 @@ export async function persistDiscoveredCapabilities() {
  */
 export async function hydrateModelCapabilitiesFromStorage() {
   try {
-    const { modelCapabilitiesStorage } = await import(
-      '@/services/wxtStorageService.js'
-    )
+    const { modelCapabilitiesStorage } = await getStorage()
     const { mergeDiscoveredCapabilities } = await import(
       './providerCapabilities.js'
     )
@@ -68,7 +54,7 @@ export async function hydrateModelCapabilitiesFromStorage() {
     const stored = await modelCapabilitiesStorage.getValue()
     if (stored?.entries && typeof stored.entries === 'object') {
       mergeDiscoveredCapabilities(stored.entries)
-      await bumpCapabilitiesSignal()
+      await notifyCapabilitiesChanged()
     }
   } catch (error) {
     console.warn('[modelCapabilityCache] hydrate failed:', error)

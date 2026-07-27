@@ -1,5 +1,10 @@
 import { BUILT_IN_SKILLS } from './builtInSkills.js'
 import { generateUUID } from '@/lib/utils/utils.js'
+import {
+  ensureSettingsLoaded,
+  updateSettings,
+  getSettings as portSettings,
+} from '@/lib/config/settingsPort.js'
 
 function toStoredSkill(skill = {}) {
   return {
@@ -92,10 +97,11 @@ export function createSkillService({
         await saveSettings({ chatUserSkills: userSkills })
         return getAvailableSkills(getSettings().chatUserSkills)
       }
-      const settingsModule = await import('@/stores/settingsStore.svelte.js')
-      await settingsModule.loadSettings()
-      await settingsModule.updateSettings({ chatUserSkills: userSkills })
-      return getAvailableSkills(settingsModule.settings.chatUserSkills)
+      // No injected settings port (the default singleton) — go through the
+      // lib-level settings port rather than reaching into the store directly.
+      await ensureSettingsLoaded()
+      await updateSettings({ chatUserSkills: userSkills })
+      return getAvailableSkills(portSettings().chatUserSkills)
     },
 
     async saveSkill(draft, currentSettings = getSettings()) {

@@ -48,7 +48,26 @@ The extension outputs to the `.output` folder, which you load as an unpacked ext
 | `src/components/**`, `src/entrypoints/**` | anything |
 | everything | **never** import from `src/entrypoints/**` |
 
+Enforced by `tests/architecture/layering.test.js`, for **static and dynamic** imports alike — `await import('@/stores/…')` is not a loophole.
+
+**How `lib/` reaches downward:** through a registered port or reporter, never a direct import. The store/service registers itself at module load; the port keeps a lazy fallback so ordering can't break it.
+
+| Need | Port | Registered by |
+|---|---|---|
+| read/write settings | `lib/config/settingsPort.js` | `stores/settingsStore` |
+| WXT storage items | `lib/config/storagePort.js` | lazily resolves `services/wxtStorageService` |
+| report model status | `lib/api/modelStatusReporter.js` | `stores/summaryStore` |
+| bump capability signal | `lib/chat/capabilitiesSignal.js` | `stores/chatStore` |
+
+Those port files are the **only** entries in the test's `LAZY_PORT_ALLOWLIST`. Adding one is a design decision, not a fix for a failing test.
+
+> The `settingsStore` carve-out for `services/` is deliberate and named: `animationService`, `deepDiveService`, `toolProviderService`, and `cloudSyncService` read it directly (the last also writes back). One named, greppable exception with a test watching it beats a leaky abstraction.
+
+**Reading settings from `lib/`:** import `settings` from `settingsPort`, not the store. Reads are synchronous and safe from module load onward (the port holds the live `$state` object, which is only ever mutated in place) — so transitions like `lib/utils/slideScaleFade.js` see real values without awaiting. Call `ensureSettingsLoaded()` only when you need storage-backed values guaranteed present, e.g. before building a prompt.
+
 **Where components go:** `src/components/*` is **only** for things used by **2 or more entrypoints**. Anything used by a single surface belongs next to that entrypoint (`src/entrypoints/<surface>/components/`).
+
+**Filenames must be unique:** no two `.svelte` files anywhere under `src/` may share a basename (`App.svelte` excepted — one per entrypoint). Two different `ShadowTooltip.svelte` implementations once sat in folders imported side by side; the guard test blocks a repeat.
 
 ### High-Level Structure
 

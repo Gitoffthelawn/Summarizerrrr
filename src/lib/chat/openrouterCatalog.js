@@ -9,10 +9,15 @@
  * Also provides fetch/persist/hydrate helpers so the catalog survives reloads
  * and works even when the user never opens OpenRouter settings.
  *
- * NOTE: Storage and providerCapabilities are imported lazily (dynamic import)
- * inside the async helpers so that the pure functions can be imported in unit
- * tests without triggering `browser.runtime` side effects.
+ * NOTE: storage goes through `lib/config/storagePort.js` and the reactive
+ * capability signal through `lib/chat/capabilitiesSignal.js` — both resolve
+ * lazily, so the pure functions in this file stay importable in unit tests
+ * without triggering `browser.runtime` side effects, and `lib/` never imports
+ * `services/` or `stores/` (see the layering table in CLAUDE.md).
  */
+
+import { getStorage } from '@/lib/config/storagePort.js'
+import { notifyCapabilitiesChanged } from '@/lib/chat/capabilitiesSignal.js'
 
 /** How long a cached catalog is considered fresh (7 days). */
 const CATALOG_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -143,26 +148,6 @@ export function lookupCatalogWindow(catalog, providerId, modelId) {
 }
 
 // ---------------------------------------------------------------------------
-// Reactive signal bump (keeps donut preview in sync)
-// ---------------------------------------------------------------------------
-
-/**
- * Nudge the reactive capability signal so the context donut preview recomputes
- * when the catalog arrives.  Lazy-imported and best-effort — the store pulls in
- * browser-only deps, so failures are swallowed in unit tests.
- */
-async function bumpCatalogCapabilitiesSignal() {
-  try {
-    const { bumpCapabilitiesVersion } = await import(
-      '@/stores/chatStore.svelte.js'
-    )
-    bumpCapabilitiesVersion()
-  } catch {
-    // No reactive store available (e.g. unit tests) — nothing to refresh.
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Fetch / persist / hydrate helpers (Phase 3)
 // ---------------------------------------------------------------------------
 
@@ -170,7 +155,7 @@ async function bumpCatalogCapabilitiesSignal() {
  * Fetch the OpenRouter `/models` catalog, persist it to storage, and push it
  * into the live resolver.  Keyless — no `Authorization` header.
  *
- * Storage and providerCapabilities are imported lazily to avoid triggering
+ * Storage and providerCapabilities are resolved lazily to avoid triggering
  * `browser.runtime` at module load time in unit tests.
  *
  * @param {typeof globalThis.fetch} [fetchFn=fetch] — injectable for testing.
@@ -186,8 +171,8 @@ export async function fetchAndStoreCatalog(fetchFn = fetch) {
     const body = await response.json()
     const entries = buildCatalog(body)
 
-    // Lazy imports to keep pure functions free of browser-only side effects.
-    const { openrouterCatalogStorage } = await import('@/services/wxtStorageService.js')
+    // Lazy resolution keeps pure functions free of browser-only side effects.
+    const { openrouterCatalogStorage } = await getStorage()
     const { setOpenrouterCatalog } = await import('./providerCapabilities.js')
 
     // Persist so the catalog survives reloads.
@@ -197,7 +182,7 @@ export async function fetchAndStoreCatalog(fetchFn = fetch) {
     setOpenrouterCatalog(entries)
 
     // Bump so capability-derived UI (context donut) recomputes.
-    await bumpCatalogCapabilitiesSignal()
+    await notifyCapabilitiesChanged()
   } catch (error) {
     // Offline / network error must never break chat.
     console.warn('[openrouterCatalog] fetch failed:', error)
@@ -211,8 +196,8 @@ export async function fetchAndStoreCatalog(fetchFn = fetch) {
  */
 export async function hydrateCatalogFromStorage() {
   try {
-    // Lazy imports to keep pure functions free of browser-only side effects.
-    const { openrouterCatalogStorage } = await import('@/services/wxtStorageService.js')
+    // Lazy resolution keeps pure functions free of browser-only side effects.
+    const { openrouterCatalogStorage } = await getStorage()
     const { setOpenrouterCatalog } = await import('./providerCapabilities.js')
 
     const stored = await openrouterCatalogStorage.getValue()
@@ -222,7 +207,7 @@ export async function hydrateCatalogFromStorage() {
     // Push whatever we have into the resolver (even if empty — harmless).
     if (entries && typeof entries === 'object' && Object.keys(entries).length > 0) {
       setOpenrouterCatalog(entries)
-      await bumpCatalogCapabilitiesSignal()
+      await notifyCapabilitiesChanged()
     }
 
     // Refresh in the background if stale or empty.

@@ -2,6 +2,7 @@ import { chatService } from '@/services/chat/chatService.js'
 import { chatSessionService } from '@/services/chat/chatSessionService.js'
 import { chatSourceService } from '@/services/chat/chatSourceService.js'
 import { estimateTokens } from '@/lib/chat/contextPipeline/contextBudgeter.js'
+import { setCapabilitiesSignalReporter } from '@/lib/chat/capabilitiesSignal.js'
 import { conversationRepository } from '@/lib/db/conversationRepository.js'
 import { settings } from './settingsStore.svelte.js'
 import { handleError } from '@/lib/error/simpleErrorHandler.js'
@@ -99,6 +100,10 @@ export const capabilitiesState = $state({ version: 0 })
 export function bumpCapabilitiesVersion() {
   capabilitiesState.version += 1
 }
+
+// Register with the capabilities-signal port so lib/chat can bump this without
+// importing the store (see the layering table in CLAUDE.md).
+setCapabilitiesSignalReporter(bumpCapabilitiesVersion)
 
 const tabSessions = new Map() // tabId -> plain session snapshot
 const activeEstimateJobs = new Map() // `${tabId}|${url}|${kind}` -> Promise

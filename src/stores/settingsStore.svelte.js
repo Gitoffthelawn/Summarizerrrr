@@ -2,7 +2,11 @@
 import { get } from 'svelte/store'
 import { locale } from 'svelte-i18n'
 import { settingsStorage } from '@/services/wxtStorageService.js'
-import { setSettingsProvider } from '@/lib/config/settingsPort.js'
+import {
+  setSettingsProvider,
+  setSettingsObject,
+  setSettingsWriter,
+} from '@/lib/config/settingsPort.js'
 import { sanitizeSettings, migrateLegacyGeminiAdvanced } from '@/lib/config/settingsSchema.js'
 import { normalizeProviderId, getLegacyModel, getProvider, getDefaultModel, listConfiguredProviders, isProviderConfigured } from '@/lib/providers/providerRegistry.js'
 import {
@@ -179,11 +183,18 @@ export let settings = $state({ ...DEFAULT_SETTINGS })
 let _isInitializedPromise = null
 let _isSyncingFromCloud = false // Flag to prevent sync loop when applying cloud settings
 
-// Register with settings port to break lib -> store dependency
+// Register with settings port to break lib -> store dependency.
+// `setSettingsObject` runs synchronously at module load so that synchronous
+// readers in lib/ (e.g. the transitions in lib/utils/slideScaleFade.js) see
+// DEFAULT_SETTINGS immediately instead of `undefined` until the first
+// `ensureSettingsLoaded()` await. `settings` is only ever mutated in place, so
+// this reference stays live.
+setSettingsObject(settings)
 setSettingsProvider(async () => {
   await loadSettings()
   return settings
 })
+setSettingsWriter((patch) => updateSettings(patch))
 
 // --- Helper Functions ---
 
