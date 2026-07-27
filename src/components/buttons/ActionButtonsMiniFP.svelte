@@ -6,7 +6,7 @@
   import { t } from 'svelte-i18n'
   import { ShadowTooltipState } from '@/components/ui/shadowTooltipState.svelte.js'
   import { setContext } from 'svelte'
-  import { fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { fadeOnly } from '@/lib/utils/slideScaleFade.js'
 
   let {
     onActionClick,
@@ -14,7 +14,7 @@
     isCourseActive = false,
   } = $props()
 
-  import { ACTION_BUTTONS } from '@/lib/constants/actionConstants.js'
+  import { ACTION_BUTTONS } from '@/lib/config/actionConstants.js'
 
   const actions = ACTION_BUTTONS
 

@@ -1,7 +1,7 @@
 <script>
   // @ts-nocheck
   import Icon from '@iconify/svelte'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade'
 
   let { modelStatus } = $props()
 

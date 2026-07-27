@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { settings } from './settingsStore.svelte.js'
-import { createDefaultDeepDiveState } from '@/lib/constants/initialStates.js'
+import { createDefaultDeepDiveState } from '@/lib/config/initialStates.js'
 import {
   getOrCreateTabState,
   getCurrentTabId,

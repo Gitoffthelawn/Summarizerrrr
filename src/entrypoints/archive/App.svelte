@@ -7,7 +7,7 @@
   import { useOverlayScrollbars } from 'overlayscrollbars-svelte'
   import { appStateStorage } from '@/services/wxtStorageService.js'
   import SidePanel from './SidePanel.svelte'
-  import { fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import {
     settings,
     loadSettings,

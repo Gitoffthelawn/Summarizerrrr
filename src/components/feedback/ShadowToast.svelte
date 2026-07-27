@@ -1,6 +1,6 @@
 <script>
   import Icon from '@iconify/svelte'
-  import { fadeOnly, flyOnly } from '@/lib/ui/slideScaleFade.js'
+  import { fadeOnly, flyOnly } from '@/lib/utils/slideScaleFade.js'
 
   let {
     title = 'Notification',

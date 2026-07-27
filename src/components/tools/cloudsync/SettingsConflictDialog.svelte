@@ -2,7 +2,7 @@
   // @ts-nocheck
   import Icon from '@iconify/svelte'
   import { Dialog } from 'bits-ui'
-  import { slideScaleFade, fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade, fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import { t } from 'svelte-i18n'
 
   let { conflict, isResolving = false, onResolve } = $props()

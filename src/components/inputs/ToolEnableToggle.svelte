@@ -2,7 +2,7 @@
   // @ts-nocheck
   import { Label, Switch } from 'bits-ui'
   import Icon from '@iconify/svelte'
-  import TextScramble from '@/lib/ui/textScramble.js'
+  import TextScramble from '@/lib/utils/textScramble.js'
 
   /**
    * Reusable Tool Enable Toggle Component

@@ -38,6 +38,7 @@
 
   $effect(() => {
     if (!tableContainer || !table) return
+    if (typeof ResizeObserver === 'undefined') return
 
     const resizeObserver = new ResizeObserver(updateScrollMetrics)
     resizeObserver.observe(tableContainer)

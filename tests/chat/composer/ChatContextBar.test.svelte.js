@@ -4,7 +4,7 @@ import { flushSync, mount } from 'svelte'
 import ChatContextBar from '../../../src/components/chat/ChatContextBar.svelte'
 
 // Mock the slideScaleFade transition to avoid animation issues in tests
-vi.mock('@/lib/ui/slideScaleFade.js', () => ({
+vi.mock('@/lib/utils/slideScaleFade.js', () => ({
   slideScaleFade: () => ({ delay: 0, duration: 0, css: () => '' }),
 }))
 

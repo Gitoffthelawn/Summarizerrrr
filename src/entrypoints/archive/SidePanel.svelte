@@ -5,7 +5,7 @@
   import 'overlayscrollbars/overlayscrollbars.css'
   import Dialog from './Dialog.svelte'
   import { useOverlayScrollbars } from 'overlayscrollbars-svelte'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
   import ExportMarkdownFAB from '@/components/buttons/ExportMarkdownFAB.svelte'
 
   // Load icons for archive states

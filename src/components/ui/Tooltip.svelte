@@ -1,6 +1,6 @@
 <script>
   import { Tooltip } from 'bits-ui'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade'
 
   let {
     content,

@@ -8,7 +8,7 @@
     iconForSourceKind,
     activeSourceLabelForUrl,
   } from '@/services/chat/sourceResolution.js'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
 
   let {
     /** @type {string|null} */

@@ -2,8 +2,8 @@
 <script>
   import { t } from 'svelte-i18n'
   import Icon, { loadIcons } from '@iconify/svelte'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
-  import ShadowTooltip from '@/lib/components/ShadowTooltip.svelte'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
+  import HoverTooltip from '@/components/ui/HoverTooltip.svelte'
 
   let { onSave, localSummaryState } = $props()
   let isSaving = $state(false)
@@ -33,7 +33,7 @@
   })
 </script>
 
-<ShadowTooltip content={tooltipContent}>
+<HoverTooltip content={tooltipContent}>
   <button
     onclick={handleSave}
     class="p-1.5 size-8 relative hover:bg-blackwhite/10 rounded-4xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -77,4 +77,4 @@
       </span>
     {/if}
   </button>
-</ShadowTooltip>
+</HoverTooltip>

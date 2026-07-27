@@ -39,7 +39,7 @@ import {
 import { cleanTitle } from '@/lib/utils/titleExtractor.js'
 
 // Import shared initial state
-import { createDefaultSummaryState } from '@/lib/constants/initialStates.js'
+import { createDefaultSummaryState } from '@/lib/config/initialStates.js'
 
 // --- State ---
 // --- State ---

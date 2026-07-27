@@ -10,7 +10,7 @@
   import ApiKeySetupPrompt from '@/components/ui/ApiKeySetupPrompt.svelte'
   import { settings } from '@/stores/settingsStore.svelte.js'
   import { useApiKeyValidation } from '../composables/useApiKeyValidation.svelte.js'
-  import { fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import ActionButtonsFP from '@/components/buttons/ActionButtonsFP.svelte'
   import ActionButtonsMiniFP from '@/components/buttons/ActionButtonsMiniFP.svelte'
   import ShadowToast from '@/components/feedback/ShadowToast.svelte'

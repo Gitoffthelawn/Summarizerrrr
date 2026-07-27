@@ -12,7 +12,7 @@ vi.mock('overlayscrollbars', () => ({
   OverlayScrollbars: overlayMock.getInstance,
 }))
 
-import { acquireOverlayScrollLock } from '../../../src/lib/ui/overlayScrollLock.js'
+import { acquireOverlayScrollLock } from '../../../src/lib/utils/overlayScrollLock.js'
 
 function createInstance(initialOverflowY = 'scroll') {
   let overflowY = initialOverflowY

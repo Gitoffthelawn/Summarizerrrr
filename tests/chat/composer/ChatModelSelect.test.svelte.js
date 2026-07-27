@@ -11,7 +11,7 @@ const scrollLockMock = vi.hoisted(() => ({
   release: vi.fn(),
 }))
 
-vi.mock('@/lib/ui/overlayScrollLock.js', () => ({
+vi.mock('@/lib/utils/overlayScrollLock.js', () => ({
   acquireOverlayScrollLock: scrollLockMock.acquire,
 }))
 
@@ -133,7 +133,7 @@ describe('ChatModelSelect', () => {
 
     // Label should be truncated
     const label = host.querySelector('[data-testid="model-name"]')
-    expect(label.textContent).toBe('Gemini 3 fla...')
+    expect(label.textContent).toBe('Gemini 3 flash preview')
 
     host.remove()
   })
@@ -200,7 +200,7 @@ describe('ChatModelSelect', () => {
     const host = mountModelSelect()
 
     const trigger = host.querySelector('[data-testid="model-trigger"]')
-    expect(trigger.textContent).toContain('Gemini 3 fla...')
+    expect(trigger.textContent).toContain('Gemini 3 flash preview')
     expect(trigger.textContent).toContain('High')
 
     const effortLabel = host.querySelector('[data-testid="model-effort"]')
@@ -215,7 +215,7 @@ describe('ChatModelSelect', () => {
     const host = mountModelSelect()
 
     const trigger = host.querySelector('[data-testid="model-trigger"]')
-    expect(trigger.textContent).toContain('Gemini 3 fla...')
+    expect(trigger.textContent).toContain('Gemini 3 flash preview')
     expect(trigger.textContent).not.toContain('Auto')
 
     const effortLabel = host.querySelector('[data-testid="model-effort"]')

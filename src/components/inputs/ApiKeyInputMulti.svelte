@@ -1,6 +1,6 @@
 <script>
   // @ts-nocheck
-  import { fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import Icon from '@iconify/svelte'
 
   let {

@@ -10,7 +10,7 @@
 import {
   createDefaultSummaryState,
   createDefaultDeepDiveState
-} from '@/lib/constants/initialStates.js'
+} from '@/lib/config/initialStates.js'
 
 // Map<tabId, {summaryState, deepDiveState, scrollY}>
 const tabStates = new Map()

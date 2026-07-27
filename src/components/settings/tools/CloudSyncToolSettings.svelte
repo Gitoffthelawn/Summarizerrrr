@@ -28,7 +28,7 @@
   import TextInput from '@/components/inputs/TextInput.svelte'
   import ApiKeyInput from '@/components/inputs/ApiKeyInput.svelte'
   import { Dialog } from 'bits-ui'
-  import { slideScaleFade, fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade, fadeOnly } from '@/lib/utils/slideScaleFade.js'
 
   // Load icons
   loadIcons([

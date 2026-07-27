@@ -1,6 +1,6 @@
 <script>
   import { settings, updateSettings } from '@/stores/settingsStore.svelte.js'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
   import Icon from '@iconify/svelte'
   import { browser } from 'wxt/browser'
   import { t } from 'svelte-i18n'

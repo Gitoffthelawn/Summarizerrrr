@@ -1,8 +1,8 @@
 <script>
   import { t } from 'svelte-i18n'
   import Icon, { loadIcons } from '@iconify/svelte'
-  import { slideScaleFade } from '../../lib/ui/slideScaleFade.js'
-  import ShadowTooltip from '../../lib/components/ShadowTooltip.svelte'
+  import { slideScaleFade } from '../../lib/utils/slideScaleFade.js'
+  import HoverTooltip from '@/components/ui/HoverTooltip.svelte'
 
   let { targetId = 'copy-cat', text = null, pageUrl = null } = $props()
 
@@ -308,7 +308,7 @@
   }
 </script>
 
-<ShadowTooltip content={isCopied ? $t('button.copied') : $t('button.copy')}>
+<HoverTooltip content={isCopied ? $t('button.copied') : $t('button.copy')}>
   <button
     bind:this={btn}
     onclick={copyToClipboard}
@@ -340,4 +340,4 @@
       </span>
     {/if}
   </button>
-</ShadowTooltip>
+</HoverTooltip>

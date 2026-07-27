@@ -2,7 +2,7 @@
 <script>
   import { t } from 'svelte-i18n'
   import Icon from '@iconify/svelte'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade'
 
   let {
     canGoBack = false,

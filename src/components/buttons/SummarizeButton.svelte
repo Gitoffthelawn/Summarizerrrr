@@ -3,7 +3,7 @@
   import Icon from '@iconify/svelte'
   import { animate, stagger } from 'animejs'
   import { onMount } from 'svelte'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
   import { isReduceMotionEnabled } from '@/services/animationService.js'
   import {
     stopStreaming,

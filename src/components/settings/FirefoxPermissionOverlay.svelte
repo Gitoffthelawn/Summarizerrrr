@@ -1,6 +1,6 @@
 <script>
   import { t } from 'svelte-i18n'
-  import { fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import {
     getFirefoxPermission,
     updateFirefoxPermission,

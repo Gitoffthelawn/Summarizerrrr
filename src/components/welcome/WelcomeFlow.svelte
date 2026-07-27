@@ -7,7 +7,7 @@
   import WelcomeDisplayStep from './steps/WelcomeDisplayStep.svelte'
   import WelcomeSummaryLangStep from './steps/WelcomeSummaryLangStep.svelte'
   import WelcomeNavigation from './shared/WelcomeNavigation.svelte'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade'
 
   // State management
   let { shadow = false } = $props()

@@ -1,6 +1,6 @@
 <script>
   // @ts-nocheck
-  import SummaryWrapper from '@/components/displays/floating-panel/SummaryWrapper.svelte'
+  import SummaryWrapperFP from '@/components/displays/floating-panel/SummaryWrapperFP.svelte'
   import SummaryContent from '@/components/displays/floating-panel/SummaryContentFP.svelte'
   import FloatingPanelFooter from './FloatingPanelFooter.svelte'
 
@@ -15,7 +15,7 @@
   } = $props()
 </script>
 
-<SummaryWrapper {isLoading} data={summary} {loadingText}>
+<SummaryWrapperFP {isLoading} data={summary} {loadingText}>
   <SummaryContent {summary} {isLoading} {targetId} {showTOC} />
   {#if !isLoading && summary}
     <FloatingPanelFooter
@@ -26,4 +26,4 @@
       {targetId}
     />
   {/if}
-</SummaryWrapper>
+</SummaryWrapperFP>

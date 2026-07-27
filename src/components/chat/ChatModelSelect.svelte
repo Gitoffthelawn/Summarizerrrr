@@ -19,7 +19,7 @@
     getChatReasoningOptions,
     effectiveReasoningLevel,
   } from '@/lib/api/reasoningConfig.js'
-  import { acquireOverlayScrollLock } from '@/lib/ui/overlayScrollLock.js'
+  import { acquireOverlayScrollLock } from '@/lib/utils/overlayScrollLock.js'
   import { _ } from 'svelte-i18n'
 
   let { disabled = false } = $props()

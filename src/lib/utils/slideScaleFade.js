@@ -1,6 +1,11 @@
 // @ts-nocheck
 import { cubicOut } from 'svelte/easing'
-import { isReduceMotionEnabled } from '@/services/animationService.js'
+import { settings } from '@/lib/config/settingsPort.js'
+
+function isReduceMotionEnabled() {
+  return settings.reduceMotion ?? false
+}
+
 
 /**
  * @typedef {Object} SlideScaleFadeParams

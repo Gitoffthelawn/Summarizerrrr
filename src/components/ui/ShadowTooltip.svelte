@@ -1,5 +1,5 @@
 <script>
-  import { fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import { getContext } from 'svelte'
 
   let { children, content, side = 'top', delay = 500 } = $props()

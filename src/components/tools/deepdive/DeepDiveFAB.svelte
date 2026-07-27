@@ -1,7 +1,7 @@
 <script>
   // @ts-nocheck
   import Icon from '@iconify/svelte'
-  import { slideScaleFade, fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade, fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import { t } from 'svelte-i18n'
   import {
     deepDiveState,

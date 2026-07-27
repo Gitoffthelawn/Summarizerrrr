@@ -2,8 +2,8 @@
 <script>
   import Icon, { loadIcons } from '@iconify/svelte'
   import { t } from 'svelte-i18n'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
-  import ShadowTooltip from '../../lib/components/ShadowTooltip.svelte'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
+  import HoverTooltip from '@/components/ui/HoverTooltip.svelte'
   import {
     moveHistoryItemToArchive,
     removeFromArchiveByHistoryId,
@@ -46,7 +46,7 @@
   }
 </script>
 
-<ShadowTooltip
+<HoverTooltip
   content={isItemArchived ? $t('button.saved') : $t('button.save_to_archive')}
 >
   <button
@@ -80,4 +80,4 @@
       </span>
     {/if}
   </button>
-</ShadowTooltip>
+</HoverTooltip>

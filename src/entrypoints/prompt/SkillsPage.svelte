@@ -3,7 +3,7 @@
   import Icon from '@iconify/svelte'
   import SkillList from '@/components/skills/SkillList.svelte'
   import PlusIcon from '@/components/icons/PlusIcon.svelte'
-  import TextScramble from '@/lib/ui/textScramble.js'
+  import TextScramble from '@/lib/utils/textScramble.js'
   import { skillService, createUserSkill } from '@/lib/chat/skills/skillService.js'
   import { settings } from '@/stores/settingsStore.svelte.js'
 

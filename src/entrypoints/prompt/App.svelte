@@ -9,7 +9,7 @@
   import { useOverlayScrollbars } from 'overlayscrollbars-svelte'
   import Icon from '@iconify/svelte'
   import PlusIcon from '@/components/icons/PlusIcon.svelte'
-  import TextScramble from '@/lib/ui/textScramble.js'
+  import TextScramble from '@/lib/utils/textScramble.js'
   import PromptMenu from './PromptMenu.svelte'
   import SkillsPage from './SkillsPage.svelte'
   import CustomToast from '@/components/feedback/CustomToast.svelte'
@@ -28,7 +28,7 @@
   } from '@/stores/themeStore.svelte.js'
   import '@fontsource-variable/geist-mono'
   import { Dialog } from 'bits-ui'
-  import { slideScaleFade, fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade, fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import { enhancePrompt } from '@/lib/api/api.js'
   import aiPrompt from '@/lib/prompts/templates/promptEnhance.js'
 

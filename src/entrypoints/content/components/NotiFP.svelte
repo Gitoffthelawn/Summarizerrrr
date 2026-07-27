@@ -1,11 +1,11 @@
 <script>
   import { onMount, onDestroy } from 'svelte'
-  import { fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import { t } from 'svelte-i18n'
   import {
     displayOrder,
     notificationData,
-  } from '@/lib/constants/notificationData.js'
+  } from '@/lib/config/notificationData.js'
 
   // Sorted notifications based on displayOrder
   let notifications = $derived(

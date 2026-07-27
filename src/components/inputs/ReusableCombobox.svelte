@@ -1,7 +1,7 @@
 <!-- @ts-nocheck -->
 <script>
   import { Combobox } from 'bits-ui'
-  import { flyOnly } from '@/lib/ui/slideScaleFade.js'
+  import { flyOnly } from '@/lib/utils/slideScaleFade.js'
 
   let {
     items = [],

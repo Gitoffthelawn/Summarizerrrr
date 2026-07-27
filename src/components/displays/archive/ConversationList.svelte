@@ -2,7 +2,7 @@
   // @ts-nocheck
   import Icon from '@iconify/svelte'
   import { t } from 'svelte-i18n'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
   import {
     conversationArchiveStore,
     selectConversation,

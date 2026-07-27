@@ -2,7 +2,7 @@
   // @ts-nocheck
   import { DropdownMenu } from 'bits-ui'
   import Icon from '@iconify/svelte'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
   import { t } from 'svelte-i18n'
 
   // Props từ component cha

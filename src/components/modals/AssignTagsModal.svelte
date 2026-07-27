@@ -2,7 +2,7 @@
   // @ts-nocheck
   import { getAllTags, updateSummaryTags } from '@/lib/db/indexedDBService'
   import Icon from '@iconify/svelte'
-  import { slideScaleFade, fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade, fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import { t } from 'svelte-i18n'
   import { settings } from '@/stores/settingsStore.svelte.js'
 

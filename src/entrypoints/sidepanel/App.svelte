@@ -47,7 +47,7 @@
   import '@fontsource-variable/noto-serif'
   import '@fontsource/opendyslexic'
   import '@fontsource/mali'
-  import { fadeOnly, slideScaleFade } from '@/lib/ui/slideScaleFade.js'
+  import { fadeOnly, slideScaleFade } from '@/lib/utils/slideScaleFade.js'
   import ActionButtonsMini from '@/components/buttons/ActionButtonsMini.svelte'
   import { debounce } from '@/lib/utils/utils.js'
   import Tooltip from '@/components/ui/Tooltip.svelte'

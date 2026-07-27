@@ -12,7 +12,7 @@
   import { Tooltip as BitsTooltip } from 'bits-ui'
   import { t } from 'svelte-i18n'
 
-  import { ACTION_BUTTONS } from '@/lib/constants/actionConstants.js'
+  import { ACTION_BUTTONS } from '@/lib/config/actionConstants.js'
   import {
     getHasAnimatedButtons,
     setHasAnimatedButtons,

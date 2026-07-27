@@ -1,7 +1,7 @@
 <script>
   // @ts-nocheck
   import { Select } from 'bits-ui'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
   import GeminiIcon from '@/components/icons/GeminiIcon.svelte'
   import ChatGPTIcon from '@/components/icons/ChatGPTIcon.svelte'
   import PerplexityIcon from '@/components/icons/PerplexityIcon.svelte'

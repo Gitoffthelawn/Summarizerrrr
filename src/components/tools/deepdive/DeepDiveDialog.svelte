@@ -1,7 +1,7 @@
 <script>
   // @ts-nocheck
   import { Dialog } from 'bits-ui'
-  import { slideScaleFade, fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade, fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import {
     deepDiveState,
     toggleDeepDive,

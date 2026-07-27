@@ -3,8 +3,8 @@
   import { t } from 'svelte-i18n'
   import Icon, { loadIcons } from '@iconify/svelte'
 
-  import { slideScaleFade } from '../../lib/ui/slideScaleFade.js'
-  import ShadowTooltip from '../../lib/components/ShadowTooltip.svelte'
+  import { slideScaleFade } from '../../lib/utils/slideScaleFade.js'
+  import HoverTooltip from '@/components/ui/HoverTooltip.svelte'
 
   let {
     content,
@@ -170,7 +170,7 @@
   }
 </script>
 
-<ShadowTooltip
+<HoverTooltip
   content={isDownloaded ? $t('button.downloaded') : $t('button.download')}
 >
   <button
@@ -203,4 +203,4 @@
       </span>
     {/if}
   </button>
-</ShadowTooltip>
+</HoverTooltip>

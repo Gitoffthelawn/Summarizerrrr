@@ -9,7 +9,7 @@
     createParticleAnimation,
     clamp,
   } from '../../services/animationService.js'
-  import { slideScaleFade, fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade, fadeOnly } from '@/lib/utils/slideScaleFade.js'
 
   let buttonElement
   let heartsAnimation = null
