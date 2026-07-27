@@ -36,6 +36,20 @@ The extension outputs to the `.output` folder, which you load as an unpacked ext
 
 ## Architecture Overview
 
+### Code Layering & Component Rules
+
+**Layering (dependency direction):**
+
+| Layer | May import |
+|---|---|
+| `src/lib/**` | `src/lib/**` only |
+| `src/services/**` | `lib`, `services`, **and `stores/settingsStore` only** |
+| `src/stores/**` | `lib`, `services`, `stores` |
+| `src/components/**`, `src/entrypoints/**` | anything |
+| everything | **never** import from `src/entrypoints/**` |
+
+**Where components go:** `src/components/*` is **only** for things used by **2 or more entrypoints**. Anything used by a single surface belongs next to that entrypoint (`src/entrypoints/<surface>/components/`).
+
 ### High-Level Structure
 
 The extension is organized around **multiple entrypoints** (handled by WXT):
