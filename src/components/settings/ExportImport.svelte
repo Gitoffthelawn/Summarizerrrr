@@ -31,16 +31,16 @@
     exportDataToZip,
     generateExportFilename,
     downloadBlob,
-  } from '../../lib/exportImport/exportService.js'
+  } from '../../services/exportImport/exportService.js'
 
   import {
     isZipFile,
     extractFilesFromZip,
-  } from '../../lib/exportImport/zipService.js'
+  } from '../../services/exportImport/zipService.js'
   import {
     importFromJsonl,
     parseJsonlWithMeta,
-  } from '../../lib/exportImport/jsonlService.js'
+  } from '../../services/exportImport/jsonlService.js'
   import { sanitizeSettings, migrateLegacyGeminiAdvanced } from '../../lib/config/settingsSchema.js'
 
   import SwitchPermission from '../inputs/SwitchPermission.svelte'
@@ -184,7 +184,7 @@
       const {
         exportHistoryMarkdownToZip,
         generateHistoryMarkdownExportFilename,
-      } = await import('../../lib/exportImport/exportService.js')
+      } = await import('../../services/exportImport/exportService.js')
 
       // Export with progress callback
       const zipBlob = await exportHistoryMarkdownToZip((progress) => {
@@ -215,7 +215,7 @@
       const {
         exportArchiveMarkdownToZip,
         generateArchiveMarkdownExportFilename,
-      } = await import('../../lib/exportImport/exportService.js')
+      } = await import('../../services/exportImport/exportService.js')
 
       // Export with progress callback
       const zipBlob = await exportArchiveMarkdownToZip((progress) => {

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { settings, loadSettings } from '@/stores/settingsStore.svelte.js'
+import { settings, ensureSettingsLoaded as loadSettings } from '@/lib/config/settingsPort.js'
 import { promptBuilders } from '@/lib/prompts/builders/index.js'
 import { customActionTemplates } from '@/lib/prompts/index.js'
 import { replacePlaceholders } from '@/lib/prompts/utils.js'

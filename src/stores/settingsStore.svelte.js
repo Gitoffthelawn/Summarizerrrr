@@ -2,6 +2,7 @@
 import { get } from 'svelte/store'
 import { locale } from 'svelte-i18n'
 import { settingsStorage } from '@/services/wxtStorageService.js'
+import { setSettingsProvider } from '@/lib/config/settingsPort.js'
 import { sanitizeSettings, migrateLegacyGeminiAdvanced } from '@/lib/config/settingsSchema.js'
 import { normalizeProviderId, getLegacyModel, getProvider, getDefaultModel, listConfiguredProviders, isProviderConfigured } from '@/lib/providers/providerRegistry.js'
 import {
@@ -177,6 +178,12 @@ const DEFAULT_SETTINGS = {
 export let settings = $state({ ...DEFAULT_SETTINGS })
 let _isInitializedPromise = null
 let _isSyncingFromCloud = false // Flag to prevent sync loop when applying cloud settings
+
+// Register with settings port to break lib -> store dependency
+setSettingsProvider(async () => {
+  await loadSettings()
+  return settings
+})
 
 // --- Helper Functions ---
 

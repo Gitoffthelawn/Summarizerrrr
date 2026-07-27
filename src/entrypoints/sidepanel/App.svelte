@@ -29,13 +29,13 @@
     fetchAndSummarizeStream,
     updateActiveCourseTab,
   } from '@/stores/summaryStore.svelte.js'
-  import { setupMessageListener } from '@/services/messageHandler.js'
+  import { setupMessageListener } from './messageHandler.js'
   import {
     getCurrentTabId,
     getTabsWithSummary,
     getOrCreateTabState,
   } from '@/services/tabCacheService.js'
-  import { initializeApp } from '@/services/initialization.js'
+  import { initializeApp } from './initialization.js'
   import { settings, loadSettings } from '@/stores/settingsStore.svelte.js'
   import {
     themeSettings,

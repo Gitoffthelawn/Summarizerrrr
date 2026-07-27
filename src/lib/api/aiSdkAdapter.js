@@ -26,7 +26,7 @@ import {
   shouldEnableApiKeyRetry,
   getCurrentGeminiModel,
 } from '@/lib/utils/geminiAutoFallback.js'
-import { updateModelStatus } from '@/stores/summaryStore.svelte.js'
+import { reportModelStatus as updateModelStatus } from '@/lib/api/modelStatusReporter.js'
 
 import { showModelFallbackToast } from '@/lib/utils/toastUtils.js'
 

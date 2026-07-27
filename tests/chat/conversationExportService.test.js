@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { conversationBundleToMarkdown } from '@/lib/exportImport/conversationExportService.js'
+import { conversationBundleToMarkdown } from '@/services/exportImport/conversationExportService.js'
 
 describe('conversationBundleToMarkdown', () => {
   it('includes transcript, source provenance, capture time, and skill metadata', () => {

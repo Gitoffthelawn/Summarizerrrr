@@ -4,8 +4,8 @@ import {
   exportConversationAsJson,
   exportConversationAsMarkdown,
   conversationExportFilename,
-} from '@/lib/exportImport/conversationExportService.js'
-import { downloadBlob } from '@/lib/exportImport/exportService.js'
+} from '@/services/exportImport/conversationExportService.js'
+import { downloadBlob } from '@/services/exportImport/exportService.js'
 
 let conversationList = $state([])
 let selectedConversation = $state(null)

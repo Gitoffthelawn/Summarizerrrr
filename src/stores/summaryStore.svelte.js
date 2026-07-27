@@ -10,6 +10,7 @@ import {
   summarizeChaptersStream,
   providerSupportsStreaming,
 } from '@/lib/api/api.js'
+import { setModelStatusReporter } from '@/lib/api/modelStatusReporter.js'
 import {
   addSummary,
   addHistory,
@@ -66,6 +67,9 @@ export function updateModelStatus(
     isFallback,
   }
 }
+
+// Register with reporter to break circular dependency
+setModelStatusReporter(updateModelStatus)
 
 /**
  * Helper to check if any loading state is active

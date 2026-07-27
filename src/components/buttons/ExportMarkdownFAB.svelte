@@ -16,7 +16,7 @@
         exportMarkdownToZip,
         generateMarkdownExportFilename,
         downloadBlob,
-      } = await import('@/lib/exportImport/exportService.js')
+      } = await import('@/services/exportImport/exportService.js')
 
       // Export with progress callback
       const zipBlob = await exportMarkdownToZip((progress) => {

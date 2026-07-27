@@ -2,16 +2,16 @@ import {
   settings,
   loadSettings,
   subscribeToSettingsChanges,
-} from '../stores/settingsStore.svelte.js'
+} from '@/stores/settingsStore.svelte.js'
 import {
   themeSettings,
   initializeTheme,
   subscribeToSystemThemeChanges,
   applyThemeToDocument,
-} from '../stores/themeStore.svelte.js'
+} from '@/stores/themeStore.svelte.js'
 import { useOverlayScrollbars } from 'overlayscrollbars-svelte'
-import { hydrateCatalogFromStorage } from '../lib/chat/openrouterCatalog.js'
-import { hydrateModelCapabilitiesFromStorage } from '../lib/chat/modelCapabilityCache.js'
+import { hydrateCatalogFromStorage } from '@/lib/chat/openrouterCatalog.js'
+import { hydrateModelCapabilitiesFromStorage } from '@/lib/chat/modelCapabilityCache.js'
 
 function applyFontToDocument(font) {
   if (document.body) {

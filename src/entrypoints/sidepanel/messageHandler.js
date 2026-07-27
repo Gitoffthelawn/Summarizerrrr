@@ -6,9 +6,9 @@ import {
   fetchAndSummarize,
   updateActiveCourseTab,
   updateActiveYouTubeTab,
-} from '../stores/summaryStore.svelte.js'
-import { deepDiveState, resetDeepDive } from '../stores/deepDiveStore.svelte.js'
-import { setTabTitle } from '../stores/tabTitleStore.svelte.js'
+} from '@/stores/summaryStore.svelte.js'
+import { deepDiveState, resetDeepDive } from '@/stores/deepDiveStore.svelte.js'
+import { setTabTitle } from '@/stores/tabTitleStore.svelte.js'
 import {
   getOrCreateTabState,
   setCurrentTabId,
@@ -16,7 +16,7 @@ import {
   getCurrentTabScrollY,
   checkAndResetTabState,
   saveScrollForTab,
-} from './tabCacheService.js'
+} from '@/services/tabCacheService.js'
 
 /**
  * Syncs the global summaryState/deepDiveState with a tab's state
@@ -212,7 +212,7 @@ function handleBackgroundMessage(request) {
       // Components like PermissionWarningPrompt will handle this directly
       break
     case 'resumeConversation':
-      import('../stores/chatStore.svelte.js')
+      import('@/stores/chatStore.svelte.js')
         .then(({ openConversation }) => openConversation(request.conversationId))
         .catch((error) => console.error('[messageHandler] Failed to resume conversation:', error))
       break
