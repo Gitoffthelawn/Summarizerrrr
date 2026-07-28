@@ -122,6 +122,14 @@ welcome
 ```
 Matches the plan exactly: 6 files remain in `src/components/ui/`, the top-level `src/components` listing is exactly `buttons icons inputs markdown ui welcome`, and the shared tree totals 32 files.
 
+**Correction (added post-review):** the `32` above was recorded on a tree with no `.DS_Store` present. `find src/components -type f | wc -l` returns **33** whenever macOS Finder has left a `src/components/.DS_Store` (gitignored — [.gitignore:132](../../../.gitignore)). The **tracked** count is genuinely 32 either way. Prefer a command that doesn't depend on Finder:
+
+```sh
+git ls-files src/components | wc -l   # → 32, stable
+```
+
+(`find src/components -type f -not -name '.DS_Store' | wc -l` also returns 32.)
+
 ### 2. Automated Tests
 ```sh
 npm test
@@ -163,7 +171,7 @@ First attempt (before the `Field.svelte` fix described above) was not run standa
 ### Completed Verification (Verified by Agent)
 - [x] `src/components/ui/` reduced to exactly 6 files: `ApiKeySetupPrompt.svelte`, `ErrorDisplay.svelte`, `FoooterDisplay.svelte`, `HoverTooltip.svelte`, `ModelStatusDisplay.svelte`, `TabNavigation.svelte`.
 - [x] `src/components/` top level is exactly `buttons icons inputs markdown ui welcome`.
-- [x] `find src/components -type f | wc -l` → 32.
+- [x] `git ls-files src/components | wc -l` → 32. (The plan's `find src/components -type f | wc -l` returns 33 when a gitignored `.DS_Store` is present — the tracked count is 32.)
 - [x] All 20 moved files landed at their planned destination path (10 settings, 6 sidepanel, 2 archive, 2 content).
 - [x] `paths.ts` and `shadowTooltipState.svelte.js` each moved on their own line, not folded into the `.svelte` loops, per the phase's explicit instruction.
 - [x] Stale extension-less import in `Field.svelte` (`@/components/ui/paths` → `@/entrypoints/settings/components/ui/paths`) found and fixed.

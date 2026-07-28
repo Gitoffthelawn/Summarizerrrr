@@ -2,6 +2,8 @@
 
 Implemented Phase 1 of the [Full Component Reorg plan](../02b-full-reorg-plan.md): every relative import specifier (`./...`, `../...`) inside `src/components/` was rewritten to its `@/`-prefixed absolute equivalent, with the two deliberate `package.json` exceptions left untouched. No files were moved or renamed.
 
+**Correction (added post-review):** "every relative import specifier" overstates the result. Two **multi-line** `await import(\n  '../../services/…'\n)` calls in `src/components/settings/ExportImport.svelte` were not rewritten, because the plan's verify regex only matches a specifier whose opening quote sits on the same line as `import(` — see [§1 Relative-import audit](#1-relative-import-audit). They surfaced as build failures during Phase 9 and were fixed there; the final tree is unaffected.
+
 ## Changes Made
 
 ### 1. Mechanical import-specifier rewrite (51 files under `src/components/`)
@@ -52,6 +54,7 @@ Used a small Python script (scratch, not committed) that: found every file under
 
 ### 1. Relative-import audit
 - Ran the plan's specified check (`rg -o` for relative `from`/`import()` specifiers under `src/components`, counting matches) → **2** (the exact 2 expected `package.json` hits; started at 133 relative imports before the rewrite).
+  - **The check has a blind spot.** Its pattern requires the opening quote on the *same line* as `import(`, so a dynamic import written across several lines is invisible to it. Two such calls in `settings/ExportImport.svelte` were therefore counted as zero here and left un-rewritten; Phase 9 hit them as build errors and fixed them. Read the `2` as "2 hits by this check," not "2 relative imports in the tree."
 - Ran `rg -n "\.\./\.\./\.\./package\.json" src/components` → matched exactly `AboutSettings.svelte` and `ReleaseNote.svelte`, as required.
 - `git diff --stat` shows changes confined to 51 files under `src/components/` (plus the pre-existing, user-owned edit to `docs/refactor/02-full-reorg-direction.md`, untouched by this phase) — no file moves, no logic changes.
 
@@ -84,7 +87,7 @@ Both builds completed successfully with no errors.
 ## Verification Categories
 
 ### Completed Verification (Verified by Agent)
-- [x] Exactly 2 relative-import hits remain in `src/components/`, both the known `package.json` exceptions.
+- [x] The plan's relative-import check reports exactly 2 hits in `src/components/`, both the known `package.json` exceptions. This measures single-line specifiers only — the check cannot see multi-line `await import()` calls, and two in `settings/ExportImport.svelte` did remain (fixed in Phase 9).
 - [x] `npm test` → 50 files / 494 tests passed (matches baseline).
 - [x] `npm run check` → 0 errors, 14 pre-existing warnings (matches baseline).
 - [x] `npm run build` → succeeds.

@@ -52,7 +52,7 @@ The helper's `@/`-alias rewrite updated every specifier across `src/`. Confirmed
 
 ### 8. Cleanup
 
-- Ran `find src/components -type d -empty -delete` after all moves. `src/components/displays/` (and its four subfolders `core/`, `platform/`, `archive/`, `history/`, `ui/`, `floating-panel/`) no longer exist.
+- Ran `find src/components -type d -empty -delete` after all moves. `src/components/displays/` (and its six subfolders `core/`, `platform/`, `archive/`, `history/`, `ui/`, `floating-panel/`) no longer exist.
 
 ### Method
 
