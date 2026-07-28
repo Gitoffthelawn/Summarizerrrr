@@ -48,7 +48,7 @@ vi.mock('@/lib/api/providerModelService.js', async (importOriginal) => {
 // Import dependencies after mocking
 import { PROVIDER_LIST } from '@/lib/providers/providerRegistry.js'
 import { settings } from '@/stores/settingsStore.svelte.js'
-import FeatureModelPicker from '@/components/inputs/FeatureModelPicker.svelte'
+import FeatureModelPicker from '@/entrypoints/settings/components/inputs/FeatureModelPicker.svelte'
 
 describe('FeatureModelPicker Component', () => {
   let host

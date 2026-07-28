@@ -41,6 +41,14 @@ const DUPLICATE_BASENAME_ALLOWLIST = new Set([
   'App.svelte', // every WXT entrypoint has its own root component
 ])
 
+/**
+ * `popop` is a 117-line shell with no `components/` of its own — it mounts
+ * settings' `Setting.svelte` (see `src/entrypoints/popop/App.svelte`). It
+ * counts as the same owner as `settings` for both Rule 5 (cross-surface
+ * import ban) and Rule 6 (2+-owner reachability); see CLAUDE.md.
+ */
+const SURFACE_ALIAS = { popop: 'settings' }
+
 const SOURCE_EXT = /\.(js|ts|svelte)$/
 
 function walkDir(dir) {
@@ -145,6 +153,96 @@ function report(label, violations) {
   return `${label}\n\n${violations.join('\n')}\n\nSee the layering table in CLAUDE.md.`
 }
 
+/**
+ * Canonical "surface" for a path under `src/entrypoints/`, given as a
+ * src-relative string (e.g. `entrypoints/popop/main.js`,
+ * `entrypoints/global.content.js`, `entrypoints/settings/components/Setting.svelte`).
+ *
+ * Every top-level `*.content.js` script collapses to `content` — they are all
+ * facets of the single content-script surface (two of them, `global.content.js`
+ * and `firefox.content.js`, literally load `content/main.js`), matching the
+ * "measured starting state" methodology at the top of the reorg plan. `popop`
+ * collapses to `settings` per SURFACE_ALIAS.
+ */
+function canonicalSurface(entrypointsRel) {
+  const top = entrypointsRel.split('/')[1]
+  if (!top) return null
+  if (top.endsWith('.content.js')) return 'content'
+  if (top === 'background.js') return 'background'
+  return SURFACE_ALIAS[top] ?? top
+}
+
+/**
+ * Resolve a `resolveSpec` result to a real file on disk, trying common
+ * extensions and `index` files. `resolveSpec` itself only resolves the
+ * specifier shape (`@/`, `./`, `../`); Rules 1–4 never needed to check the
+ * result actually exists because they only classify by top-level folder. Rule
+ * 6 has to keep walking the graph, so it needs a real file to read next.
+ */
+function resolveToRealFile(abs) {
+  if (!abs) return null
+  if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return abs
+  for (const ext of ['.js', '.ts', '.svelte', '.json']) {
+    if (fs.existsSync(abs + ext)) return abs + ext
+  }
+  for (const ext of ['.js', '.ts']) {
+    const idx = path.join(abs, `index${ext}`)
+    if (fs.existsSync(idx)) return idx
+  }
+  return null
+}
+
+/** Every source file under `src/`, mapped to the real files its imports resolve to. */
+function buildImportGraph() {
+  const graph = new Map()
+  for (const file of walkDir(SRC).filter((f) => SOURCE_EXT.test(f))) {
+    const content = fs.readFileSync(file, 'utf-8')
+    const targets = []
+    for (const { spec } of extractImports(content)) {
+      const resolved = resolveToRealFile(resolveSpec(file, spec))
+      if (resolved) targets.push(resolved)
+    }
+    graph.set(file, targets)
+  }
+  return graph
+}
+
+/** BFS over a prebuilt import graph, returning every file reachable from `root`. */
+function reachableFrom(root, graph) {
+  const seen = new Set()
+  const stack = [root]
+  while (stack.length) {
+    const file = stack.pop()
+    if (seen.has(file)) continue
+    seen.add(file)
+    for (const next of graph.get(file) ?? []) {
+      if (!seen.has(next)) stack.push(next)
+    }
+  }
+  return seen
+}
+
+/**
+ * The entrypoint roots per the reorg plan: every surface's `main.js`, the
+ * content surface's `main.js`, every top-level `*.content.js` script, and
+ * `background.js`. Enumerated from disk, not hardcoded, so a new entrypoint
+ * doesn't silently fall outside Rule 6's coverage.
+ */
+function enumerateEntrypointRoots() {
+  const ENTRYPOINTS = path.join(SRC, 'entrypoints')
+  const roots = []
+  for (const surface of ['sidepanel', 'archive', 'settings', 'popop', 'prompt', 'content']) {
+    const main = path.join(ENTRYPOINTS, surface, 'main.js')
+    if (fs.existsSync(main)) roots.push(main)
+  }
+  const background = path.join(ENTRYPOINTS, 'background.js')
+  if (fs.existsSync(background)) roots.push(background)
+  for (const entry of fs.readdirSync(ENTRYPOINTS)) {
+    if (entry.endsWith('.content.js')) roots.push(path.join(ENTRYPOINTS, entry))
+  }
+  return roots
+}
+
 describe('layering rules (CLAUDE.md)', () => {
   test('Rule 1: src/lib/** imports only src/lib/**', () => {
     const violations = findViolations(['lib'], ({ fromRel, targetLayer, kind }) => {
@@ -202,6 +300,53 @@ describe('layering rules (CLAUDE.md)', () => {
     expect(
       missing,
       `LAZY_PORT_ALLOWLIST names files that no longer exist — drop them so the exception list stays honest:\n${missing.join('\n')}`
+    ).toEqual([])
+  })
+
+  test('Rule 5: no cross-surface component imports', () => {
+    const violations = findViolations(['entrypoints'], ({ fromRel, targetLayer, targetRel }) => {
+      if (targetLayer !== 'entrypoints') return null
+      const targetParts = targetRel.split('/')
+      if (targetParts[2] !== 'components') return null // only components/ imports are surface-owned
+      const targetSurface = canonicalSurface(targetRel)
+      const fromSurface = canonicalSurface(fromRel)
+      if (fromSurface === targetSurface) return null
+      return (
+        `entrypoints/${fromSurface}/ imported a component owned by entrypoints/${targetSurface}/components/. ` +
+        `A component used by 2+ surfaces belongs in src/components/, not in another surface's components/ ` +
+        `(see "Where components go" in CLAUDE.md).`
+      )
+    })
+    expect(violations, report('Rule 5 — cross-surface component import:', violations)).toEqual([])
+  })
+
+  test('Rule 6: every file in src/components/ is reachable from 2+ entrypoint surfaces', () => {
+    const graph = buildImportGraph()
+    const owners = new Map() // absolute src/components/ file -> Set<surface>
+    for (const root of enumerateEntrypointRoots()) {
+      const surface = canonicalSurface(relToSrc(root))
+      for (const file of reachableFrom(root, graph)) {
+        if (!file.startsWith(path.join(SRC, 'components') + path.sep)) continue
+        if (!owners.has(file)) owners.set(file, new Set())
+        owners.get(file).add(surface)
+      }
+    }
+    const violations = sourceFilesIn('components')
+      .map((file) => {
+        const surfaces = [...(owners.get(file) ?? new Set())]
+        return { file, surfaces }
+      })
+      .filter(({ surfaces }) => surfaces.length < 2)
+      .map(
+        ({ file, surfaces }) =>
+          `${relToSrc(file)} — reachable from ${surfaces.length} surface(s)${
+            surfaces.length ? ` (${surfaces.join(', ')})` : ''
+          }. src/components/ is only for 2+ surfaces (CLAUDE.md); move it into its owner's ` +
+          `src/entrypoints/<surface>/components/, or delete it if nothing reaches it.`
+      )
+    expect(
+      violations,
+      report('Rule 6 — single-owner (or unreachable) file in src/components/:', violations)
     ).toEqual([])
   })
 })

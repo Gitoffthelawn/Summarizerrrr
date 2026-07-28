@@ -3,18 +3,18 @@
   import Icon from '@iconify/svelte'
   import { t } from 'svelte-i18n'
   import 'overlayscrollbars/overlayscrollbars.css'
-  import SettingButton from '@/components/buttons/SettingButton.svelte'
+  import SettingButton from '@/entrypoints/sidepanel/components/SettingButton.svelte'
   import SummarizeButton from '@/components/buttons/SummarizeButton.svelte'
-  import ActionButtons from '@/components/buttons/ActionButtons.svelte'
-  import TabNavigation from '@/components/navigation/TabNavigation.svelte'
-  import GenericSummaryDisplay from '@/components/displays/core/GenericSummaryDisplay.svelte'
-  import YouTubeSummaryDisplay from '@/components/displays/platform/YouTubeSummaryDisplay.svelte'
-  import CourseSummaryDisplay from '@/components/displays/platform/CourseSummaryDisplay.svelte'
-  import ErrorDisplay from '@/components/displays/ui/ErrorDisplay.svelte'
+  import ActionButtons from '@/entrypoints/sidepanel/components/ActionButtons.svelte'
+  import TabNavigation from '@/components/ui/TabNavigation.svelte'
+  import GenericSummaryDisplay from '@/entrypoints/sidepanel/components/displays/GenericSummaryDisplay.svelte'
+  import YouTubeSummaryDisplay from '@/entrypoints/sidepanel/components/displays/YouTubeSummaryDisplay.svelte'
+  import CourseSummaryDisplay from '@/entrypoints/sidepanel/components/displays/CourseSummaryDisplay.svelte'
+  import ErrorDisplay from '@/components/ui/ErrorDisplay.svelte'
   import ApiKeySetupPrompt from '@/components/ui/ApiKeySetupPrompt.svelte'
   import { Toaster, toast } from 'svelte-sonner'
-  import ModelToast from '@/components/feedback/ModelToast.svelte'
-  import Noti from '@/components/ui/Noti.svelte'
+  import ModelToast from '@/entrypoints/sidepanel/components/ModelToast.svelte'
+  import Noti from '@/entrypoints/sidepanel/components/Noti.svelte'
   import 'webextension-polyfill'
   import { browser } from 'wxt/browser'
 
@@ -48,18 +48,18 @@
   import '@fontsource/opendyslexic'
   import '@fontsource/mali'
   import { fadeOnly, slideScaleFade } from '@/lib/utils/slideScaleFade.js'
-  import ActionButtonsMini from '@/components/buttons/ActionButtonsMini.svelte'
+  import ActionButtonsMini from '@/entrypoints/sidepanel/components/ActionButtonsMini.svelte'
   import { debounce } from '@/lib/utils/utils.js'
-  import Tooltip from '@/components/ui/Tooltip.svelte'
+  import Tooltip from '@/entrypoints/sidepanel/components/Tooltip.svelte'
   import { Tooltip as BitsTooltip } from 'bits-ui'
-  import TabTitleBar from '@/components/ui/TabTitleBar.svelte'
+  import TabTitleBar from '@/entrypoints/sidepanel/components/TabTitleBar.svelte'
   import { tabTitle } from '@/stores/tabTitleStore.svelte.js'
 
   // Deep Dive imports
-  import DeepDiveFAB from '@/components/tools/deepdive/DeepDiveFAB.svelte'
-  import DeepDiveDialog from '@/components/tools/deepdive/DeepDiveDialog.svelte'
-  import DeepDiveContent from '@/components/tools/deepdive/DeepDiveContent.svelte'
-  import InlineDeepDiveQuestions from '@/components/tools/deepdive/InlineDeepDiveQuestions.svelte'
+  import DeepDiveFAB from '@/entrypoints/sidepanel/components/deepdive/DeepDiveFAB.svelte'
+  import DeepDiveDialog from '@/entrypoints/sidepanel/components/deepdive/DeepDiveDialog.svelte'
+  import DeepDiveContent from '@/entrypoints/sidepanel/components/deepdive/DeepDiveContent.svelte'
+  import InlineDeepDiveQuestions from '@/entrypoints/sidepanel/components/deepdive/InlineDeepDiveQuestions.svelte'
   import {
     deepDiveState,
     toggleDeepDive,
@@ -72,9 +72,9 @@
   import { generateFollowUpQuestions } from '@/services/tools/deepDiveService.js'
 
   // Chat harness (Phase 5): chat is the default side-panel surface
-  import ChatShell from '@/components/chat/ChatShell.svelte'
-  import ChatHeader from '@/components/chat/ChatHeader.svelte'
-  import ChatTabTitleBar from '@/components/chat/ChatTabTitleBar.svelte'
+  import ChatShell from '@/entrypoints/sidepanel/components/chat/ChatShell.svelte'
+  import ChatHeader from '@/entrypoints/sidepanel/components/chat/ChatHeader.svelte'
+  import ChatTabTitleBar from '@/entrypoints/sidepanel/components/chat/ChatTabTitleBar.svelte'
   import { openConversation } from '@/stores/chatStore.svelte.js'
 
   // Track if settings are loaded
@@ -573,7 +573,7 @@
 
       <!-- NEW: Permission Warning Component for Firefox -->
       {#if import.meta.env.BROWSER === 'firefox'}
-        {#await import('@/components/ui/PermissionWarningPrompt.svelte')}
+        {#await import('@/entrypoints/sidepanel/components/PermissionWarningPrompt.svelte')}
           <!-- Loading placeholder - có thể để trống hoặc thêm loading indicator nhỏ -->
         {:then { default: PermissionWarningPrompt }}
           <PermissionWarningPrompt

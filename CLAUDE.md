@@ -25,7 +25,7 @@ npm run zip
 npm run zip:firefox
 
 # Type checking
-npm check
+npm run check
 
 # Android testing
 npm run android
@@ -65,7 +65,11 @@ Those port files are the **only** entries in the test's `LAZY_PORT_ALLOWLIST`. A
 
 **Reading settings from `lib/`:** import `settings` from `settingsPort`, not the store. Reads are synchronous and safe from module load onward (the port holds the live `$state` object, which is only ever mutated in place) — so transitions like `lib/utils/slideScaleFade.js` see real values without awaiting. Call `ensureSettingsLoaded()` only when you need storage-backed values guaranteed present, e.g. before building a prompt.
 
-**Where components go:** `src/components/*` is **only** for things used by **2 or more entrypoints**. Anything used by a single surface belongs next to that entrypoint (`src/entrypoints/<surface>/components/`).
+**Where components go:** `src/components/*` is **only** for things used by **2 or more surfaces** — measured, not aspirational: it currently holds exactly 6 folders / 32 files (`buttons` 9, `icons` 5, `inputs` 3, `markdown` 3, `ui` 6, `welcome` 6). Everything else lives next to the entrypoint that owns it, under `src/entrypoints/<surface>/components/`.
+
+`settings` and `popop` count as **one surface**, not two: `popop/App.svelte` has no `components/` directory of its own and mounts settings' `@/entrypoints/settings/components/Setting.svelte` directly. A settings-only component doesn't become "shared" just because popop also renders it.
+
+The guard test enforces **Rules 1–6**. Rule 5 bans cross-surface component imports (a file under `entrypoints/<A>/components/` must not be imported from `entrypoints/<B>/`, `A !== B`). Rule 6 requires every file under `src/components/` to be reachable — by static or dynamic import — from **2 or more** entrypoint roots. Rule 6 is what makes the placement rule stick: a new shared component needs a second real consumer before it's allowed to live in `src/components/`; there's no way to place it there "in advance" of that second usage.
 
 **Filenames must be unique:** no two `.svelte` files anywhere under `src/` may share a basename (`App.svelte` excepted — one per entrypoint). Two different `ShadowTooltip.svelte` implementations once sat in folders imported side by side; the guard test blocks a repeat.
 
@@ -272,7 +276,9 @@ Firefox requires optional permissions for sites. The flow:
 
 ## Testing
 
-Currently no explicit test configuration in package.json. For manual testing:
+`npm test` runs `vitest run` — 50 test files, including the architecture guard at `tests/architecture/layering.test.js`. Run `npm test` before considering any layering or component-placement change done.
+
+For manual testing:
 
 1. Run `npm run dev` to build with HMR
 2. Load `.output/chrome` or `.output/firefox` folder as unpacked extension

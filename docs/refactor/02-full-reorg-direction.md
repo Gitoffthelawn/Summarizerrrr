@@ -1,5 +1,13 @@
 # Full Reorg Direction — surface-first
 
+> **Superseded for execution by [`02b-full-reorg-plan.md`](./02b-full-reorg-plan.md).**
+> This doc supplies the principle (§2) and the method (§5), both still valid.
+> Its **§4 file assignments were derived by eyeballing folders and are wrong in
+> ~10 places** — an import-graph check found `Tooltip`, `ShadowTooltip`,
+> `ConfirmDialog`, `ActionDropdownMenu`, `PermissionWarningPrompt`, `Switch` and
+> `TextInput` are single-owner (not shared), 2 shared buttons were omitted, and 5
+> genuinely-shared files were never placed at all. Use 02b's move table, not §4's.
+
 > **Status:** direction for a LATER plan. Not yet executed.
 > **Precondition:** assumes [`01-cleanup-and-rule.md`](./01-cleanup-and-rule.md) is complete — dead code deleted, name collisions resolved, layering rule written down and guarded by a test.
 > **Do not reorg before the rule exists.** Without the guard test the tree will rot again within months and the move work is wasted.

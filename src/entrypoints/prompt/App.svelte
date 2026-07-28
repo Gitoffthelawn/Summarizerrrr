@@ -12,8 +12,8 @@
   import TextScramble from '@/lib/utils/textScramble.js'
   import PromptMenu from './PromptMenu.svelte'
   import SkillsPage from './SkillsPage.svelte'
-  import CustomToast from '@/components/feedback/CustomToast.svelte'
-  import Logdev from '@/components/settings/Logdev.svelte'
+  import CustomToast from '@/entrypoints/prompt/components/CustomToast.svelte'
+  import Logdev from '@/entrypoints/prompt/components/Logdev.svelte'
   import { Toaster, toast } from 'svelte-sonner'
   import {
     settings,

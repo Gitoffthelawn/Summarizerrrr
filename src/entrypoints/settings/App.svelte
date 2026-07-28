@@ -8,7 +8,7 @@
     loadSettings,
     subscribeToSettingsChanges,
   } from '@/stores/settingsStore.svelte.js'
-  import Setting from '@/components/settings/Setting.svelte'
+  import Setting from '@/entrypoints/settings/components/Setting.svelte'
   import {
     themeSettings,
     initializeTheme,

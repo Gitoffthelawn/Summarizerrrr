@@ -1,7 +1,7 @@
 <script>
   // @ts-nocheck
   import Icon from '@iconify/svelte'
-  import SkillList from '@/components/skills/SkillList.svelte'
+  import SkillList from '@/entrypoints/prompt/components/SkillList.svelte'
   import PlusIcon from '@/components/icons/PlusIcon.svelte'
   import TextScramble from '@/lib/utils/textScramble.js'
   import { skillService, createUserSkill } from '@/lib/chat/skills/skillService.js'

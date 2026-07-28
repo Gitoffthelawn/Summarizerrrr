@@ -19,7 +19,7 @@
     themeSettings,
     applyThemeToDocument,
   } from '@/stores/themeStore.svelte.js'
-  import SummaryDisplay from '@/components/displays/archive/SummaryDisplay.svelte'
+  import SummaryDisplay from '@/entrypoints/archive/components/displays/SummaryDisplay.svelte'
   import '@fontsource-variable/geist-mono'
   import '@fontsource-variable/noto-serif'
   import '@fontsource/opendyslexic'
@@ -31,7 +31,7 @@
     loadConversationArchive,
     clearConversationSelection,
   } from '@/stores/conversationArchiveStore.svelte.js'
-  import ConversationTranscript from '@/components/displays/archive/ConversationTranscript.svelte'
+  import ConversationTranscript from '@/entrypoints/archive/components/displays/ConversationTranscript.svelte'
   import { animationService } from '@/services/animationService.js'
   import {
     archiveFilterStore,

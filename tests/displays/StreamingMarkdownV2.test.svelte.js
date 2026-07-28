@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { flushSync, mount } from 'svelte'
-import StreamingMarkdownV2 from '@/components/displays/ui/StreamingMarkdownV2.svelte'
+import StreamingMarkdownV2 from '@/components/markdown/StreamingMarkdownV2.svelte'
 
 function render(sourceMarkdown) {
   const host = document.createElement('div')

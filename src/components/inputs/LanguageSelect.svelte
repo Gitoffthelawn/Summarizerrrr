@@ -1,9 +1,9 @@
 <script>
-  import ReusableSelect from './ReusableSelect.svelte'
+  import ReusableSelect from '@/components/inputs/ReusableSelect.svelte'
   import {
     settings,
     updateSettings,
-  } from '../../stores/settingsStore.svelte.js' // Import updateSettings
+  } from '@/stores/settingsStore.svelte.js' // Import updateSettings
   const languages = [
     { value: 'Arabic', label: 'Arabic' },
     { value: 'Bengali', label: 'Bengali' },

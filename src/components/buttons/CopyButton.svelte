@@ -1,7 +1,7 @@
 <script>
   import { t } from 'svelte-i18n'
   import Icon, { loadIcons } from '@iconify/svelte'
-  import { slideScaleFade } from '../../lib/utils/slideScaleFade.js'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
   import HoverTooltip from '@/components/ui/HoverTooltip.svelte'
 
   let { targetId = 'copy-cat', text = null, pageUrl = null } = $props()
