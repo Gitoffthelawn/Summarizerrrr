@@ -9,10 +9,11 @@
   import { useOverlayScrollbars } from 'overlayscrollbars-svelte'
   import Icon from '@iconify/svelte'
   import PlusIcon from '@/components/icons/PlusIcon.svelte'
-  import TextScramble from '@/lib/ui/textScramble.js'
+  import TextScramble from '@/lib/utils/textScramble.js'
   import PromptMenu from './PromptMenu.svelte'
-  import CustomToast from '@/components/feedback/CustomToast.svelte'
-  import Logdev from '@/components/settings/Logdev.svelte'
+  import SkillsPage from './SkillsPage.svelte'
+  import CustomToast from '@/entrypoints/prompt/components/CustomToast.svelte'
+  import Logdev from '@/entrypoints/prompt/components/Logdev.svelte'
   import { Toaster, toast } from 'svelte-sonner'
   import {
     settings,
@@ -27,7 +28,7 @@
   } from '@/stores/themeStore.svelte.js'
   import '@fontsource-variable/geist-mono'
   import { Dialog } from 'bits-ui'
-  import { slideScaleFade, fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade, fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import { enhancePrompt } from '@/lib/api/api.js'
   import aiPrompt from '@/lib/prompts/templates/promptEnhance.js'
 
@@ -235,6 +236,23 @@
     window.history.pushState({}, '', `?promptKey=${key}`)
   }
 
+  let view = $state(
+    new URLSearchParams(window.location.search).get('view') === 'skills'
+      ? 'skills'
+      : 'editor',
+  )
+
+  function openSkills() {
+    view = 'skills'
+    window.history.pushState({}, '', `?view=skills`)
+  }
+
+  function backToPrompts() {
+    view = 'editor'
+    const query = promptKey ? `?promptKey=${promptKey}` : window.location.pathname
+    window.history.pushState({}, '', query)
+  }
+
   let selectedTemplate = $state(null)
 
   function handleTemplateChange(event) {
@@ -304,6 +322,9 @@
     unstyled: true,
   }}
 />
+{#if view === 'skills'}
+  <SkillsPage onBack={backToPrompts} />
+{:else}
 <main
   class="flex font-mono text-xs 2xl:text-sm relative p-8 min-w-4xl min-h-dvh bg-background text-text-primary"
 >
@@ -329,6 +350,7 @@
     {summarizePrompts}
     {customActionPrompts}
     {handlePromptMenuClick}
+    onOpenSkills={openSkills}
   />
 
   <!-- Right Column: Prompt Editor -->
@@ -616,3 +638,4 @@
     </Dialog.Content>
   </Dialog.Portal>
 </Dialog.Root>
+{/if}

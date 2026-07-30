@@ -3,19 +3,20 @@
   import Icon from '@iconify/svelte'
   import { t } from 'svelte-i18n'
   import 'overlayscrollbars/overlayscrollbars.css'
-  import SettingButton from '@/components/buttons/SettingButton.svelte'
+  import SettingButton from '@/entrypoints/sidepanel/components/SettingButton.svelte'
   import SummarizeButton from '@/components/buttons/SummarizeButton.svelte'
-  import ActionButtons from '@/components/buttons/ActionButtons.svelte'
-  import TabNavigation from '@/components/navigation/TabNavigation.svelte'
-  import GenericSummaryDisplay from '@/components/displays/core/GenericSummaryDisplay.svelte'
-  import YouTubeSummaryDisplay from '@/components/displays/platform/YouTubeSummaryDisplay.svelte'
-  import CourseSummaryDisplay from '@/components/displays/platform/CourseSummaryDisplay.svelte'
-  import ErrorDisplay from '@/components/displays/ui/ErrorDisplay.svelte'
+  import ActionButtons from '@/entrypoints/sidepanel/components/ActionButtons.svelte'
+  import TabNavigation from '@/components/ui/TabNavigation.svelte'
+  import GenericSummaryDisplay from '@/entrypoints/sidepanel/components/displays/GenericSummaryDisplay.svelte'
+  import YouTubeSummaryDisplay from '@/entrypoints/sidepanel/components/displays/YouTubeSummaryDisplay.svelte'
+  import CourseSummaryDisplay from '@/entrypoints/sidepanel/components/displays/CourseSummaryDisplay.svelte'
+  import ErrorDisplay from '@/components/ui/ErrorDisplay.svelte'
   import ApiKeySetupPrompt from '@/components/ui/ApiKeySetupPrompt.svelte'
   import { Toaster, toast } from 'svelte-sonner'
-  import ModelToast from '@/components/feedback/ModelToast.svelte'
-  import Noti from '@/components/ui/Noti.svelte'
+  import ModelToast from '@/entrypoints/sidepanel/components/ModelToast.svelte'
+  import Noti from '@/entrypoints/sidepanel/components/Noti.svelte'
   import 'webextension-polyfill'
+  import { browser } from 'wxt/browser'
 
   // Import direct variables and functions from refactored stores
   import {
@@ -28,13 +29,13 @@
     fetchAndSummarizeStream,
     updateActiveCourseTab,
   } from '@/stores/summaryStore.svelte.js'
-  import { setupMessageListener } from '@/services/messageHandler.js'
+  import { setupMessageListener } from './messageHandler.js'
   import {
     getCurrentTabId,
     getTabsWithSummary,
     getOrCreateTabState,
   } from '@/services/tabCacheService.js'
-  import { initializeApp } from '@/services/initialization.js'
+  import { initializeApp } from './initialization.js'
   import { settings, loadSettings } from '@/stores/settingsStore.svelte.js'
   import {
     themeSettings,
@@ -46,19 +47,19 @@
   import '@fontsource-variable/noto-serif'
   import '@fontsource/opendyslexic'
   import '@fontsource/mali'
-  import { fadeOnly, slideScaleFade } from '@/lib/ui/slideScaleFade.js'
-  import ActionButtonsMini from '@/components/buttons/ActionButtonsMini.svelte'
+  import { fadeOnly, slideScaleFade } from '@/lib/utils/slideScaleFade.js'
+  import ActionButtonsMini from '@/entrypoints/sidepanel/components/ActionButtonsMini.svelte'
   import { debounce } from '@/lib/utils/utils.js'
-  import Tooltip from '@/components/ui/Tooltip.svelte'
+  import Tooltip from '@/entrypoints/sidepanel/components/Tooltip.svelte'
   import { Tooltip as BitsTooltip } from 'bits-ui'
-  import TabTitleBar from '@/components/ui/TabTitleBar.svelte'
+  import TabTitleBar from '@/entrypoints/sidepanel/components/TabTitleBar.svelte'
   import { tabTitle } from '@/stores/tabTitleStore.svelte.js'
 
   // Deep Dive imports
-  import DeepDiveFAB from '@/components/tools/deepdive/DeepDiveFAB.svelte'
-  import DeepDiveDialog from '@/components/tools/deepdive/DeepDiveDialog.svelte'
-  import DeepDiveContent from '@/components/tools/deepdive/DeepDiveContent.svelte'
-  import InlineDeepDiveQuestions from '@/components/tools/deepdive/InlineDeepDiveQuestions.svelte'
+  import DeepDiveFAB from '@/entrypoints/sidepanel/components/deepdive/DeepDiveFAB.svelte'
+  import DeepDiveDialog from '@/entrypoints/sidepanel/components/deepdive/DeepDiveDialog.svelte'
+  import DeepDiveContent from '@/entrypoints/sidepanel/components/deepdive/DeepDiveContent.svelte'
+  import InlineDeepDiveQuestions from '@/entrypoints/sidepanel/components/deepdive/InlineDeepDiveQuestions.svelte'
   import {
     deepDiveState,
     toggleDeepDive,
@@ -70,8 +71,23 @@
   } from '@/stores/deepDiveStore.svelte.js'
   import { generateFollowUpQuestions } from '@/services/tools/deepDiveService.js'
 
+  // Chat harness (Phase 5): chat is the default side-panel surface
+  import ChatShell from '@/entrypoints/sidepanel/components/chat/ChatShell.svelte'
+  import ChatHeader from '@/entrypoints/sidepanel/components/chat/ChatHeader.svelte'
+  import ChatTabTitleBar from '@/entrypoints/sidepanel/components/chat/ChatTabTitleBar.svelte'
+  import { openConversation } from '@/stores/chatStore.svelte.js'
+  import {
+    sidepanelViewState,
+    showLegacySummarySurface,
+  } from '@/stores/sidepanelViewStore.svelte.js'
+
   // Track if settings are loaded
   let settingsLoaded = $state(false)
+
+  // Legacy summary UI remains reachable behind an explicit toggle. The flag
+  // lives in a store because `messageHandler` needs it too: whichever surface
+  // is off screen must not touch the shared document scroll.
+  const showLegacySummary = $derived(sidepanelViewState.surface === 'summary')
 
   // Permission state for Firefox
   let hasPermission = $state(true) // Default to true for non-Firefox
@@ -115,6 +131,7 @@
     // Update count
     cachedTabsCount = getTabsWithSummary().length
   })
+
 
   // Use API key validation composable
   const { needsApiKeySetup, currentProviderDisplayName } = useApiKeyValidation()
@@ -491,34 +508,24 @@
     {/await}
   </div>
 {/if}
+{#if showLegacySummary}
 <div
   class="main-container flex min-w-[22.5rem] bg-surface-1 w-full flex-col"
-  data-per-tab={settings.tools?.perTabCache?.enabled ? 'true' : undefined}
+  data-per-tab="true"
 >
   <div
-    class="grid min-h-screen {settings.tools?.perTabCache?.enabled
-      ? 'grid-rows-[36px_32px_10px_192px_10px_1fr]'
-      : 'grid-rows-[32px_10px_192px_10px_1fr]'}"
+    class="grid min-h-screen grid-rows-[36px_32px_10px_192px_10px_1fr]"
   >
     <div
-      class="flex justify-center items-center w-screen h-full {settings.tools
-        ?.perTabCache?.enabled
-        ? 'sticky top-0 z-40 bg-surface-1'
-        : ''}"
+      class="flex sticky top-0 z-40 justify-center items-center w-screen h-full bg-surface-1"
     >
       <TabTitleBar {cachedTabsCount} />
       <div
-        class=" absolute w-screen h-3 -bottom-3 bg-linear-to-b from-surface-1 to-surface-1/0 {settings
-          .tools?.perTabCache?.enabled
-          ? ''
-          : 'hidden'}"
+        class="absolute w-screen h-3 -bottom-3 bg-linear-to-b from-surface-1 to-surface-1/0"
       ></div>
     </div>
     <div
-      class="w-screen text-center text-[0.7rem] flex justify-center items-center px-2 text-text-secondary {settings
-        .tools?.perTabCache?.enabled
-        ? ''
-        : 'hidden'}"
+      class="w-screen text-center text-[0.7rem] flex justify-center items-center px-2 text-text-secondary"
     >
       <div class="line-clamp-1 !text-center w-full">
         {$tabTitle}
@@ -539,11 +546,11 @@
           >
             {#snippet children({ builder })}
               <button
+                {...builder}
                 onclick={() => {
-                  browser.tabs.create({ url: 'archive.html' })
+                  browser.tabs.create({ url: browser.runtime.getURL('archive.html') })
                 }}
                 class="p-1 setting-animation transition-colors hover:bg-surface-1 rounded-full hover:text-text-primary"
-                {...builder}
               >
                 <Icon icon="solar:history-linear" width="24" height="24" />
               </button>
@@ -572,7 +579,7 @@
 
       <!-- NEW: Permission Warning Component for Firefox -->
       {#if import.meta.env.BROWSER === 'firefox'}
-        {#await import('@/components/ui/PermissionWarningPrompt.svelte')}
+        {#await import('@/entrypoints/sidepanel/components/PermissionWarningPrompt.svelte')}
           <!-- Loading placeholder - có thể để trống hoặc thêm loading indicator nhỏ -->
         {:then { default: PermissionWarningPrompt }}
           <PermissionWarningPrompt
@@ -673,9 +680,41 @@
 {#if !summaryState.lastSummaryTypeDisplayed && settings.hasCompletedOnboarding && !needsApiKeySetup()()}
   <Noti />
 {/if}
+{:else}
+<div
+  class="flex min-h-screen min-w-[22.5rem] w-full flex-col bg-surface-1"
+  data-per-tab="true"
+>
+  <!-- `data-sticky-header`: ChatShell measures this to offset its submit scroll. -->
+  <div class="sticky top-0 z-40 bg-surface-1" data-sticky-header>
+    <div
+      class="relative flex h-9 shrink-0 items-center justify-center bg-surface-1"
+    >
+      <ChatTabTitleBar />
+      <div
+        class="absolute -bottom-3 h-3 w-screen bg-linear-to-b from-surface-1 to-surface-1/0"
+      ></div>
+    </div>
+    <ChatHeader
+      onOpenConversation={openConversation}
+      onShowLegacySummary={showLegacySummarySurface}
+    />
+  </div>
+
+  {#if needsApiKeySetup()()}
+    <div class="prose wrap-anywhere main-sidepanel p z-10 flex flex-col gap-8 px-6 pt-8 min-w-[22.5rem] max-w-[52rem] w-screen mx-auto">
+      <ApiKeySetupPrompt />
+    </div>
+  {:else}
+    <div class="flex flex-1 flex-col">
+      <ChatShell />
+    </div>
+  {/if}
+</div>
+{/if}
 <Toaster />
 <!-- Deep Dive FAB & Section with Error Boundary -->
-{#if shouldShowDeepDiveNow}
+{#if shouldShowDeepDiveNow && showLegacySummary}
   {#await Promise.resolve()}
     <!-- Loading placeholder -->
   {:then}

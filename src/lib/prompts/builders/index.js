@@ -1,4 +1,4 @@
-import { settings } from '@/stores/settingsStore.svelte.js'
+import { settings } from '@/lib/config/settingsPort.js'
 import {
   youtubeSummary,
   youtubeSummaryShort,

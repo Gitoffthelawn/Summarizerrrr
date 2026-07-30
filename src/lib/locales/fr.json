@@ -25,13 +25,6 @@
         "system": "Système",
         "system_desc": "Utilise le thème de votre appareil."
       },
-      "responseMode": "Mode de réponse (Fonctionne uniquement dans le panneau latéral)",
-      "response_mode": {
-        "streaming": "Streaming",
-        "streaming_desc": "Réponses instantanées. Recommandé.",
-        "non_streaming": "Blocking",
-        "non_streaming_desc": "Pour les connexions lentes. Évite les pauses."
-      },
       "floatingButton": "Bouton flottant",
       "floating_button": {
         "show": "Afficher",
@@ -196,8 +189,18 @@
         "youtube_comment": "Commentaire YouTube",
         "override_note": "* Les prompts actifs remplacent les réglages de base."
       },
+      "reasoning": {
+        "title": "Raisonnement",
+        "off": "Désactivé",
+        "off_desc": "Réponse directe, plus rapide.",
+        "low": "Faible",
+        "low_desc": "Raisonnement léger.",
+        "medium": "Moyen",
+        "medium_desc": "Équilibre entre profondeur et vitesse."
+      },
       "comment_limit": "Limite de commentaires YouTube",
-      "comment_limit_desc": "Nombre maximum de commentaires à analyser."
+      "comment_limit_desc": "Nombre maximum de commentaires à analyser.",
+      "uses_gemini_basic": "Utilise Gemini Basic"
     },
     "chatgpt_config": {
       "api_key_label": "Clé API",
@@ -221,13 +224,7 @@
       "select_model_label": "Modèle Gemini Advanced",
       "select_model_placeholder": "Sélectionnez un modèle",
       "select_gemini_model_aria_label": "Sélectionner un modèle Gemini",
-      "auto_fallback_label": "Repli automatique en cas de surcharge",
-      "thinking_level": "Niveau de réflexion",
-      "thinking_levels": {
-        "minimal": "Minimal",
-        "medium": "Moyen",
-        "high": "Élevé"
-      }
+      "auto_fallback_label": "Repli automatique en cas de surcharge"
     },
     "gemini_basic_config": {
       "api_key_label": "Clé API Gemini",
@@ -254,7 +251,7 @@
       "api_key_placeholder": "Entrez votre clé API Groq",
       "model_label": "Nom du modèle",
       "get_a_key": "Obtenir une clé",
-      "model_placeholder": "mixtral-8x7b-32768",
+      "model_placeholder": "llama-3.3-70b-versatile",
       "saved_status": "Sauvegardé !",
       "view_models": "Voir les modèles"
     },
@@ -306,39 +303,99 @@
         "generate_new_questions": "Générer de nouvelles questions",
         "previous_questions": "Questions précédentes",
         "next_questions": "Questions suivantes",
-        "ask_own_question_in_chat": "Posez votre propre question dans le chat"
-      },
-      "perTabCache": {
-        "title": "Onglet dans le panneau latéral",
-        "description": "Conserver un état de résumé séparé pour chaque onglet du navigateur.",
-        "enabled": "Activé",
-        "disabled": "Désactivé",
-        "clear_on_navigation": {
-          "title": "Effacer lors de la navigation",
-          "description": "Ce qui arrive au résumé en cache lorsque l'URL de la page change.",
-          "keep_summary": "Conserver le résumé",
-          "keep_summary_desc": "Le résumé reste en cache lorsque l'URL change",
-          "auto_clear": "Effacer automatiquement",
-          "auto_clear_desc": "Effacer le résumé quand l'URL change"
-        },
-        "auto_scroll": {
-          "title": "Défiler automatiquement vers l'onglet actif",
-          "description": "Défiler automatiquement pour amener le bouton de l'onglet actif dans la vue.",
-          "off": "Désactivé",
-          "off_desc": "Ne pas défiler automatiquement",
-          "jump": "Saut",
-          "jump_desc": "Défilement instantané",
-          "smooth": "Fluide",
-          "smooth_desc": "Défilement animé"
-        },
-        "nav": {
-          "previous_tab": "Onglet précédent",
-          "next_tab": "Onglet suivant",
-          "remove_tab": "Supprimer (Clic du milieu)"
-        },
-        "blocking_note": "Note: Le mode de réponse est réglé sur Blocking pour de meilleures performances."
+        "ask_own_question_in_chat": "Posez votre propre question dans le chat",
+        "api_keys_info_restructured": "Les clés API sont gérées globalement. Allez dans l'onglet",
+        "api_keys_link_text": "Fournisseurs et clés API",
+        "api_keys_info_restructured_end": "pour configurer les identifiants.",
+        "reasoning_title": "Raisonnement",
+        "reasoning_description": "Contrôlez le niveau de raisonnement pour les questions Deep Dive.",
+        "reasoning_off": "Désactivé",
+        "reasoning_off_desc": "Réponse directe, le plus rapide.",
+        "reasoning_low": "Faible",
+        "reasoning_low_desc": "Raisonnement léger.",
+        "reasoning_medium": "Moyen",
+        "reasoning_medium_desc": "Équilibre entre profondeur et vitesse."
       }
+    },
+    "feature_model_picker": {
+      "provider_label": "Fournisseur de modèles",
+      "model_label": "Nom du modèle",
+      "model_placeholder": "Rechercher ou sélectionner un modèle",
+      "view_models": "Voir les modèles",
+      "unconfigured_suffix": "non configuré",
+      "unconfigured_warning": "Ce fournisseur n'est pas configuré.",
+      "configure_link": "Configurer la clé API",
+      "free_text_placeholder": "Saisir l'ID du modèle"
+    },
+    "provider_key_config": {
+      "status_configured": "configuré",
+      "status_unconfigured": "non configuré",
+      "base_url_label": "URL de base",
+      "endpoint_label": "URL du point de terminaison",
+      "api_key_label": "Clé API",
+      "api_key_placeholder": "Saisir la clé API",
+      "get_a_key": "Obtenir une clé API",
+      "api_keys_section_title": "Clés API et points de terminaison",
+      "add_provider": "Ajouter un fournisseur",
+      "remove_provider": "Supprimer"
+    },
+    "openai_profile_config": {
+      "name_label": "Nom du profil",
+      "name_required": "Le nom est requis",
+      "base_url_label": "URL de base",
+      "base_url_invalid": "Doit être une URL HTTP/HTTPS valide",
+      "api_key_label": "Clé API",
+      "api_key_required": "La clé API est requise",
+      "default_model_label": "ID de modèle par défaut",
+      "default_model_required": "L'ID de modèle par défaut est requis",
+      "delete_profile": "Supprimer le profil"
+    },
+    "chat": {
+      "add_to_quick_models": "Ajouter aux modèles rapides",
+      "quick_models": "Modèles rapides",
+      "quick_models_hint": "Jusqu'à {max} modèles pour un changement rapide dans le compositeur.",
+      "remove_quick_model": "Retirer des modèles rapides",
+      "default_reasoning": "Niveau de raisonnement par défaut",
+      "default_reasoning_hint": "S'applique au sélecteur de raisonnement des nouveaux onglets. Les réglages par onglet sont indépendants."
     }
+  },
+  "chat": {
+    "time": {
+      "justNow": "À l'instant",
+      "minutesAgo": "il y a {count} min"
+    },
+    "context_donut": {
+      "aria_usage": "Context window usage:",
+      "aria_unknown": "Context usage not known yet",
+      "model": "Model",
+      "unknown_provider": "Unknown provider",
+      "context_window": "Context window",
+      "input_budget": "Input budget",
+      "input": "Input",
+      "output": "Output",
+      "cache": "Cache",
+      "source": "Source"
+    },
+    "context_warning": {
+      "source_dropped": "\"{title}\" était trop long pour le contexte de ce modèle et a été exclu. La réponse ci-dessous n'est pas basée sur celui-ci — essayez un modèle avec une fenêtre de contexte plus grande.",
+      "source_dropped_untitled": "Une source était trop longue pour le contexte de ce modèle et a été exclue. La réponse ci-dessous n'est pas basée sur celle-ci.",
+      "source_truncated": "Seule une partie de \"{title}\" entrait dans le contexte de ce modèle.",
+      "history_trimmed": "{count} échange(s) plus ancien(s) ont été abandonné(s) pour s'adapter au contexte de ce modèle.",
+      "source_unresolved": "Une source jointe précédemment n'a pas pu être chargée.",
+      "input_too_large": "Votre message est trop long pour la fenêtre de contexte de ce modèle, même en supprimant toutes les sources. Raccourcissez-le ou passez à un modèle avec un contexte plus large."
+    },
+    "model_select": {
+      "aria_label": "Modèle de chat : {model}",
+      "default_label": "Par défaut ({model})",
+      "manage_models": "Gérer les modèles...",
+      "reasoning": "Raisonnement",
+      "warning_unresolvable": "Profil inconnu"
+    }
+  },
+  "tab_navigation": {
+    "previous_tab": "Onglet précédent",
+    "next_tab": "Onglet suivant",
+    "remove_tab": "Supprimer (Clic du milieu)"
   },
   "prompts": {
     "title": "Prompts",

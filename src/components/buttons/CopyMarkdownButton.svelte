@@ -1,8 +1,8 @@
 <script>
   import { t } from 'svelte-i18n'
   import Icon, { loadIcons } from '@iconify/svelte'
-  import { slideScaleFade } from '../../lib/ui/slideScaleFade.js'
-  import ShadowTooltip from '../../lib/components/ShadowTooltip.svelte'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
+  import HoverTooltip from '@/components/ui/HoverTooltip.svelte'
 
   let { text = '', pageUrl = null } = $props()
 
@@ -126,7 +126,7 @@
   }
 </script>
 
-<ShadowTooltip
+<HoverTooltip
   content={isCopied ? $t('button.copied') : $t('button.copyMarkdown')}
 >
   <button
@@ -178,4 +178,4 @@
       </span>
     {/if}
   </button>
-</ShadowTooltip>
+</HoverTooltip>

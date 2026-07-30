@@ -6,8 +6,8 @@
   } from '@/stores/summaryStore.svelte.js'
   import { t } from 'svelte-i18n'
   import Icon, { loadIcons } from '@iconify/svelte'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
-  import ShadowTooltip from '../../lib/components/ShadowTooltip.svelte'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
+  import HoverTooltip from '@/components/ui/HoverTooltip.svelte'
 
   async function handleSave() {
     if (summaryState.isArchived) return
@@ -16,7 +16,7 @@
   loadIcons(['heroicons:archive-box', 'heroicons:archive-box-solid'])
 </script>
 
-<ShadowTooltip
+<HoverTooltip
   content={summaryState.isArchived
     ? $t('button.saved')
     : $t('button.save_to_archive')}
@@ -51,4 +51,4 @@
       </span>
     {/if}
   </button>
-</ShadowTooltip>
+</HoverTooltip>

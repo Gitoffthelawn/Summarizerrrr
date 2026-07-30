@@ -8,7 +8,7 @@
     loadSettings,
     subscribeToSettingsChanges,
   } from '@/stores/settingsStore.svelte.js'
-  import Setting from '@/components/settings/Setting.svelte'
+  import Setting from '@/entrypoints/settings/components/Setting.svelte'
   import {
     themeSettings,
     initializeTheme,
@@ -19,6 +19,8 @@
   import '@fontsource-variable/noto-serif'
   import '@fontsource/opendyslexic'
   import '@fontsource/mali'
+  import { OverlayScrollbars } from 'overlayscrollbars'
+  import 'overlayscrollbars/overlayscrollbars.css'
 
   // Browser detection for review URL
   const isFirefox = import.meta.env.FIREFOX
@@ -31,9 +33,28 @@
     const unsubscribeSystemTheme = subscribeToSystemThemeChanges()
     const unsubscribeTheme = subscribeToThemeChanges()
 
+    function isTouchDevice() {
+      return (
+        'ontouchstart' in window ||
+        navigator.maxTouchPoints > 0 ||
+        navigator.msMaxTouchPoints > 0
+      )
+    }
+
+    let osInstance = null
+    if (!isTouchDevice()) {
+      osInstance = OverlayScrollbars(
+        { target: document.body },
+        { scrollbars: { theme: 'os-theme-custom-app' } },
+      )
+    }
+
     return () => {
       unsubscribeSystemTheme()
       unsubscribeTheme()
+      if (osInstance) {
+        osInstance.destroy()
+      }
     }
   })
 
@@ -52,13 +73,13 @@
   })
 </script>
 
-<div class="flex parent h-dvh bg-background">
+<div class="flex parent h-dvh sm:h-auto sm:min-h-dvh bg-background">
   <span class=" bg-border/70 top">
     <div
-      class="w-full absolute max-w-2xl left-1/2 -translate-x-1/2 top-px z-10 flex items-end"
+      class="w-full absolute max-w-4xl left-1/2 -translate-x-1/2 top-px z-10 flex items-end"
     >
       <!-- Bug Reports & Feature Ideas -->
-      <a
+      <!-- <a
         href="https://github.com/trongnguyen24/Summarizerrrr/issues"
         target="_blank"
         rel="noopener noreferrer"
@@ -67,16 +88,16 @@
         <Icon icon="mdi:github" width="16" height="16" />
         <span class="text-xs">Bug reports & feature ideas</span>
         <Icon icon="heroicons:arrow-up-right-16-solid" width="12" height="12" />
-      </a>
+      </a> -->
     </div>
   </span>
   <span class=" bg-border/70 relative bottom">
     <!-- Footer Links: Support & Bug Reports -->
     <div
-      class="w-full absolute max-w-2xl left-1/2 -translate-x-1/2 top-px z-10"
+      class="w-full absolute max-w-4xl left-1/2 -translate-x-1/2 top-px z-10"
     >
       <!-- Buy Me a Coffee or Review -->
-      <div
+      <!-- <div
         class="flex w-full text-muted py-1 px-3 items-center gap-1 text-xs justify-center"
       >
         If helpful? Support me on <a
@@ -94,52 +115,29 @@
           class="flex items-center gap-1 hover:text-primary underline underline-offset-1"
           >Review</a
         >
-        <!-- <a
-          href="https://www.buymeacoffee.com/trongnguyen24"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="flex items-center gap-1 hover:text-primary"
-        >
-          <Icon icon="simple-icons:buymeacoffee" width="14" height="14" />
-          <span>Buy me a coffee</span>
-        </a>
-        <span class="text-muted/50">or</span>
-        <a
-          href={reviewUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="flex items-center gap-1 hover:text-primary"
-        >
-          <Icon icon="material-symbols:star-rounded" width="14" height="14" />
-          <span>Review</span>
-        </a> -->
-      </div>
+      </div> -->
     </div>
   </span>
   <span class="bg-border/70 left"></span>
   <span class="bg-border/70 right"></span>
-  <div class="settings max-w-2xl w-full relative">
-    <div
-      class="absolute hidden sm:block left-0 z-10 -translate-x-[5px] -translate-y-[5px]"
+  <!-- Fixed corner crosses -->
+  <div class="corner corner-tl hidden sm:block">
+    <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" fill="none"
+      ><path d="M4 0h1v9H4z" fill="currentColor" /><path
+        d="M9 4v1H0V4z"
+        fill="currentColor"
+      /></svg
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" fill="none"
-        ><path d="M4 0h1v9H4z" fill="currentColor" /><path
-          d="M9 4v1H0V4z"
-          fill="currentColor"
-        /></svg
-      >
-    </div>
-    <div
-      class="absolute hidden sm:block right-0 bottom-0 z-10 translate-x-[5px] translate-y-[5px]"
+  </div>
+  <div class="corner corner-br hidden sm:block">
+    <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" fill="none"
+      ><path d="M4 0h1v9H4z" fill="currentColor" /><path
+        d="M9 4v1H0V4z"
+        fill="currentColor"
+      /></svg
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" fill="none"
-        ><path d="M4 0h1v9H4z" fill="currentColor" /><path
-          d="M9 4v1H0V4z"
-          fill="currentColor"
-        /></svg
-      >
-    </div>
-
+  </div>
+  <div class="settings max-w-4xl w-full h-full sm:h-auto overflow-hidden sm:overflow-visible relative">
     <Setting />
   </div>
 </div>
@@ -150,7 +148,7 @@
     grid-template-columns:
       minmax(1.5rem, 1fr) /* trái min 1.5rem */
       1px
-      min(672px, calc(100% - 3rem - 2px))
+      min(896px, calc(100% - 3rem - 2px))
       /* giữa: 640px hoặc 100% - 3rem - 2px, tuỳ nhỏ hơn */
       1px
       minmax(1.5rem, 1fr); /* phải min 1.5rem */
@@ -172,6 +170,55 @@
   }
   .right {
     grid-area: 1 / 4 / 6 / 5;
+  }
+  .corner {
+    position: fixed;
+    z-index: 60;
+  }
+  .corner-tl {
+    top: calc(1.5rem - 5px);
+    left: calc(max(1.5rem, 50vw - 449px) - 5px);
+  }
+  .corner-br {
+    bottom: calc(1.5rem - 5px);
+    right: calc(max(1.5rem, 50vw - 449px) - 5px);
+  }
+  @media (min-width: 42rem) {
+    .top,
+    .bottom,
+    .left,
+    .right {
+      position: fixed;
+      z-index: 50;
+    }
+    .top {
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1.5rem;
+      background-color: var(--color-background);
+      border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+    }
+    .bottom {
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 1.5rem;
+      background-color: var(--color-background);
+      border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+    }
+    .left {
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      left: max(1.5rem, calc(50vw - 449px));
+    }
+    .right {
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      right: max(1.5rem, calc(50vw - 449px));
+    }
   }
   @media (max-width: 42rem) {
     .settings {

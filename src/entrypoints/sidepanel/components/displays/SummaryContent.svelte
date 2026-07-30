@@ -1,0 +1,39 @@
+<script>
+  // @ts-nocheck
+  import StreamingMarkdownV2 from '@/components/markdown/StreamingMarkdownV2.svelte'
+  import FoooterDisplay from '@/components/ui/FoooterDisplay.svelte'
+  import TOC from '@/entrypoints/sidepanel/components/TOC.svelte'
+  import { summaryState } from '@/stores/summaryStore.svelte'
+  import { settings } from '@/stores/settingsStore.svelte.js' // Import settings
+
+  let { summary, isLoading, targetId, showTOC = false } = $props()
+
+  let isMarkdownRendered = $state(false)
+
+  function handleMarkdownFinishTyping() {
+    isMarkdownRendered = true
+  }
+</script>
+
+<div id={targetId}>
+  <StreamingMarkdownV2
+    sourceMarkdown={summary}
+    onFinishTyping={handleMarkdownFinishTyping}
+    enableCursor={false}
+    enableHighlight={true}
+    summaryLang={settings.summaryLang}
+    {isLoading}
+    class="custom-markdown-style"
+  />
+</div>
+{#if !isLoading && isMarkdownRendered}
+  <FoooterDisplay
+    summaryContent={summary}
+    summaryTitle={summaryState.pageTitle}
+    {targetId}
+  />
+{/if}
+<span id="footer"></span>
+{#if showTOC}
+  <TOC targetDivId={targetId} />
+{/if}

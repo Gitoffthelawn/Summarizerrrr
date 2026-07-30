@@ -3,6 +3,12 @@ import {
   getAllSummaries,
   getAllHistory,
 } from '@/lib/db/indexedDBService'
+import {
+  navigatePreviousConversation,
+  navigateNextConversation,
+  canNavigatePreviousConversation,
+  canNavigateNextConversation,
+} from '@/stores/conversationArchiveStore.svelte.js'
 
 let archiveList = $state([])
 let historyList = $state([])
@@ -52,8 +58,8 @@ async function loadData() {
 }
 
 async function initializeFromUrl(urlTab, urlSummaryId) {
-  const targetTab = urlTab === 'archive' ? 'archive' : 'history'
-  const currentList = targetTab === 'archive' ? archiveList : historyList
+  const targetTab = ['history', 'archive', 'conversations'].includes(urlTab) ? urlTab : 'history'
+  const currentList = targetTab === 'archive' ? archiveList : targetTab === 'history' ? historyList : []
 
   if (urlSummaryId) {
     const found = currentList.find((s) => s.id === urlSummaryId)
@@ -86,13 +92,14 @@ function validateSelectedItem(activeTab) {
   // When isDataLoaded becomes true, effect may run with stale activeTab value
   // before App.svelte updates activeTab from loadData result
   const urlTab = getUrlParams().tab
-  const expectedTab = urlTab === 'archive' ? 'archive' : 'history'
+  const expectedTab = ['history', 'archive', 'conversations'].includes(urlTab) ? urlTab : 'history'
   
   // Skip if activeTab doesn't match URL - this means activeTab hasn't been updated yet
   if (activeTab !== expectedTab) {
     return
   }
 
+  if (activeTab === 'conversations') return
   const currentList = activeTab === 'archive' ? archiveList : historyList
   const found = currentList.find((s) => s.id === selectedSummaryId)
 
@@ -119,7 +126,7 @@ function selectTab(tabName) {
   selectedSummary = null
   selectedSummaryId = null
 
-  const newList = tabName === 'archive' ? archiveList : historyList
+  const newList = tabName === 'archive' ? archiveList : tabName === 'history' ? historyList : []
   if (newList.length > 0) {
     selectedSummary = newList[0]
     selectedSummaryId = newList[0].id
@@ -129,7 +136,10 @@ function selectTab(tabName) {
   }
 }
 
-function navigatePrevious(activeTab) {
+async function navigatePrevious(activeTab) {
+  if (activeTab === 'conversations') {
+    return navigatePreviousConversation()
+  }
   const currentList = activeTab === 'archive' ? archiveList : historyList
   if (currentList.length === 0 || !selectedSummaryId) return false
 
@@ -144,7 +154,10 @@ function navigatePrevious(activeTab) {
   return false
 }
 
-function navigateNext(activeTab) {
+async function navigateNext(activeTab) {
+  if (activeTab === 'conversations') {
+    return navigateNextConversation()
+  }
   const currentList = activeTab === 'archive' ? archiveList : historyList
   if (currentList.length === 0 || !selectedSummaryId) return false
 
@@ -160,6 +173,9 @@ function navigateNext(activeTab) {
 }
 
 function canNavigatePrevious(activeTab) {
+  if (activeTab === 'conversations') {
+    return canNavigatePreviousConversation()
+  }
   const currentList = activeTab === 'archive' ? archiveList : historyList
   if (currentList.length === 0 || !selectedSummaryId) return false
   const currentIndex = currentList.findIndex((s) => s.id === selectedSummaryId)
@@ -167,6 +183,9 @@ function canNavigatePrevious(activeTab) {
 }
 
 function canNavigateNext(activeTab) {
+  if (activeTab === 'conversations') {
+    return canNavigateNextConversation()
+  }
   const currentList = activeTab === 'archive' ? archiveList : historyList
   if (currentList.length === 0 || !selectedSummaryId) return false
   const currentIndex = currentList.findIndex((s) => s.id === selectedSummaryId)

@@ -25,19 +25,25 @@ export function createOllamaProxyModel(settings) {
         // Convert settings from a Svelte store (Proxy) to a plain object to avoid cloning errors in Firefox
         const plainSettings = JSON.parse(JSON.stringify(settings))
 
-        const response = await browser.runtime.sendMessage({
-          type: 'OLLAMA_API_REQUEST',
-          requestId,
-          providerId: 'ollama',
-          settings: plainSettings,
-          systemInstruction: config.system || '',
-          userPrompt: config.prompt,
-          config: {
-            temperature: config.temperature,
-            topP: config.topP,
-            maxTokens: config.maxTokens,
-          },
-        })
+        const response = await awaitWithAbort(
+          browser.runtime.sendMessage({
+            type: 'OLLAMA_API_REQUEST',
+            requestId,
+            providerId: 'ollama',
+            settings: plainSettings,
+            systemInstruction: config.instructions || '',
+            userPrompt: config.prompt,
+            messages: toPlainObject(config.messages),
+            config: toPlainObject({
+              ...config,
+              instructions: undefined,
+              prompt: undefined,
+              messages: undefined,
+              abortSignal: undefined,
+            }),
+          }),
+          config.abortSignal
+        )
 
         if (!response.success) {
           throw new Error(response.error?.message || 'Proxy request failed')
@@ -67,18 +73,58 @@ export function createOllamaProxyModel(settings) {
       // Fallback to blocking mode for content script
       const result = await this.generateText(config)
 
-      // Create a fake stream that yields the complete result
-      const fakeStream = (async function* () {
+      // Expose both the structured contract used by current callers and the
+      // legacy text-only contract for older consumers.
+      const textStream = (async function* () {
         yield result.text
+      })()
+      const fullStream = (async function* () {
+        yield { type: 'text-delta', text: result.text }
       })()
 
       return {
-        textStream: fakeStream,
+        fullStream,
+        textStream,
         usage: Promise.resolve({ totalTokens: 0 }),
         finishReason: Promise.resolve('stop'),
       }
     },
   }
+}
+
+/**
+ * Browser runtime messages cannot clone an AbortSignal. Race the local proxy
+ * request with it so callers get the same cancellation semantics as direct
+ * providers while the background request finishes harmlessly in v1.
+ * @param {Promise<unknown>} promise
+ * @param {AbortSignal | undefined} abortSignal
+ */
+function awaitWithAbort(promise, abortSignal) {
+  if (!abortSignal) return promise
+  if (abortSignal.aborted) {
+    return Promise.reject(new DOMException('The operation was aborted', 'AbortError'))
+  }
+
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      abortSignal.addEventListener(
+        'abort',
+        () => reject(new DOMException('The operation was aborted', 'AbortError')),
+        { once: true }
+      )
+    }),
+  ])
+}
+
+/**
+ * Convert potentially reactive values into structured-clone-safe data before
+ * runtime messaging. Undefined remains undefined so legacy prompt requests
+ * preserve their established payload shape.
+ * @param {unknown} value
+ */
+function toPlainObject(value) {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value))
 }
 
 /**

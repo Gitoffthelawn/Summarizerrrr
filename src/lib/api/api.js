@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { settings, loadSettings } from '@/stores/settingsStore.svelte.js'
+import { settings, ensureSettingsLoaded as loadSettings } from '@/lib/config/settingsPort.js'
 import { promptBuilders } from '@/lib/prompts/builders/index.js'
 import { customActionTemplates } from '@/lib/prompts/index.js'
 import { replacePlaceholders } from '@/lib/prompts/utils.js'
@@ -9,6 +9,18 @@ import {
   generateContentStreamEnhanced as aiSdkGenerateContentStreamEnhanced,
 } from './aiSdkAdapter.js'
 import { getBrowserCompatibility } from '@/lib/utils/browserDetection.js'
+import { resolveFeatureModel } from '@/lib/providers/featureModelResolver.js'
+import {
+  getProvider,
+  normalizeProviderId,
+  isProviderConfigured,
+  resolveAdapterCall,
+  resolveProviderEntry,
+} from '@/lib/providers/providerRegistry.js'
+import {
+  buildReasoningRequestOptions,
+  normalizeTaskReasoningLevel,
+} from '@/lib/api/reasoningConfig.js'
 
 /**
  * Checks if the selected provider supports streaming.
@@ -17,18 +29,9 @@ import { getBrowserCompatibility } from '@/lib/utils/browserDetection.js'
  * @returns {boolean} - True if provider supports streaming, false otherwise.
  */
 export function providerSupportsStreaming(selectedProviderId) {
-  // AI SDK 5 supports streaming for all providers
-  const supportedProviders = [
-    'gemini',
-    'openrouter',
-    'ollama',
-    'openaiCompatible',
-    'chatgpt',
-    'deepseek',
-  ]
-
-  // Check if provider is supported
-  const isProviderSupported = supportedProviders.includes(selectedProviderId)
+  const normalizedId = normalizeProviderId(selectedProviderId)
+  const provider = resolveProviderEntry(normalizedId, settings)
+  const isProviderSupported = !!provider
 
   // Check browser compatibility
   const browserCompatibility = getBrowserCompatibility()
@@ -38,71 +41,46 @@ export function providerSupportsStreaming(selectedProviderId) {
 }
 
 /**
- * Validates API key for the selected provider
+ * Resolves the provider and settings for summarization.
  * @param {object} userSettings - The current settings object
- * @param {string} selectedProviderId - The ID of the selected provider
+ * @returns {{ providerId: string, settings: object, featureProviderId: string, modelId: string }} Resolved adapter provider ID, settings, and feature-level identifiers.
  * @throws {Error} If API key is not configured
  */
-function validateApiKey(userSettings, selectedProviderId) {
-  let apiKey
-  let providerName
+export function resolveSummarizeProvider(userSettings) {
+  const { providerId, modelId } = resolveFeatureModel('summarize', userSettings)
 
-  switch (selectedProviderId) {
-    case 'gemini':
-      if (userSettings.isAdvancedMode) {
-        // Check if there are any valid keys in the additional array for Advanced mode
-        const hasAdvancedAdditionalKeys =
-          userSettings.geminiAdvancedAdditionalApiKeys?.some((k) => k && k.trim() !== '')
-        
-        // Valid if main key exists OR additional keys exist
-        const hasAdvancedMainKey = userSettings.geminiAdvancedApiKey && userSettings.geminiAdvancedApiKey.trim() !== ''
-        
-        apiKey = (hasAdvancedMainKey || hasAdvancedAdditionalKeys) ? 'valid' : ''
-      } else {
-        // Check if there are any valid keys in the additional array
-        const hasAdditionalKeys =
-          userSettings.geminiAdditionalApiKeys?.some((k) => k && k.trim() !== '')
-        
-        // Valid if main key exists OR additional keys exist
-        const hasMainKey = userSettings.geminiApiKey && userSettings.geminiApiKey.trim() !== ''
-        
-        apiKey = (hasMainKey || hasAdditionalKeys) ? 'valid' : ''
-      }
-      providerName = 'Google Gemini'
-      break
-    case 'openrouter':
-      apiKey = userSettings.openrouterApiKey
-      providerName = 'OpenRouter'
-      break
-    case 'ollama':
-      // Ollama doesn't require API key, but needs endpoint
-      return // Skip validation for Ollama
-    case 'lmstudio':
-      // LM Studio doesn't require API key, but needs endpoint
-      return // Skip validation for LM Studio
-    case 'openaiCompatible':
-      apiKey = userSettings.openaiCompatibleApiKey
-      providerName = 'OpenAI Compatible'
-      break
-    case 'chatgpt':
-      apiKey = userSettings.chatgptApiKey
-      providerName = 'ChatGPT'
-      break
-    case 'deepseek':
-      apiKey = userSettings.deepseekApiKey
-      providerName = 'DeepSeek'
-      break
-    default:
-      apiKey = userSettings[`${selectedProviderId}ApiKey`]
-      providerName = selectedProviderId
+  const provider = resolveProviderEntry(providerId, userSettings)
+  if (!provider) {
+    throw new Error(`Unknown provider: ${providerId}`)
   }
 
-  if (!apiKey) {
+  // Special check for additional API keys (like in gemini provider)
+  let isConfigured = isProviderConfigured(providerId, userSettings)
+  if (!isConfigured && provider.additionalKeysField) {
+    const additionalKeys = userSettings[provider.additionalKeysField]
+    if (Array.isArray(additionalKeys) && additionalKeys.some((k) => k && k.trim() !== '')) {
+      isConfigured = true
+    }
+  }
+
+  if (!isConfigured) {
     throw new Error(
-      `${providerName} API key is not configured. Click the settings icon on the right to add your API key.`
+      `${provider.label} API key is not configured. Click the settings icon on the right to add your API key.`
     )
   }
+
+  // Return both the adapter call result and the feature-level identifiers.
+  // featureProviderId is the original provider id (e.g. 'openai-compatible-profile-1'),
+  // while providerId from resolveAdapterCall is the collapsed adapter id (e.g. 'openaiCompatible').
+  // Reasoning lookup needs the feature-level id to pick the correct provider row.
+  return {
+    ...resolveAdapterCall(providerId, modelId, userSettings),
+    featureProviderId: providerId,
+    modelId,
+  }
 }
+
+
 
 /**
  * Summarizes content using the selected AI provider.
@@ -115,14 +93,14 @@ export async function summarizeContent(text, contentType, abortSignal = null) {
   await loadSettings()
 
   const userSettings = settings
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId } = resolveSummarizeProvider(userSettings)
 
-  // Validate API key
-  validateApiKey(userSettings, selectedProviderId)
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    modelId
+  )
 
   let systemInstruction, userPrompt
 
@@ -144,7 +122,6 @@ export async function summarizeContent(text, contentType, abortSignal = null) {
 
     // Kiểm tra nếu user đã bật custom prompt và có nội dung
     if (
-      userSettings.isSummaryAdvancedMode &&
       userSettings[selectionKey] &&
       userSettings[customPromptKey]
     ) {
@@ -189,14 +166,14 @@ export async function summarizeContent(text, contentType, abortSignal = null) {
   try {
     // Use AI SDK adapter for unified content generation
     return await aiSdkGenerateContent(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
       userPrompt,
-      { abortSignal }
+      { abortSignal, ...reasoningOptions }
     )
   } catch (e) {
-    console.error(`AI SDK Error for ${selectedProviderId}:`, e)
+    console.error(`AI SDK Error for ${providerId}:`, e)
     throw e
   }
 }
@@ -206,14 +183,14 @@ export async function* summarizeContentStream(text, contentType, abortSignal = n
   await loadSettings()
 
   const userSettings = settings
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId } = resolveSummarizeProvider(userSettings)
 
-  // Validate API key
-  validateApiKey(userSettings, selectedProviderId)
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    modelId
+  )
 
   // Check browser compatibility for streaming
   const browserCompatibility = getBrowserCompatibility()
@@ -245,12 +222,11 @@ export async function* summarizeContentStream(text, contentType, abortSignal = n
       `[DEBUG] Processing custom action type in stream: ${contentType}`
     )
     console.log(
-      `[DEBUG] Custom prompt enabled: ${userSettings[selectionKey]}, Advanced mode: ${userSettings.isSummaryAdvancedMode}`
+      `[DEBUG] Custom prompt enabled: ${userSettings[selectionKey]}`
     )
 
     // Kiểm tra nếu user đã bật custom prompt và có nội dung
     if (
-      userSettings.isSummaryAdvancedMode &&
       userSettings[selectionKey] &&
       userSettings[customPromptKey]
     ) {
@@ -303,13 +279,14 @@ export async function* summarizeContentStream(text, contentType, abortSignal = n
   try {
     // Use AI SDK adapter for unified streaming với smoothing
     const streamGenerator = aiSdkGenerateContentStream(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
       userPrompt,
       {
         useSmoothing: browserCompatibility.streamingOptions.useSmoothing,
-        abortSignal
+        abortSignal,
+        ...reasoningOptions,
       }
     )
 
@@ -317,7 +294,7 @@ export async function* summarizeContentStream(text, contentType, abortSignal = n
       yield chunk
     }
   } catch (e) {
-    console.error(`AI SDK Stream Error for ${selectedProviderId}:`, e)
+    console.error(`AI SDK Stream Error for ${providerId}:`, e)
 
     // Check if this is an abort error - if so, just return (don't throw)
     if (e.name === 'AbortError' || e.message?.includes('aborted')) {
@@ -344,14 +321,14 @@ export async function enhancePrompt(userPrompt) {
   await loadSettings()
 
   const userSettings = settings
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId } = resolveSummarizeProvider(userSettings)
 
-  // Validate API key
-  validateApiKey(userSettings, selectedProviderId)
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    modelId
+  )
 
   const contentConfig = promptBuilders['promptEnhance']
 
@@ -367,13 +344,14 @@ export async function enhancePrompt(userPrompt) {
   try {
     // Use AI SDK adapter for unified content generation
     return await aiSdkGenerateContent(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
-      enhancedPrompt
+      enhancedPrompt,
+      { ...reasoningOptions }
     )
   } catch (e) {
-    console.error(`AI SDK Error for ${selectedProviderId}:`, e)
+    console.error(`AI SDK Error for ${providerId}:`, e)
     throw e
   }
 }
@@ -388,14 +366,14 @@ export async function summarizeChapters(timestampedTranscript, abortSignal = nul
   await loadSettings()
 
   const userSettings = settings
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId } = resolveSummarizeProvider(userSettings)
 
-  // Validate API key
-  validateApiKey(userSettings, selectedProviderId)
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    modelId
+  )
 
   const chapterConfig = promptBuilders['chapter']
 
@@ -413,14 +391,14 @@ export async function summarizeChapters(timestampedTranscript, abortSignal = nul
   try {
     // Use AI SDK adapter for unified content generation
     return await aiSdkGenerateContent(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
       userPrompt,
-      { abortSignal }
+      { abortSignal, ...reasoningOptions }
     )
   } catch (e) {
-    console.error(`AI SDK Error for ${selectedProviderId} (Chapters):`, e)
+    console.error(`AI SDK Error for ${providerId} (Chapters):`, e)
     throw e
   }
 }
@@ -430,14 +408,14 @@ export async function* summarizeChaptersStream(timestampedTranscript, abortSigna
   await loadSettings()
 
   const userSettings = settings
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId } = resolveSummarizeProvider(userSettings)
 
-  // Validate API key
-  validateApiKey(userSettings, selectedProviderId)
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    modelId
+  )
 
   // Check browser compatibility for streaming
   const browserCompatibility = getBrowserCompatibility()
@@ -463,13 +441,14 @@ export async function* summarizeChaptersStream(timestampedTranscript, abortSigna
   try {
     // Use AI SDK adapter for unified streaming với smoothing
     const streamGenerator = aiSdkGenerateContentStream(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
       userPrompt,
       {
         useSmoothing: browserCompatibility.streamingOptions.useSmoothing,
-        abortSignal
+        abortSignal,
+        ...reasoningOptions,
       }
     )
 
@@ -478,7 +457,7 @@ export async function* summarizeChaptersStream(timestampedTranscript, abortSigna
     }
   } catch (e) {
     console.error(
-      `AI SDK Stream Error for ${selectedProviderId} (Chapters):`,
+      `AI SDK Stream Error for ${providerId} (Chapters):`,
       e
     )
 
@@ -506,12 +485,14 @@ export async function* summarizeContentStreamEnhanced(text, contentType) {
   await loadSettings()
 
   const userSettings = settings
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini'
-  }
+  const { providerId, settings: resolvedSettings, featureProviderId, modelId: featureModelId } = resolveSummarizeProvider(userSettings)
 
-  validateApiKey(userSettings, selectedProviderId)
+  // Build reasoning options from the user's summarize.reasoningLevel setting
+  const reasoningOptions = buildReasoningRequestOptions(
+    featureProviderId,
+    normalizeTaskReasoningLevel(userSettings.summarize?.reasoningLevel),
+    featureModelId
+  )
 
   // Check browser compatibility for streaming
   const browserCompatibility = getBrowserCompatibility()
@@ -543,12 +524,11 @@ export async function* summarizeContentStreamEnhanced(text, contentType) {
       `[DEBUG] Processing custom action type in enhanced stream: ${contentType}`
     )
     console.log(
-      `[DEBUG] Custom prompt enabled: ${userSettings[selectionKey]}, Advanced mode: ${userSettings.isSummaryAdvancedMode}`
+      `[DEBUG] Custom prompt enabled: ${userSettings[selectionKey]}`
     )
 
     // Kiểm tra nếu user đã bật custom prompt và có nội dung
     if (
-      userSettings.isSummaryAdvancedMode &&
       userSettings[selectionKey] &&
       userSettings[customPromptKey]
     ) {
@@ -600,18 +580,18 @@ export async function* summarizeContentStreamEnhanced(text, contentType) {
 
   try {
     const streamGenerator = aiSdkGenerateContentStreamEnhanced(
-      selectedProviderId,
-      userSettings,
+      providerId,
+      resolvedSettings,
       systemInstruction,
       userPrompt,
-      { useSmoothing: browserCompatibility.streamingOptions.useSmoothing }
+      { useSmoothing: browserCompatibility.streamingOptions.useSmoothing, ...reasoningOptions }
     )
 
     for await (const streamData of streamGenerator) {
       yield streamData
     }
   } catch (e) {
-    console.error(`AI SDK Enhanced Stream Error for ${selectedProviderId}:`, e)
+    console.error(`AI SDK Enhanced Stream Error for ${providerId}:`, e)
 
     // Add Firefox mobile specific error handling
     if (browserCompatibility.isFirefoxMobile && e.message.includes('flush')) {

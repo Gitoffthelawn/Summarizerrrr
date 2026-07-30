@@ -6,14 +6,14 @@
   import { useNavigationManager } from '../composables/useNavigationManager.svelte.js'
   import { useSummarization } from '../composables/useSummarization.svelte.js'
   import { useFloatingPanelState } from '../composables/useFloatingPanelState.svelte.js'
-  import FloatingPanelContent from '@/components/displays/floating-panel/FloatingPanelContent.svelte'
+  import FloatingPanelContent from '@/entrypoints/content/components/displays/FloatingPanelContent.svelte'
   import ApiKeySetupPrompt from '@/components/ui/ApiKeySetupPrompt.svelte'
   import { settings } from '@/stores/settingsStore.svelte.js'
   import { useApiKeyValidation } from '../composables/useApiKeyValidation.svelte.js'
-  import { fadeOnly } from '@/lib/ui/slideScaleFade.js'
-  import ActionButtonsFP from '@/components/buttons/ActionButtonsFP.svelte'
-  import ActionButtonsMiniFP from '@/components/buttons/ActionButtonsMiniFP.svelte'
-  import ShadowToast from '@/components/feedback/ShadowToast.svelte'
+  import { fadeOnly } from '@/lib/utils/slideScaleFade.js'
+  import ActionButtonsFP from '@/entrypoints/content/components/ActionButtonsFP.svelte'
+  import ActionButtonsMiniFP from '@/entrypoints/content/components/ActionButtonsMiniFP.svelte'
+  import ShadowToast from '@/entrypoints/content/components/ShadowToast.svelte'
   // Deep Dive imports
   import DeepDivePanelMobile from './DeepDivePanelMobile.svelte'
   import {
@@ -35,7 +35,7 @@
   let toastTimeout
 
   // Delayed visibility for animation
-  let delayedVisible = $state(visible)
+  let delayedVisible = $state((() => visible)())
   let visibleTimer
   let safariHackVisible = $state(false)
 

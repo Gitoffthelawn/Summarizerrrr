@@ -2,12 +2,12 @@
 <script>
   import { onMount } from 'svelte'
   import { settings, updateSettings } from '@/stores/settingsStore.svelte.js'
-  import StepIndicator from './shared/StepIndicator.svelte'
-  import WelcomeLanguageStep from './steps/WelcomeLanguageStep.svelte'
-  import WelcomeDisplayStep from './steps/WelcomeDisplayStep.svelte'
-  import WelcomeSummaryLangStep from './steps/WelcomeSummaryLangStep.svelte'
-  import WelcomeNavigation from './shared/WelcomeNavigation.svelte'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade'
+  import StepIndicator from '@/components/welcome/shared/StepIndicator.svelte'
+  import WelcomeLanguageStep from '@/components/welcome/steps/WelcomeLanguageStep.svelte'
+  import WelcomeDisplayStep from '@/components/welcome/steps/WelcomeDisplayStep.svelte'
+  import WelcomeSummaryLangStep from '@/components/welcome/steps/WelcomeSummaryLangStep.svelte'
+  import WelcomeNavigation from '@/components/welcome/shared/WelcomeNavigation.svelte'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade'
 
   // State management
   let { shadow = false } = $props()

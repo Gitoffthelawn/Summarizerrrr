@@ -8,8 +8,11 @@ import {
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { anthropic } from '@ai-sdk/anthropic'
+import { createDeepSeek } from '@ai-sdk/deepseek'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
+import { createGroq } from '@ai-sdk/groq'
+import { createCerebras } from '@ai-sdk/cerebras'
 import { createOllama } from 'ai-sdk-ollama'
 import { getBrowserCompatibility } from '@/lib/utils/browserDetection.js'
 import { requiresApiProxy } from '@/lib/utils/contextDetection.js'
@@ -23,10 +26,10 @@ import {
   shouldEnableApiKeyRetry,
   getCurrentGeminiModel,
 } from '@/lib/utils/geminiAutoFallback.js'
-import { updateModelStatus } from '@/stores/summaryStore.svelte.js'
+import { reportModelStatus as updateModelStatus } from '@/lib/api/modelStatusReporter.js'
 
 import { showModelFallbackToast } from '@/lib/utils/toastUtils.js'
-import { buildThinkingProviderOptions } from '@/lib/utils/geminiThinkingConfig.js'
+
 
 // Global index for round-robin key rotation
 let currentKeyIndex = 0
@@ -37,33 +40,7 @@ let currentKeyIndex = 0
  * @returns {string} The selected API key
  */
 function getGeminiApiKey(settings) {
-  if (settings.isAdvancedMode) {
-    // Combine main key and additional keys for Advanced mode
-    const allKeys = [
-      settings.geminiAdvancedApiKey,
-      ...(settings.geminiAdvancedAdditionalApiKeys || [])
-    ]
-    
-    // Filter out empty keys
-    const validKeys = allKeys.filter((k) => k && k.trim() !== '')
-
-    if (validKeys.length === 0) {
-      return settings.geminiAdvancedApiKey // Fallback even if empty
-    }
-
-    // Use round-robin selection
-    const key = validKeys[currentKeyIndex % validKeys.length]
-    console.log(
-      `[aiSdkAdapter] 🔑 Using Gemini Advanced Key Index ${currentKeyIndex % validKeys.length} (Total: ${validKeys.length})`
-    )
-    
-    // Increment index for next call
-    currentKeyIndex++
-    
-    return key
-  }
-
-  // Combine main key and additional keys for Basic mode
+  // Combine main key and additional keys (unified for both modes)
   const allKeys = [
     settings.geminiApiKey,
     ...(settings.geminiAdditionalApiKeys || [])
@@ -103,11 +80,8 @@ export function getAISDKModel(providerId, settings) {
   switch (providerId) {
     case 'gemini':
       // Use sequential rotation for keys or specific key if provided
-      // getGeminiApiKey handles both Advanced and Basic mode
       const geminiApiKey = settings.specificApiKey || getGeminiApiKey(settings)
-      const geminiModel = settings.isAdvancedMode
-        ? settings.selectedGeminiAdvancedModel || 'gemini-3-flash-preview'
-        : settings.selectedGeminiModel || 'gemini-3-flash-preview'
+      const geminiModel = settings.selectedGeminiModel || 'gemini-3-flash-preview'
 
       if (!geminiApiKey || geminiApiKey.trim() === '') {
         throw new Error(
@@ -138,31 +112,30 @@ export function getAISDKModel(providerId, settings) {
         apiKey: settings.chatgptApiKey,
         baseURL: settings.chatgptBaseUrl,
       })
-      return openai(settings.selectedChatgptModel || 'gpt-3.5-turbo')
+      return openai(settings.selectedChatgptModel || 'gpt-5.6-luna')
 
     case 'groq':
-      const groq = createOpenAICompatible({
-        name: 'groq',
+      const groq = createGroq({
         apiKey: settings.groqApiKey,
-        baseURL: 'https://api.groq.com/openai/v1',
       })
-      return groq(settings.selectedGroqModel || 'mixtral-8x7b-32768')
+      return groq(settings.selectedGroqModel || 'llama-3.3-70b-versatile')
 
     case 'openrouter':
-      const openrouter = createOpenAICompatible({
-        name: 'openrouter',
+      const openrouter = createOpenRouter({
         apiKey: settings.openrouterApiKey,
-        baseURL: 'https://openrouter.ai/api/v1',
       })
-      return openrouter(settings.selectedOpenrouterModel || 'openrouter/auto')
+      return openrouter(settings.selectedOpenrouterModel || 'openrouter/free')
 
     case 'deepseek':
-      const deepseek = createOpenAICompatible({
-        name: 'deepseek',
+      // Dedicated DeepSeek provider (not the generic openai-compatible one) so
+      // usage carries `prompt_cache_hit_tokens` → `cachedInputTokens`, letting
+      // the UI show the cached-prompt count. Falls back to the provider's own
+      // default baseURL when the user hasn't set a custom one.
+      const deepseek = createDeepSeek({
         apiKey: settings.deepseekApiKey,
-        baseURL: settings.deepseekBaseUrl || 'https://api.deepseek.com/v1',
+        baseURL: settings.deepseekBaseUrl || undefined,
       })
-      return deepseek(settings.selectedDeepseekModel || 'deepseek-chat')
+      return deepseek(settings.selectedDeepseekModel || 'deepseek-v4-flash')
 
     case 'ollama':
       const ollama = createOllama({
@@ -191,12 +164,10 @@ export function getAISDKModel(providerId, settings) {
       )
 
     case 'cerebras':
-      const cerebras = createOpenAICompatible({
-        name: 'cerebras',
+      const cerebras = createCerebras({
         apiKey: settings.cerebrasApiKey,
-        baseURL: 'https://api.cerebras.ai/v1',
       })
-      return cerebras(settings.selectedCerebrasModel || 'llama3.1-8b')
+      return cerebras(settings.selectedCerebrasModel || 'gpt-oss-120b')
 
     default:
       throw new Error(`Unsupported provider: ${providerId}`)
@@ -204,58 +175,13 @@ export function getAISDKModel(providerId, settings) {
 }
 
 /**
- * Checks if a model doesn't support temperature/topP parameters
- * GPT-5.x and other newer OpenAI models only support default values (1.0)
- * @param {string} modelName - The model name to check
- * @returns {boolean} True if the model doesn't support temperature/topP
- */
-function isModelWithoutTempSupport(modelName) {
-  if (!modelName) return false
-  const lowerModel = modelName.toLowerCase()
-  // GPT-5.x models don't support temperature/topP (only default value 1.0)
-  // Add more patterns here as needed for future models
-  return lowerModel.startsWith('gpt-5') || 
-         lowerModel.includes('gpt-5') ||
-         lowerModel.startsWith('o1') ||
-         lowerModel.startsWith('o3') ||
-         lowerModel.startsWith('o4')
-}
-
-/**
  * Maps user settings to AI SDK generation configuration
  * @param {object} settings - User settings object
- * @param {object} advancedModeSettings - Advanced mode settings
- * @param {object} basicModeSettings - Basic mode settings
  * @returns {object} Generation configuration for AI SDK
  */
 export function mapGenerationConfig(settings) {
   const config = {
-    maxTokens: 4000, // Default max tokens
-  }
-  
-  // Get the current model name from settings
-  const modelName = settings.selectedChatgptModel || 
-                    settings.selectedOpenAICompatibleModel ||
-                    settings.selectedGeminiModel ||
-                    ''
-  
-  // Only add temperature/topP if the model supports them
-  // GPT-5.x and similar models only support default value (1.0)
-  // If value is 1.0 (default), we can safely omit these parameters
-  const skipTempParams = isModelWithoutTempSupport(modelName)
-  
-  if (!skipTempParams) {
-    // Only include temperature if it's not the default (1.0) or if explicitly set
-    if (settings.temperature !== undefined && settings.temperature !== 1.0) {
-      config.temperature = settings.temperature
-    }
-    
-    // Only include topP if it's not the default (1.0) or if explicitly set
-    if (settings.topP !== undefined && settings.topP !== 1.0) {
-      config.topP = settings.topP
-    }
-  } else {
-    console.log(`[aiSdkAdapter] Skipping temperature/topP for model: ${modelName} (not supported)`)
+    maxOutputTokens: 4000, // Default max output tokens
   }
   
   return config
@@ -276,14 +202,60 @@ export function wrapModelWithReasoningExtraction(model) {
 }
 
 /**
- * Unified content generation function using AI SDK
- * WITH AUTO-FALLBACK for Gemini Basic when overloaded
- * @param {string} providerId - Provider identifier
- * @param {object} settings - User settings
- * @param {object} advancedModeSettings - Advanced mode settings
- * @param {object} basicModeSettings - Basic mode settings
- * @param {string} systemInstruction - System instruction/prompt
- * @param {string} userPrompt - User prompt
+ * Validate and normalize a provider-agnostic generation request.
+ * Exactly one input form is allowed so prompt callers and message callers use
+ * the same retry, fallback, proxy, and abort paths.
+ * @param {import('../chat/contracts.js').GenerationRequest & object} request
+ * @returns {import('../chat/contracts.js').GenerationRequest & object}
+ */
+export function normalizeGenerationRequest(request) {
+  if (!request || typeof request !== 'object') {
+    throw new TypeError('Generation request must be an object')
+  }
+
+  const hasPrompt = request.prompt !== undefined
+  const hasMessages = request.messages !== undefined
+
+  if (hasPrompt === hasMessages) {
+    throw new Error(
+      'Generation request must contain exactly one of "prompt" or "messages"'
+    )
+  }
+  if (hasMessages && !Array.isArray(request.messages)) {
+    throw new TypeError('Generation request messages must be an array')
+  }
+  if (!request.providerId) {
+    throw new Error('Generation request requires a providerId')
+  }
+  if (!request.settings || typeof request.settings !== 'object') {
+    throw new Error('Generation request requires settings')
+  }
+
+  const { systemInstruction, ...normalized } = request
+  return {
+    ...normalized,
+    system: normalized.system ?? systemInstruction,
+  }
+}
+
+function createPromptGenerationRequest(
+  providerId,
+  settings,
+  systemInstruction,
+  userPrompt,
+  options = {}
+) {
+  return normalizeGenerationRequest({
+    ...options,
+    providerId,
+    settings,
+    system: systemInstruction,
+    prompt: userPrompt,
+  })
+}
+
+/**
+ * Compatibility wrapper for existing positional prompt callers.
  * @returns {Promise<string>} Generated content
  */
 export async function generateContent(
@@ -293,6 +265,35 @@ export async function generateContent(
   userPrompt,
   options = {}
 ) {
+  return generateContentRequest(
+    createPromptGenerationRequest(
+      providerId,
+      settings,
+      systemInstruction,
+      userPrompt,
+      options
+    )
+  )
+}
+
+/**
+ * Generate content from a normalized prompt or messages request.
+ * @param {import('../chat/contracts.js').GenerationRequest & object} request
+ * @returns {Promise<string>} Generated content
+ */
+export async function generateContentRequest(request) {
+  const normalizedRequest = normalizeGenerationRequest(request)
+  const {
+    providerId,
+    settings,
+    system: systemInstruction,
+    prompt,
+    messages,
+    providerOptions,
+    abortSignal,
+    tools,
+    ...generationOptions
+  } = normalizedRequest
   // Check if auto-fallback is enabled (Gemini Basic only)
   const autoFallbackEnabled = shouldEnableAutoFallback(providerId, settings)
   // Check if API key retry is enabled (Both Gemini Basic and Advanced)
@@ -312,15 +313,10 @@ export async function generateContent(
       // Create settings with current model & key
       // If apiKeyRetryEnabled (Gemini Basic or Advanced), explicit key management is needed
       if (apiKeyRetryEnabled && !currentApiKey) {
-           const allKeys = settings.isAdvancedMode 
-             ? [
-                 settings.geminiAdvancedApiKey,
-                 ...(settings.geminiAdvancedAdditionalApiKeys || [])
-               ]
-             : [
-                 settings.geminiApiKey,
-                 ...(settings.geminiAdditionalApiKeys || [])
-               ]
+           const allKeys = [
+               settings.geminiApiKey,
+               ...(settings.geminiAdditionalApiKeys || [])
+             ]
            const validKeys = allKeys.filter(k => k && k.trim() !== '')
            
            if (validKeys.length > 0) {
@@ -331,11 +327,7 @@ export async function generateContent(
 
       const currentSettings = {
         ...settings,
-        ...(autoFallbackEnabled ? (
-          settings.isAdvancedMode 
-            ? { selectedGeminiAdvancedModel: currentModel }
-            : { selectedGeminiModel: currentModel }
-        ) : {}),
+        ...(autoFallbackEnabled ? { selectedGeminiModel: currentModel } : {}),
         ...(currentApiKey ? { specificApiKey: currentApiKey } : {})
       }
 
@@ -362,7 +354,7 @@ export async function generateContent(
       // User request: Remove system instruction completely for these smaller models as they don't handle long prompts well
       const isGemmaModel = modelName.toLowerCase().includes('gemma')
       const effectiveSystemInstruction = isGemmaModel ? undefined : systemInstruction
-      const effectiveUserPrompt = userPrompt
+      const input = messages ? { messages } : { prompt }
 
       // Check if this is a proxy model
       const isProxyModel = requiresApiProxy(providerId)
@@ -374,39 +366,29 @@ export async function generateContent(
         // Use the proxy model's custom generateText method
         console.log('[aiSdkAdapter] Using proxy model for generateContent')
         const result = await model.generateText({
-          system: effectiveSystemInstruction,
-          prompt: effectiveUserPrompt,
+          instructions: effectiveSystemInstruction,
+          ...input,
           ...generationConfig,
-          ...(options.abortSignal && { abortSignal: options.abortSignal }),
+          ...generationOptions,
+          ...(tools && { tools }),
+          ...(providerOptions && { providerOptions }),
+          ...(abortSignal && { abortSignal }),
         })
         console.log('[DEBUG] Proxy raw result:', result.text) // Add debug log
         console.log(`[aiSdkAdapter] ✅ API Success - Model: ${modelName}`)
         return result.text
       } else {
-        // Build thinking providerOptions from user settings (Gemini-only)
-        // Caller-provided providerOptions (e.g. DeepDive) take precedence
-        const thinkingLevel = currentSettings.isAdvancedMode
-          ? (currentSettings.geminiAdvancedThinkingLevel || 'high')
-          : (currentSettings.geminiThinkingLevel || 'high')
-        const thinkingProviderOptions =
-          providerId === 'gemini'
-            ? buildThinkingProviderOptions(modelName, thinkingLevel)
-            : {}
-
-        // Merge: caller options override auto-built thinking options
-        const mergedProviderOptions = Object.keys(thinkingProviderOptions).length
-          ? { ...thinkingProviderOptions, ...(options.providerOptions || {}) }
-          : options.providerOptions
-
         // Use the standard AI SDK generateText for direct calls - no middleware
         const { text } = await generateText({
           model,
-          system: effectiveSystemInstruction,
-          prompt: effectiveUserPrompt,
+          instructions: effectiveSystemInstruction,
+          ...input,
           maxRetries: 0, // Disable AI SDK built-in retry to allow custom fallback to work faster
           ...generationConfig,
-          ...(mergedProviderOptions && { providerOptions: mergedProviderOptions }),
-          ...(options.abortSignal && { abortSignal: options.abortSignal }),
+          ...generationOptions,
+          ...(tools && { tools }),
+          ...(providerOptions && { providerOptions }),
+          ...(abortSignal && { abortSignal }),
         })
         console.log(`[aiSdkAdapter] ✅ API Success - Model: ${modelName}`)
         return text
@@ -446,12 +428,7 @@ export async function generateContent(
          failedKeys.add(currentApiKey)
          
          // Find a key that hasn't failed yet
-         const allKeys = settings.isAdvancedMode
-           ? [
-               settings.geminiAdvancedApiKey,
-               ...(settings.geminiAdvancedAdditionalApiKeys || [])
-             ]
-           : [
+         const allKeys = [
                settings.geminiApiKey,
                ...(settings.geminiAdditionalApiKeys || [])
              ]
@@ -473,10 +450,8 @@ export async function generateContent(
       // 2. Check for Overload Error (503) OR (All keys failed quota) -> Try different MODEL
       if (autoFallbackEnabled) {
           if (isOverloadError(error) || (isQuotaError(error) && failedKeys.size >= ([settings.geminiApiKey, ...(settings.geminiAdditionalApiKeys||[])].filter(k => k && k.trim() !== '').length || 1))) {
-               // Use appropriate fallback function based on mode
-               const nextModel = settings.isAdvancedMode
-                 ? getNextAdvancedFallbackModel(currentModel, settings)
-                 : getNextFallbackModel(currentModel)
+               const nextModel = getNextAdvancedFallbackModel(currentModel, settings)
+                  || getNextFallbackModel(currentModel)
 
                 if (nextModel) {
                   console.log(
@@ -521,16 +496,7 @@ export async function generateContent(
 }
 
 /**
- * Unified streaming content generation function using AI SDK
- * WITH AUTO-FALLBACK for Gemini Basic when overloaded
- * @param {string} providerId - Provider identifier
- * @param {object} settings - User settings
- * @param {object} advancedModeSettings - Advanced mode settings
- * @param {object} basicModeSettings - Basic mode settings
- * @param {string} systemInstruction - System instruction/prompt
- * @param {string} userPrompt - User prompt
- * @param {object} [streamOptions] - Additional streaming options
- * @param {AbortSignal} [streamOptions.abortSignal] - Optional abort signal for cancellation
+ * Compatibility wrapper for existing positional prompt streaming callers.
  * @returns {AsyncIterable<string>} Stream of generated content chunks
  */
 export async function* generateContentStream(
@@ -540,6 +506,78 @@ export async function* generateContentStream(
   userPrompt,
   streamOptions = {}
 ) {
+  yield* generateContentStreamRequest(
+    createPromptGenerationRequest(
+      providerId,
+      settings,
+      systemInstruction,
+      userPrompt,
+      streamOptions
+    )
+  )
+}
+
+function normalizeProviderStreamError(error) {
+  if (error instanceof Error) return error
+
+  const normalized = new Error(
+    typeof error === 'string'
+      ? error
+      : error?.message || 'The provider stream failed without an error message.'
+  )
+  if (error !== undefined) normalized.cause = error
+  return normalized
+}
+
+/**
+ * Read text from either an AI SDK structured stream or a legacy proxy stream.
+ * Structured streams are preferred because their error parts would otherwise
+ * be filtered out by textStream.
+ */
+async function* readProviderStream(result) {
+  if (result?.fullStream) {
+    for await (const part of result.fullStream) {
+      if (part?.type === 'error') {
+        throw normalizeProviderStreamError(part.error)
+      }
+
+      if (part?.type === 'text-delta') {
+        yield part.text
+      }
+    }
+    return
+  }
+
+  // Compatibility for older/custom proxies that only expose textStream.
+  if (result?.textStream) {
+    for await (const chunk of result.textStream) {
+      yield chunk
+    }
+    return
+  }
+
+  throw new Error('The provider did not return a readable text stream.')
+}
+
+/**
+ * Stream content from a normalized prompt or messages request.
+ * @param {import('../chat/contracts.js').GenerationRequest & object} request
+ * @returns {AsyncIterable<string>} Stream of generated content chunks
+ */
+export async function* generateContentStreamRequest(request) {
+  const normalizedRequest = normalizeGenerationRequest(request)
+  const {
+    providerId,
+    settings,
+    system: systemInstruction,
+    prompt,
+    messages,
+    providerOptions,
+    abortSignal,
+    tools,
+    useSmoothing,
+    ...generationOptions
+  } = normalizedRequest
   // Check if auto-fallback is enabled (Gemini Basic only)
   const autoFallbackEnabled = shouldEnableAutoFallback(providerId, settings)
   // Check if API key retry is enabled (Both Gemini Basic and Advanced)
@@ -562,15 +600,10 @@ export async function* generateContentStream(
       // Create settings with current model & key
       // If apiKeyRetryEnabled (Gemini Basic or Advanced), explicit key management is needed
       if (apiKeyRetryEnabled && !currentApiKey) {
-           const allKeys = settings.isAdvancedMode 
-             ? [
-                 settings.geminiAdvancedApiKey,
-                 ...(settings.geminiAdvancedAdditionalApiKeys || [])
-               ]
-             : [
-                 settings.geminiApiKey,
-                 ...(settings.geminiAdditionalApiKeys || [])
-               ]
+           const allKeys = [
+               settings.geminiApiKey,
+               ...(settings.geminiAdditionalApiKeys || [])
+             ]
            const validKeys = allKeys.filter(k => k && k.trim() !== '')
            
            if (validKeys.length > 0) {
@@ -581,11 +614,7 @@ export async function* generateContentStream(
 
       const currentSettings = {
         ...settings,
-        ...(autoFallbackEnabled ? (
-          settings.isAdvancedMode 
-            ? { selectedGeminiAdvancedModel: currentModel }
-            : { selectedGeminiModel: currentModel }
-        ) : {}),
+        ...(autoFallbackEnabled ? { selectedGeminiModel: currentModel } : {}),
         ...(currentApiKey ? { specificApiKey: currentApiKey } : {})
       }
 
@@ -613,7 +642,7 @@ export async function* generateContentStream(
       // User request: Remove system instruction completely for these smaller models as they don't handle long prompts well
       const isGemmaModel = modelName.toLowerCase().includes('gemma')
       const effectiveSystemInstruction = isGemmaModel ? undefined : systemInstruction
-      const effectiveUserPrompt = userPrompt
+      const input = messages ? { messages } : { prompt }
 
       // Check if this is a proxy model (doesn't need reasoning extraction wrapper)
       const isProxyModel = requiresApiProxy(providerId)
@@ -624,16 +653,18 @@ export async function* generateContentStream(
       if (isProxyModel) {
         // Use proxy model's streamText method directly
         const result = await model.streamText({
-          system: effectiveSystemInstruction,
-          prompt: effectiveUserPrompt,
+          instructions: effectiveSystemInstruction,
+          ...input,
           ...generationConfig,
-          ...(streamOptions.abortSignal && {
-            abortSignal: streamOptions.abortSignal,
-          }),
+          ...generationOptions,
+          ...(tools && { tools }),
+          ...(providerOptions && { providerOptions }),
+          ...(abortSignal && { abortSignal }),
         })
 
-        // Yield chunks from proxy stream - now with full <think> content
-        for await (const chunk of result.textStream) {
+        // Prefer a structured proxy stream so error parts reach the UI. Older
+        // custom proxies remain compatible through the textStream fallback.
+        for await (const chunk of readProviderStream(result)) {
           yield chunk
         }
       } else {
@@ -647,45 +678,41 @@ export async function* generateContentStream(
 
         const shouldUseSmoothing =
           browserCompatibility.streamingOptions.useSmoothing &&
-          streamOptions.useSmoothing !== false
-
-        // Build thinking providerOptions from user settings (Gemini-only)
-        const thinkingLevel = currentSettings.isAdvancedMode
-          ? (currentSettings.geminiAdvancedThinkingLevel || 'high')
-          : (currentSettings.geminiThinkingLevel || 'high')
-        const thinkingProviderOptions =
-          providerId === 'gemini'
-            ? buildThinkingProviderOptions(modelName, thinkingLevel)
-            : {}
+          useSmoothing !== false
 
         const streamConfig = {
           model,
-          system: effectiveSystemInstruction,
-          prompt: effectiveUserPrompt,
+          instructions: effectiveSystemInstruction,
+          ...input,
           ...generationConfig,
           maxRetries: 0, // Disable AI SDK built-in retry to allow custom fallback to work faster
           ...(shouldUseSmoothing ? defaultSmoothingOptions : {}),
-          ...(Object.keys(thinkingProviderOptions).length && {
-            providerOptions: thinkingProviderOptions,
-          }),
-          // Caller stream options (e.g. abortSignal) go last so they always win
-          ...streamOptions,
-          ...(streamOptions.abortSignal && {
-            abortSignal: streamOptions.abortSignal,
-          }),
+          ...generationOptions,
+          ...(tools && { tools }),
+          ...(providerOptions && { providerOptions }),
+          ...(abortSignal && { abortSignal }),
         }
 
         const result = await streamText(streamConfig)
 
-        // Use smoothTextStream if available and supported by browser
-        const streamToUse =
-          shouldUseSmoothing && result.smoothTextStream
-            ? result.smoothTextStream
-            : result.textStream
-
-        // Yield full chunks including <think> tags (no extraction)
-        for await (const chunk of streamToUse) {
+        // Consume the structured stream so provider errors are not discarded.
+        for await (const chunk of readProviderStream(result)) {
           yield chunk
+        }
+
+        // Yield usage and warnings metadata from AI SDK result (if available)
+        try {
+          const usage = normalizeUsage(await result.usage)
+          const warnings = await result.warnings
+          const reasoningWarnings = extractReasoningWarnings(warnings, modelName, generationOptions)
+          const meta = {}
+          if (usage) meta.usage = usage
+          if (reasoningWarnings.length) meta.reasoningWarnings = reasoningWarnings
+          if (Object.keys(meta).length) {
+            yield { __streamMeta: true, ...meta }
+          }
+        } catch {
+          // Usage/warnings may not be available for all providers
         }
       }
 
@@ -736,12 +763,7 @@ export async function* generateContentStream(
          failedKeys.add(currentApiKey)
          
          // Find a key that hasn't failed yet
-         const allKeys = settings.isAdvancedMode
-           ? [
-               settings.geminiAdvancedApiKey,
-               ...(settings.geminiAdvancedAdditionalApiKeys || [])
-             ]
-           : [
+         const allKeys = [
                settings.geminiApiKey,
                ...(settings.geminiAdditionalApiKeys || [])
              ]
@@ -763,10 +785,8 @@ export async function* generateContentStream(
       // 2. Check for Overload Error (503) OR (All keys failed quota) -> Try different MODEL
       if (autoFallbackEnabled) {
           if (isOverloadError(error) || (isQuotaError(error) && failedKeys.size >= ([settings.geminiApiKey, ...(settings.geminiAdditionalApiKeys||[])].filter(k => k && k.trim() !== '').length || 1))) {
-                // Use appropriate fallback function based on mode
-                const nextModel = settings.isAdvancedMode
-                  ? getNextAdvancedFallbackModel(currentModel, settings)
-                  : getNextFallbackModel(currentModel)
+                const nextModel = getNextAdvancedFallbackModel(currentModel, settings)
+                  || getNextFallbackModel(currentModel)
         
                 if (nextModel) {
                   console.log(
@@ -801,15 +821,87 @@ export async function* generateContentStream(
 }
 
 /**
- * Enhanced streaming with full text accumulation for hybrid approach
- * @param {string} providerId - Provider identifier
- * @param {object} settings - User settings
- * @param {object} advancedModeSettings - Advanced mode settings
- * @param {object} basicModeSettings - Basic mode settings
- * @param {string} systemInstruction - System instruction/prompt
- * @param {string} userPrompt - User prompt
- * @param {object} [streamOptions] - Additional streaming options
- * @returns {AsyncIterable<{chunk: string, fullText: string, isComplete: boolean}>} Enhanced stream with full text
+ * Normalize AI SDK usage into a canonical shape. AI SDK v5 reports
+ * `inputTokens`/`outputTokens`/`totalTokens`; v4 reported
+ * `promptTokens`/`completionTokens`. We persist both key styles so downstream
+ * consumers (and older stored records) stay compatible.
+ * @param {object|null|undefined} usage
+ */
+function normalizeUsage(usage) {
+  if (!usage || typeof usage !== 'object') return null
+  const promptTokens = usage.promptTokens ?? usage.inputTokens ?? null
+  const completionTokens = usage.completionTokens ?? usage.outputTokens ?? null
+  const totalTokens =
+    usage.totalTokens ??
+    (promptTokens != null && completionTokens != null ? promptTokens + completionTokens : null)
+  // Cross-provider cached-prompt count. The installed core (ai@7) exposes it as
+  // `usage.inputTokenDetails.cacheReadTokens` — every provider that reports a
+  // cache read (OpenAI, DeepSeek, OpenRouter, Anthropic, …) funnels through this
+  // one field, so reading it here surfaces cache for all of them at once. The
+  // remaining names are fallbacks for other/older SDK shapes.
+  const cachedInputTokens =
+    usage.inputTokenDetails?.cacheReadTokens ??
+    usage.cachedInputTokens ??
+    usage.cachedPromptTokens ??
+    usage.cacheReadInputTokens ??
+    null
+  if (promptTokens == null && completionTokens == null && totalTokens == null) return null
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    inputTokens: promptTokens,
+    outputTokens: completionTokens,
+    cachedInputTokens,
+  }
+}
+
+/**
+ * Extract reasoning-related warnings from AI SDK's warnings array and
+ * normalize them into user-friendly messages. Logs a concise dev warning
+ * without exposing API keys or raw provider payloads.
+ *
+ * @param {Array<{type: string, message?: string, [key: string]: unknown}> | null | undefined} warnings
+ * @param {string} modelName
+ * @param {object} generationOptions - to read the requested reasoning level
+ * @returns {string[]} user-facing warning messages
+ */
+function extractReasoningWarnings(warnings, modelName, generationOptions) {
+  if (!Array.isArray(warnings) || !warnings.length) return []
+
+  const reasoningWarnings = []
+  const requestedLevel = generationOptions?.reasoning || null
+
+  for (const warning of warnings) {
+    if (!warning || typeof warning !== 'object') continue
+
+    // AI SDK may emit various warning types; filter for reasoning-related ones.
+    // Known patterns: 'unsupported-setting' with setting === 'reasoning',
+    // or any warning whose message mentions reasoning/thinking coercion.
+    const msg = warning.message || ''
+    const isReasoningRelated =
+      (warning.type === 'unsupported-setting' && warning.setting === 'reasoning') ||
+      /reasoning|thinking/i.test(msg)
+
+    if (isReasoningRelated) {
+      // Build a user-friendly message
+      const userMsg = msg || `Reasoning effort is not fully supported by ${modelName}.`
+      reasoningWarnings.push(userMsg)
+
+      // Log a concise dev warning (no API keys, no raw payloads)
+      console.warn(
+        `[aiSdkAdapter] ⚠️ Reasoning warning — model: ${modelName}, ` +
+        `requested: ${requestedLevel || 'none'}, type: ${warning.type || 'unknown'}: ${userMsg}`
+      )
+    }
+  }
+
+  return reasoningWarnings
+}
+
+/**
+ * Compatibility wrapper for existing positional enhanced streaming callers.
+ * @returns {AsyncIterable<{chunk: string, fullText: string, isComplete: boolean}>}
  */
 export async function* generateContentStreamEnhanced(
   providerId,
@@ -818,23 +910,43 @@ export async function* generateContentStreamEnhanced(
   userPrompt,
   streamOptions = {}
 ) {
-  let fullText = ''
-  let isComplete = false
-
-  // Get browser compatibility info
-  const browserCompatibility = getBrowserCompatibility()
-
-  try {
-    // Use our updated generateContentStream that handles both proxy and direct models
-    const streamGenerator = generateContentStream(
+  yield* generateContentStreamEnhancedRequest(
+    createPromptGenerationRequest(
       providerId,
       settings,
       systemInstruction,
       userPrompt,
       streamOptions
     )
+  )
+}
+
+/**
+ * Enhanced streaming with full text accumulation for normalized requests.
+ * @param {import('../chat/contracts.js').GenerationRequest & object} request
+ * @returns {AsyncIterable<{chunk: string, fullText: string, isComplete: boolean}>}
+ */
+export async function* generateContentStreamEnhancedRequest(request) {
+  const normalizedRequest = normalizeGenerationRequest(request)
+  let fullText = ''
+  let usage = null
+  let reasoningWarnings = []
+
+  // Get browser compatibility info
+  const browserCompatibility = getBrowserCompatibility()
+
+  try {
+    const streamGenerator = generateContentStreamRequest(normalizedRequest)
 
     for await (const chunk of streamGenerator) {
+      // Detect metadata marker from generateContentStreamRequest
+      if (chunk && typeof chunk === 'object' && chunk.__streamMeta) {
+        usage = chunk.usage || null
+        if (chunk.reasoningWarnings?.length) {
+          reasoningWarnings = chunk.reasoningWarnings
+        }
+        continue
+      }
       fullText += chunk
       yield {
         chunk,
@@ -843,11 +955,14 @@ export async function* generateContentStreamEnhanced(
       }
     }
 
-    // Final yield with completion flag
+    // Final yield with completion flag, usage data, and reasoning warnings.
+    // reasoningWarnings is additive — existing callers that ignore it keep working.
     yield {
       chunk: '',
       fullText,
       isComplete: true,
+      usage,
+      ...(reasoningWarnings.length ? { reasoningWarnings } : {}),
     }
   } catch (error) {
     // Check if this is a Firefox mobile specific error
@@ -874,13 +989,13 @@ function getDisplayModelName(providerId, settings) {
       return getCurrentGeminiModel(settings)
     case 'openai':
     case 'chatgpt':
-      return settings.selectedChatgptModel || 'gpt-3.5-turbo'
+      return settings.selectedChatgptModel || 'gpt-5.6-luna'
     case 'groq':
-      return settings.selectedGroqModel || 'mixtral-8x7b-32768'
+      return settings.selectedGroqModel || 'llama-3.3-70b-versatile'
     case 'openrouter':
-      return settings.selectedOpenrouterModel || 'openrouter/auto'
+      return settings.selectedOpenrouterModel || 'openrouter/free'
     case 'deepseek':
-      return settings.selectedDeepseekModel || 'deepseek-chat'
+      return settings.selectedDeepseekModel || 'deepseek-v4-flash'
     case 'ollama':
       return settings.selectedOllamaModel || 'llama2'
     case 'openaiCompatible':
@@ -888,9 +1003,8 @@ function getDisplayModelName(providerId, settings) {
     case 'lmstudio':
       return settings.selectedLmStudioModel || 'lmstudio-community/gemma-2b-it-GGUF'
     case 'cerebras':
-      return settings.selectedCerebrasModel || 'qwen-3-32b'
+      return settings.selectedCerebrasModel || 'gpt-oss-120b'
     default:
       return providerId
   }
 }
-

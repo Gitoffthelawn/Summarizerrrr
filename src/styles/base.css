@@ -76,6 +76,7 @@
   --color-muted: oklch(0.54 0 0);
   --color-primary: oklch(69.1% 0.1909 45.02);
   --color-success: oklch(0.768 0.233 130.85);
+  --color-warning: oklch(0.67 0.16 70);
   --color-error: oklch(0.637 0.237 25.331);
   --animate-wiggle: wiggle 6s ease-in-out infinite;
 }

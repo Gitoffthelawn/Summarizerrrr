@@ -25,7 +25,7 @@
   } from '@/services/tools/deepDiveService.js'
 
   // Import Shadow DOM compatible components
-  import QuestionChip from '@/components/tools/deepdive/QuestionChip.svelte'
+  import QuestionChip from '@/components/buttons/QuestionChip.svelte'
 
   // Import provider icons
   import GeminiIcon from '@/components/icons/GeminiIcon.svelte'

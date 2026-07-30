@@ -10,6 +10,7 @@ import {
   summarizeChaptersStream,
   providerSupportsStreaming,
 } from '@/lib/api/api.js'
+import { setModelStatusReporter } from '@/lib/api/modelStatusReporter.js'
 import {
   addSummary,
   addHistory,
@@ -38,7 +39,7 @@ import {
 import { cleanTitle } from '@/lib/utils/titleExtractor.js'
 
 // Import shared initial state
-import { createDefaultSummaryState } from '@/lib/constants/initialStates.js'
+import { createDefaultSummaryState } from '@/lib/config/initialStates.js'
 
 // --- State ---
 // --- State ---
@@ -66,6 +67,9 @@ export function updateModelStatus(
     isFallback,
   }
 }
+
+// Register with reporter to break circular dependency
+setModelStatusReporter(updateModelStatus)
 
 /**
  * Helper to check if any loading state is active
@@ -220,7 +224,6 @@ export function updateActiveCourseTab(tabName) {
  */
 export async function fetchAndSummarize() {
   const targetTabId = getCurrentTabId()
-  const perTabCacheEnabled = settings.tools?.perTabCache?.enabled ?? true
   let logData = null // Capture data for history logging
 
   /**
@@ -229,16 +232,15 @@ export async function fetchAndSummarize() {
    */
   const updateState = (updates) => {
     // 1. Update the tab-specific state in cache
-    if (perTabCacheEnabled && targetTabId) {
+    if (targetTabId) {
       const tabState = getOrCreateTabState(targetTabId)
       if (tabState) {
         Object.assign(tabState.summaryState, updates)
       }
     }
 
-    // 2. Update the global state IF we are looking at the target tab
-    //    OR if per-tab cache is disabled
-    if (!perTabCacheEnabled || targetTabId === getCurrentTabId()) {
+    // 2. Update the global state only while looking at the target tab.
+    if (!targetTabId || targetTabId === getCurrentTabId()) {
       Object.assign(summaryState, updates)
     }
 
@@ -251,7 +253,7 @@ export async function fetchAndSummarize() {
    */
   const resetLocalState = () => {
     // Abort any ongoing streaming operation if it matches global state
-    if ((!perTabCacheEnabled || targetTabId === getCurrentTabId()) && summaryState.abortController) {
+    if ((!targetTabId || targetTabId === getCurrentTabId()) && summaryState.abortController) {
       summaryState.abortController.abort()
       summaryState.abortController = null
     }
@@ -292,8 +294,8 @@ export async function fetchAndSummarize() {
     updateState(resetValues)
     
     // Reset DeepDive (global only if active)
-    if (!perTabCacheEnabled || targetTabId === getCurrentTabId()) {
-      resetDeepDive()
+    if (!targetTabId || targetTabId === getCurrentTabId()) {
+      resetDeepDive(targetTabId)
     }
   }
 
@@ -310,18 +312,9 @@ export async function fetchAndSummarize() {
   // Reset state before starting
   resetLocalState()
 
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
-
-  // Check if we should use streaming mode
-  // FORCE DISABLE STREAMING if per-tab cache is enabled
-  const shouldUseStreaming =
-    !perTabCacheEnabled &&
-    userSettings.enableStreaming &&
-    providerSupportsStreaming(selectedProviderId)
+  // The legacy summary path remains blocking so background-tab results can be
+  // committed atomically to their owning per-tab state.
+  const shouldUseStreaming = false
 
   if (shouldUseStreaming) {
     try {
@@ -505,16 +498,8 @@ export async function fetchChapterSummary() {
 
   const userSettings = settings
 
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
-
-  // Check if we should use streaming mode
-  const shouldUseStreaming =
-    userSettings.enableStreaming &&
-    providerSupportsStreaming(selectedProviderId)
+  // Summaries are committed as a complete result, rather than incrementally.
+  const shouldUseStreaming = false
 
   // Reset Deep Dive when starting chapter summary
   resetDeepDive()
@@ -641,16 +626,8 @@ export async function fetchCourseConcepts() {
 
   const userSettings = settings
 
-  // Determine the actual provider to use based on isAdvancedMode
-  let selectedProviderId = userSettings.selectedProvider || 'gemini'
-  if (!userSettings.isAdvancedMode) {
-    selectedProviderId = 'gemini' // Force Gemini in basic mode
-  }
-
-  // Check if we should use streaming mode
-  const shouldUseStreaming =
-    userSettings.enableStreaming &&
-    providerSupportsStreaming(selectedProviderId)
+  // Summaries are committed as a complete result, rather than incrementally.
+  const shouldUseStreaming = false
 
   // Reset Deep Dive when starting course concepts
   resetDeepDive()
@@ -1309,16 +1286,8 @@ export async function executeCustomAction(actionType) {
       throw new Error('No content found on this page.')
     }
 
-    // Determine the actual provider to use based on isAdvancedMode
-    let selectedProviderId = userSettings.selectedProvider || 'gemini'
-    if (!userSettings.isAdvancedMode) {
-      selectedProviderId = 'gemini' // Force Gemini in basic mode
-    }
-
-    // Check if we should use streaming mode
-    const shouldUseStreaming =
-      userSettings.enableStreaming &&
-      providerSupportsStreaming(selectedProviderId)
+    // Custom summary actions also return a complete result.
+    const shouldUseStreaming = false
 
     if (shouldUseStreaming) {
       // Use streaming mode
@@ -1498,16 +1467,8 @@ export async function fetchCommentSummary(
       formattedData.substring(0, 1000)
     )
 
-    // Determine the actual provider to use based on isAdvancedMode
-    let selectedProviderId = userSettings.selectedProvider || 'gemini'
-    if (!userSettings.isAdvancedMode) {
-      selectedProviderId = 'gemini' // Force Gemini in basic mode
-    }
-
-    // Check if we should use streaming mode
-    const shouldUseStreaming =
-      userSettings.enableStreaming &&
-      providerSupportsStreaming(selectedProviderId)
+    // Comment analysis is a summary action, so keep it blocking as well.
+    const shouldUseStreaming = false
 
     console.log('[fetchCommentSummary] Streaming mode:', shouldUseStreaming)
     console.log('[DEBUG] Formatted data length:', formattedData.length)

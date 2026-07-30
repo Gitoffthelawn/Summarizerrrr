@@ -1,7 +1,7 @@
 <script>
   // @ts-nocheck
   import { t } from 'svelte-i18n'
-  import Setting from '@/components/settings/Setting.svelte'
+  import Setting from '@/entrypoints/settings/components/Setting.svelte'
   import { settings } from '@/stores/settingsStore.svelte.js'
   import {
     themeSettings,

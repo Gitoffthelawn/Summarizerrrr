@@ -10,7 +10,7 @@
     loadThemeSettings,
     subscribeToThemeChanges,
   } from '@/stores/themeStore.svelte.js'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
   import Icon from '@iconify/svelte'
   import { isFirefox } from '@/lib/utils/browserDetection.js'
   import { t } from 'svelte-i18n'

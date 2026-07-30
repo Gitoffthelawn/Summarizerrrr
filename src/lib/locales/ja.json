@@ -25,13 +25,6 @@
         "system": "システム",
         "system_desc": "システムテーマ。"
       },
-      "responseMode": "応答モード (サイドパネルでのみ動作)",
-      "response_mode": {
-        "streaming": "ストリーミング",
-        "streaming_desc": "リアルタイム表示、より良い体験。",
-        "non_streaming": "非ストリーミング",
-        "non_streaming_desc": "低性能デバイス向け、遅延軽減。"
-      },
       "floatingButton": "フローティングボタン",
       "floating_button": {
         "show": "表示",
@@ -196,8 +189,18 @@
         "youtube_comment": "YouTubeコメント",
         "override_note": "* カスタムプロンプトが基本設定より優先されます。"
       },
+      "reasoning": {
+        "title": "推論",
+        "off": "オフ",
+        "off_desc": "直接回答、最速。",
+        "low": "低",
+        "low_desc": "軽い推論。",
+        "medium": "中",
+        "medium_desc": "深さと速さのバランス。"
+      },
       "comment_limit": "YouTubeコメント制限",
-      "comment_limit_desc": "分析するコメントの最大数。"
+      "comment_limit_desc": "分析するコメントの最大数。",
+      "uses_gemini_basic": "Gemini Basicを使用"
     },
     "chatgpt_config": {
       "api_key_label": "APIキー",
@@ -221,13 +224,7 @@
       "select_model_label": "Gemini Advancedモデル",
       "select_model_placeholder": "モデルを選択",
       "select_gemini_model_aria_label": "Geminiモデルを選択",
-      "auto_fallback_label": "過負荷時の自動フォールバック",
-      "thinking_level": "思考レベル",
-      "thinking_levels": {
-        "minimal": "最小",
-        "medium": "中",
-        "high": "高"
-      }
+      "auto_fallback_label": "過負荷時の自動フォールバック"
     },
     "gemini_basic_config": {
       "api_key_label": "Gemini APIキー",
@@ -254,7 +251,7 @@
       "api_key_placeholder": "Groq APIキーを入力",
       "model_label": "モデル名",
       "get_a_key": "キーを取得",
-      "model_placeholder": "mixtral-8x7b-32768",
+      "model_placeholder": "llama-3.3-70b-versatile",
       "saved_status": "保存完了！",
       "view_models": "モデル一覧"
     },
@@ -306,39 +303,99 @@
         "generate_new_questions": "新しい質問を生成",
         "previous_questions": "前の質問",
         "next_questions": "次の質問",
-        "ask_own_question_in_chat": "チャットで独自の質問をする"
-      },
-      "perTabCache": {
-        "title": "サイドパネルのタブ",
-        "description": "各ブラウザタブに個別の要約状態を保持します。",
-        "enabled": "有効",
-        "disabled": "無効",
-        "clear_on_navigation": {
-          "title": "ナビゲーション時にクリア",
-          "description": "ページURLが変更されたときにキャッシュされた要約に何が起こるか。",
-          "keep_summary": "要約を保持",
-          "keep_summary_desc": "URL変更時も要約をキャッシュに保持",
-          "auto_clear": "自動クリア",
-          "auto_clear_desc": "URL変更時に要約をクリア"
-        },
-        "auto_scroll": {
-          "title": "アクティブなタブに自動スクロール",
-          "description": "アクティブなタブボタンを表示するために自動的にスクロールします。",
-          "off": "オフ",
-          "off_desc": "自動スクロールしない",
-          "jump": "ジャンプ",
-          "jump_desc": "即時スクロール",
-          "smooth": "スムーズ",
-          "smooth_desc": "アニメーションスクロール"
-        },
-        "nav": {
-          "previous_tab": "前のタブ",
-          "next_tab": "次のタブ",
-          "remove_tab": "削除（中クリック）"
-        },
-        "blocking_note": "注: 最高のパフォーマンスのため、応答モードはBlockingに設定されています。"
+        "ask_own_question_in_chat": "チャットで独自の質問をする",
+        "api_keys_info_restructured": "APIキーはグローバルで管理されています。",
+        "api_keys_link_text": "プロバイダーとAPIキー",
+        "api_keys_info_restructured_end": "タブで認証情報を設定してください。",
+        "reasoning_title": "推論",
+        "reasoning_description": "Deep Diveの質問に対するモデルの推論レベルを制御します。",
+        "reasoning_off": "オフ",
+        "reasoning_off_desc": "直接回答、最速。",
+        "reasoning_low": "低",
+        "reasoning_low_desc": "軽い推論。",
+        "reasoning_medium": "中",
+        "reasoning_medium_desc": "深さと速度のバランス。"
       }
+    },
+    "feature_model_picker": {
+      "provider_label": "モデルプロバイダー",
+      "model_label": "モデル名",
+      "model_placeholder": "モデルを検索または選択",
+      "view_models": "モデル一覧",
+      "unconfigured_suffix": "未設定",
+      "unconfigured_warning": "このプロバイダーは設定されていません。",
+      "configure_link": "APIキーを設定",
+      "free_text_placeholder": "モデルIDを入力"
+    },
+    "provider_key_config": {
+      "status_configured": "設定済み",
+      "status_unconfigured": "未設定",
+      "base_url_label": "ベースURL",
+      "endpoint_label": "エンドポイントURL",
+      "api_key_label": "APIキー",
+      "api_key_placeholder": "APIキーを入力",
+      "get_a_key": "APIキーを取得",
+      "api_keys_section_title": "APIキーとエンドポイント",
+      "add_provider": "プロバイダーを追加",
+      "remove_provider": "削除"
+    },
+    "openai_profile_config": {
+      "name_label": "プロファイル名",
+      "name_required": "名前は必須です",
+      "base_url_label": "ベースURL",
+      "base_url_invalid": "有効なHTTP/HTTPS URLである必要があります",
+      "api_key_label": "APIキー",
+      "api_key_required": "APIキーは必須です",
+      "default_model_label": "デフォルトモデルID",
+      "default_model_required": "デフォルトモデルIDは必須です",
+      "delete_profile": "プロファイルを削除"
+    },
+    "chat": {
+      "add_to_quick_models": "クイックモデルに追加",
+      "quick_models": "クイックモデル",
+      "quick_models_hint": "コンポーザーで素早く切り替えるための最大{max}モデル。",
+      "remove_quick_model": "クイックモデルから削除",
+      "default_reasoning": "デフォルト推論レベル",
+      "default_reasoning_hint": "新しいタブの推論セレクターに適用されます。タブごとの設定は独立しています。"
     }
+  },
+  "chat": {
+    "time": {
+      "justNow": "たった今",
+      "minutesAgo": "{count}分前"
+    },
+    "context_donut": {
+      "aria_usage": "Context window usage:",
+      "aria_unknown": "Context usage not known yet",
+      "model": "Model",
+      "unknown_provider": "Unknown provider",
+      "context_window": "Context window",
+      "input_budget": "Input budget",
+      "input": "Input",
+      "output": "Output",
+      "cache": "Cache",
+      "source": "Source"
+    },
+    "context_warning": {
+      "source_dropped": "「{title}」はこのモデルのコンテキスト制限を超えているため、除外されました。以下の回答はこれに基づいていません。より大きなコンテキストウィンドウを持つモデルをお試しください。",
+      "source_dropped_untitled": "一部のソースがこのモデルのコンテキスト制限を超えているため、除外されました。以下の回答はこれに基づいていません。",
+      "source_truncated": "「{title}」の一部のみがこのモデルのコンテキストに収まりました。",
+      "history_trimmed": "このモデル의コンテキストに収めるため、古い {count} 回のやり取りが削除されました。",
+      "source_unresolved": "以前に添付されたソースを読み込めませんでした。",
+      "input_too_large": "メッセージがこのモデルのコンテキスト制限を超えています。すべてのソースを削除しても収まりません。メッセージを短くするか、より大きなコンテキストを持つモデルに切り替えてください。"
+    },
+    "model_select": {
+      "aria_label": "チャットモデル: {model}",
+      "default_label": "デフォルト ({model})",
+      "manage_models": "モデルの管理...",
+      "reasoning": "推論",
+      "warning_unresolvable": "不明なプロファイル"
+    }
+  },
+  "tab_navigation": {
+    "previous_tab": "前のタブ",
+    "next_tab": "次のタブ",
+    "remove_tab": "削除（中クリック）"
   },
   "prompts": {
     "title": "プロンプト",

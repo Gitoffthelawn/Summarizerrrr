@@ -13,7 +13,7 @@
     loadThemeSettings,
     subscribeToShadowThemeChanges,
   } from '@/stores/themeStore.svelte.js'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade'
   import { summaryState } from '../../stores/summaryStore.svelte.js'
   import FloatingButton from './components/FloatingButton.svelte'
   import FloatingPanel from './components/FloatingPanel.svelte'

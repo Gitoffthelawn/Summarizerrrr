@@ -1,0 +1,1047 @@
+import { describe, expect, it } from 'vitest'
+import { createChatService } from '@/services/chat/chatService.js'
+import { createChatSessionService } from '@/services/chat/chatSessionService.js'
+import { createChatSourceService } from '@/services/chat/chatSourceService.js'
+
+function source(id = 'source-1') {
+  return {
+    id,
+    sourceKey: `https://example.com:${id}`,
+    normalizedUrl: 'https://example.com/',
+    url: 'https://example.com/',
+    title: 'Example page',
+    sourceType: 'webpage',
+    condensedContent: 'Condensed example source.',
+    rawContent: 'Raw example source.',
+    capturedAt: '2026-07-10T00:00:00.000Z',
+  }
+}
+
+function createRepository() {
+  const conversations = new Map()
+  const messages = new Map()
+  const sources = new Map()
+  let sequence = 0
+  return {
+    sources,
+    async createConversation(data) {
+      const conversation = { id: 'conversation-1', ...data }
+      conversations.set(conversation.id, conversation)
+      return { conversation }
+    },
+    async getConversation(id) {
+      return conversations.get(id) || null
+    },
+    async listMessagesByConversation(id) {
+      return [...messages.values()].filter((message) => message.conversationId === id)
+    },
+    async addMessage(conversationId, data) {
+      const message = { id: `message-${++sequence}`, conversationId, sequence, ...data }
+      messages.set(message.id, message)
+      return message
+    },
+    async finalizeAssistantMessage(conversationId, data) {
+      if (data.status === 'aborted' && !data.content) return null
+      const message = { id: `message-${++sequence}`, conversationId, sequence, ...data }
+      messages.set(message.id, message)
+      return message
+    },
+    async createStreamingAssistantMessage(conversationId, data) {
+      const message = { id: `message-${++sequence}`, conversationId, sequence, status: 'streaming', ...data }
+      messages.set(message.id, message)
+      return message
+    },
+    async checkpointStreamingContent(messageId, content) {
+      const msg = messages.get(messageId)
+      if (!msg || msg.status !== 'streaming') return msg || null
+      msg.content = content
+      return msg
+    },
+    async recoverStreamingMessages(conversationId) {
+      const recovered = []
+      for (const msg of messages.values()) {
+        if (msg.conversationId === conversationId && msg.status === 'streaming') {
+          msg.status = 'interrupted'
+          recovered.push(msg)
+        }
+      }
+      return recovered
+    },
+    async finalizeStreamingAssistantMessage(messageId, updates) {
+      const msg = messages.get(messageId)
+      if (!msg) return null
+      Object.assign(msg, updates)
+      msg.status = updates.status || 'complete'
+      return msg
+    },
+    async getGenerationPath(id) {
+      return [...messages.values()].filter((message) => message.conversationId === id)
+    },
+    async getGenerationContextForUser(userMessageId) {
+      const userMessage = messages.get(userMessageId)
+      const all = [...messages.values()].filter((message) => message.conversationId === userMessage.conversationId)
+      const userIndex = all.findIndex((m) => m.id === userMessageId)
+      return {
+        history: all.slice(0, userIndex),
+        currentUserMessage: userMessage,
+      }
+    },
+    async getSourceById(id) {
+      return sources.get(id) || null
+    },
+    async putSourceSnapshot(data) {
+      const snapshot = { id: `source-${sources.size + 1}`, ...data }
+      sources.set(snapshot.id, snapshot)
+      return snapshot
+    },
+    async updateConversationMetadata(id, data) {
+      const updated = { ...conversations.get(id), ...data }
+      conversations.set(id, updated)
+      return updated
+    },
+    archiveConversation(id) {
+      return this.updateConversationMetadata(id, { archived: true })
+    },
+    async getMessage(id) {
+      return messages.get(id) || null
+    },
+    async markMessageStreaming(messageId) {
+      const msg = messages.get(messageId)
+      if (msg) msg.status = 'streaming'
+      return msg || null
+    },
+  }
+}
+
+const settings = { selectedProvider: 'gemini', selectedGeminiModel: 'gemini-test' }
+
+function createPipelineProbe() {
+  const calls = []
+  return {
+    calls,
+    async build(input, dependencies) {
+      calls.push({ input, dependencies })
+      return { system: 'System', messages: [{ role: 'user', content: input.currentUserMessage.content }], warnings: [] }
+    },
+  }
+}
+
+describe('chat orchestration', () => {
+  it('captures the active page on first send and reuses the cached snapshot on later sends', async () => {
+    const repository = createRepository()
+    let extractionCount = 0
+    const sourceService = createChatSourceService({
+      browserApi: { tabs: { query: async () => [{ id: 44, url: 'https://example.com', title: 'Example page' }] } },
+      getPageContentFn: async () => {
+        extractionCount += 1
+        return { type: 'webpage', content: 'The active page source.' }
+      },
+      repository,
+    })
+    const probe = createPipelineProbe()
+    const service = createChatService({
+      repository,
+      sourceService,
+      sessionService: createChatSessionService(),
+      buildPipeline: probe.build,
+      streamRequest: async function* () { yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }; yield { chunk: '', fullText: 'Answer', isComplete: true } },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+    const first = await service.send({ conversation, content: 'What is this?', settings })
+    const second = await service.send({
+      conversation,
+      messages: await repository.listMessagesByConversation(conversation.id),
+      content: 'And why?',
+      settings,
+    })
+
+    expect(extractionCount).toBe(1)
+    expect(first.assistant).toMatchObject({ content: 'Answer', status: 'complete' })
+    expect(second.assistant).toMatchObject({ content: 'Answer', status: 'complete' })
+    expect(probe.calls[1].input.conversationSourceRefs).toEqual(['source-1'])
+  })
+
+  it('uses the prepared tab source when the browser activates another tab before send assembly', async () => {
+    const repository = createRepository()
+    const prepared = source('prepared-source')
+    repository.sources.set(prepared.id, prepared)
+    let activeTabReads = 0
+    const sourceService = {
+      getActiveTab: async () => {
+        activeTabReads += 1
+        return { id: 44, url: 'https://example.com', title: 'Original tab' }
+      },
+      getCachedActiveSource: async () => {
+        throw new Error('Prepared source should avoid resolving the newly active tab')
+      },
+      captureActiveSource: async () => {
+        throw new Error('Prepared source should avoid recapturing the newly active tab')
+      },
+    }
+    const service = createChatService({
+      repository,
+      sourceService,
+      buildPipeline: createPipelineProbe().build,
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+    const result = await service.send({
+      conversation,
+      content: 'Use the original tab',
+      settings,
+      activeSource: {
+        tabId: 44,
+        url: 'https://example.com',
+        sourceKind: 'webpage',
+        sourceId: prepared.id,
+      },
+    })
+
+    expect(activeTabReads).toBe(1) // conversation start only
+    expect(result.assistant).toMatchObject({ content: 'Answer' })
+    const messages = await repository.listMessagesByConversation(conversation.id)
+    expect(messages.find((message) => message.role === 'user')?.attachmentRefs).toEqual([prepared.id])
+  })
+
+  it('stores long source snapshots without creating a truncated condensed copy', async () => {
+    const repository = createRepository()
+    const content = `${'Complete source content. '.repeat(800)}THE FINAL SECTION`
+    const sourceService = createChatSourceService({
+      browserApi: { tabs: { query: async () => [{ id: 44, url: 'https://example.com/long', title: 'Long page' }] } },
+      getPageContentFn: async () => ({ type: 'webpage', content }),
+      repository,
+    })
+
+    const { source } = await sourceService.captureActiveSource('webpage')
+
+    expect(source.rawContent).toBe(content)
+    expect(source.rawContent).toContain('THE FINAL SECTION')
+    expect(source.condensedContent).toBeNull()
+    expect(source.condensationVersion).toBe(0)
+  })
+
+  it('streams chunks under the id of the message they will be persisted as', async () => {
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const sourceService = {
+      getActiveTab: async () => ({ id: 1, title: 'Example' }),
+      getCachedActiveSource: async () => ({ source: activeSource }),
+    }
+    const service = createChatService({
+      repository,
+      sourceService,
+      buildPipeline: createPipelineProbe().build,
+      streamRequest: async function* () {
+        yield { chunk: 'Half', fullText: 'Half', isComplete: false }
+        yield { chunk: ' done', fullText: 'Half done', isComplete: false }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+    const chunkIds = []
+    const result = await service.send({
+      conversation,
+      content: 'Keep my scroll still',
+      settings,
+      onChunk: (message) => chunkIds.push(message.id),
+    })
+
+    // The side panel keys the streaming bubble by this id: a mismatch would
+    // remount the message when the stream ends and yank the scroll to the top.
+    expect(chunkIds.length).toBe(2)
+    expect(new Set(chunkIds)).toEqual(new Set([result.assistant.id]))
+  })
+
+  it('persists non-empty partial output as aborted and clears the terminal lifecycle', async () => {
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const sourceService = {
+      getActiveTab: async () => ({ id: 1, title: 'Example' }),
+      getCachedActiveSource: async () => ({ source: activeSource }),
+    }
+    const service = createChatService({
+      repository,
+      sourceService,
+      buildPipeline: createPipelineProbe().build,
+      streamRequest: async function* () {
+        yield { chunk: 'Partial', fullText: 'Partial', isComplete: false }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+    const controller = new AbortController()
+    const result = await service.send({
+      conversation,
+      content: 'Stop me',
+      settings,
+      abortController: controller,
+      onChunk: () => controller.abort(),
+    })
+
+    expect(result.assistant).toMatchObject({ content: 'Partial', status: 'aborted' })
+  })
+
+  it('persists streaming error as status error with details and returns it', async () => {
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const sourceService = {
+      getActiveTab: async () => ({ id: 1, title: 'Example' }),
+      getCachedActiveSource: async () => ({ source: activeSource }),
+    }
+    const service = createChatService({
+      repository,
+      sourceService,
+      buildPipeline: createPipelineProbe().build,
+      streamRequest: async function* () {
+        throw new Error('API limit reached')
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+    const result = await service.send({
+      conversation,
+      content: 'Hello',
+      settings,
+    })
+
+    expect(result.error).toBeDefined()
+    expect(result.error.message).toBe('API limit reached')
+    expect(result.assistant).toMatchObject({ status: 'error' })
+    expect(result.assistant.error.message).toBe('API limit reached')
+  })
+
+  it('retries with the stored skill and attachment snapshots without duplicating the user record', async () => {
+    const repository = createRepository()
+    const attachedSource = source()
+    repository.sources.set(attachedSource.id, attachedSource)
+    const probe = createPipelineProbe()
+    const service = createChatService({
+      repository,
+      sourceService: { getActiveTab: async () => ({ id: 7, title: 'Example' }) },
+      buildPipeline: probe.build,
+      streamRequest: async function* () { yield { chunk: 'Retried', fullText: 'Retried', isComplete: false } },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+    const user = await repository.addMessage(conversation.id, {
+      role: 'user',
+      content: 'Explain this',
+      skillInvocation: { skillId: 'explain', skillVersion: 1, instructionSnapshot: 'Explain simply.' },
+      attachmentRefs: [attachedSource.id],
+    })
+    const failed = await repository.finalizeAssistantMessage(conversation.id, { role: 'assistant', content: '', status: 'error', error: { message: 'failed' } })
+    const result = await service.retry({ conversation, messages: [user, failed], userMessageId: user.id, settings })
+
+    expect(probe.calls[0].input.skillInvocation).toEqual(user.skillInvocation)
+    expect(probe.calls[0].input.newAttachmentRefs).toEqual([attachedSource.id])
+    expect(result.assistant).toMatchObject({ retryOfMessageId: user.id, content: 'Retried' })
+    expect([...repository.sources.values()]).toHaveLength(1)
+  })
+
+  it('restores the runtime conversation for a tab without rebinding persisted sources', async () => {
+    const repository = createRepository()
+    const sessionService = createChatSessionService()
+    const service = createChatService({
+      repository,
+      sourceService: { getActiveTab: async () => ({ id: 23, title: 'Original tab' }) },
+      sessionService,
+      buildPipeline: createPipelineProbe().build,
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+    await repository.addMessage(conversation.id, { role: 'user', content: 'Saved', attachmentRefs: ['source-closed'] })
+
+    expect(sessionService.getConversationId(23)).toBe(conversation.id)
+    await expect(service.openConversation(conversation.id)).resolves.toMatchObject({ conversation })
+  })
+
+  it('resolves dynamic profile identities and falls back correctly when deleted', async () => {
+    const repository = createRepository()
+    const probe = createPipelineProbe()
+    const streamRequestCalls = []
+    const service = createChatService({
+      repository,
+      sourceService: { getActiveTab: async () => ({ id: 1, title: 'Example' }) },
+      buildPipeline: probe.build,
+      streamRequest: async function* (req) {
+        streamRequestCalls.push(req)
+        yield { chunk: 'Response', fullText: 'Response', isComplete: false }
+        yield { chunk: '', fullText: 'Response', isComplete: true }
+      },
+    })
+
+    const customSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-test',
+      chat: {
+        provider: 'openai-compatible-profile-1',
+        model: 'model-1-overridden',
+      },
+      openaiCompatibleProfiles: [
+        {
+          id: 'openai-compatible-profile-1',
+          name: 'My Profile',
+          baseUrl: 'https://api.my-profile.com/v1',
+          apiKey: 'my-key',
+          defaultModel: 'model-1',
+        }
+      ]
+    }
+
+    // 1. Start conversation (should store dynamic profile id)
+    const { conversation } = await service.startConversationForActiveTab({ settings: customSettings })
+    expect(conversation.providerId).toBe('openai-compatible-profile-1')
+    expect(conversation.modelId).toBe('model-1-overridden')
+
+    // 2. Send message (should resolve overlay and convert adapter ID)
+    const warnings = []
+    const diagnostics = []
+    await service.send({
+      conversation,
+      content: 'Hello',
+      settings: customSettings,
+      sourceRequired: false,
+      onWarnings: (w) => warnings.push(...w),
+      onDiagnostics: (d) => diagnostics.push(d),
+    })
+
+    expect(streamRequestCalls).toHaveLength(1)
+    // The request passed to streamRequest should use 'openaiCompatible' adapter id
+    expect(streamRequestCalls[0].providerId).toBe('openaiCompatible')
+    expect(streamRequestCalls[0].settings.openaiCompatibleApiKey).toBe('my-key')
+    expect(streamRequestCalls[0].settings.openaiCompatibleBaseUrl).toBe('https://api.my-profile.com/v1')
+    expect(streamRequestCalls[0].settings.selectedOpenAICompatibleModel).toBe('model-1-overridden')
+
+    // 3. Fallback when profile is deleted
+    const deletedSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-test',
+      chat: {
+        provider: 'gemini',
+        model: 'gemini-3-flash-preview',
+      },
+      openaiCompatibleProfiles: [] // profile-1 is now deleted!
+    }
+
+    const fallbackWarnings = []
+    await service.send({
+      conversation,
+      content: 'Hello after delete',
+      settings: deletedSettings,
+      sourceRequired: false,
+      onWarnings: (w) => fallbackWarnings.push(...w),
+    })
+
+    // The conversation metadata should be updated in the repository to 'gemini' fallback
+    const updatedConversation = await repository.getConversation(conversation.id)
+    expect(updatedConversation.providerId).toBe('gemini')
+    expect(updatedConversation.modelId).toBe('gemini-3-flash-preview')
+
+    // We should receive a warning in onWarnings
+    expect(fallbackWarnings).toContain(
+      'The selected OpenAI Compatible profile was deleted. Falling back to the current Chat provider: Google Gemini.'
+    )
+  })
+})
+
+describe('reasoning level snapshot', () => {
+  function createReasoningTestService() {
+    const repository = createRepository()
+    const streamRequestCalls = []
+    const service = createChatService({
+      repository,
+      sourceService: { getActiveTab: async () => ({ id: 1, title: 'Example' }) },
+      buildPipeline: createPipelineProbe().build,
+      streamRequest: async function* (req) {
+        streamRequestCalls.push(req)
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield { chunk: '', fullText: 'Answer', isComplete: true }
+      },
+    })
+    return { repository, service, streamRequestCalls }
+  }
+
+  it('send persists the normalized reasoning level on the user message and passes correct request options', async () => {
+    const { repository, service, streamRequestCalls } = createReasoningTestService()
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'Think hard',
+      settings,
+      sourceRequired: false,
+      reasoningLevel: 'high',
+    })
+
+    // Check persisted user message
+    const messages = await repository.listMessagesByConversation(conversation.id)
+    const userMsg = messages.find((m) => m.role === 'user')
+    expect(userMsg.reasoningLevel).toBe('high')
+
+    // Check that reasoning was passed in the stream request
+    expect(streamRequestCalls[0].reasoning).toBe('high')
+  })
+
+  it('normalizes invalid/missing reasoning values to provider-default', async () => {
+    const { repository, service, streamRequestCalls } = createReasoningTestService()
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    // Send with invalid value
+    await service.send({
+      conversation,
+      content: 'Whatever',
+      settings,
+      sourceRequired: false,
+      reasoningLevel: 'xhigh',
+    })
+
+    const messages = await repository.listMessagesByConversation(conversation.id)
+    const userMsg = messages.find((m) => m.role === 'user')
+    expect(userMsg.reasoningLevel).toBe('provider-default')
+
+    // Auto means no reasoning override in request
+    expect(streamRequestCalls[0].reasoning).toBeUndefined()
+  })
+
+  it('retry and regenerate reuse the stored level even if the current UI level has changed', async () => {
+    const { repository, service, streamRequestCalls } = createReasoningTestService()
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    // Original send with 'high'
+    const sendResult = await service.send({
+      conversation,
+      content: 'First message',
+      settings,
+      sourceRequired: false,
+      reasoningLevel: 'high',
+    })
+
+    const messages = await repository.listMessagesByConversation(conversation.id)
+    const userMsg = messages.find((m) => m.role === 'user')
+
+    // Retry — no new reasoningLevel parameter, should reuse stored 'high'
+    await service.retry({
+      conversation,
+      messages,
+      userMessageId: userMsg.id,
+      settings,
+    })
+
+    // The retry request should use 'high' from the stored message
+    expect(streamRequestCalls[1].reasoning).toBe('high')
+  })
+
+  it('edit snapshots the newly selected level on the new branch', async () => {
+    const { repository, service, streamRequestCalls } = createReasoningTestService()
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    // Original send with 'low'
+    await service.send({
+      conversation,
+      content: 'Original',
+      settings,
+      sourceRequired: false,
+      reasoningLevel: 'low',
+    })
+
+    const messages = await repository.listMessagesByConversation(conversation.id)
+    const userMsg = messages.find((m) => m.role === 'user')
+
+    // Edit with 'high' — the new branch should snapshot 'high'
+    await service.edit({
+      conversation,
+      messageId: userMsg.id,
+      content: 'Edited message',
+      reasoningLevel: 'high',
+      settings,
+    })
+
+    // The edit request should use 'high'
+    expect(streamRequestCalls[1].reasoning).toBe('high')
+
+    // Verify the new user message persisted 'high'
+    const allMessages = await repository.listMessagesByConversation(conversation.id)
+    const editedUserMsg = allMessages.find((m) => m.role === 'user' && m.content === 'Edited message')
+    expect(editedUserMsg.reasoningLevel).toBe('high')
+  })
+
+  it('existing messages without reasoningLevel still generate successfully (backward compat)', async () => {
+    const { repository, service, streamRequestCalls } = createReasoningTestService()
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    // Simulate an old message without reasoningLevel
+    const oldUser = await repository.addMessage(conversation.id, {
+      role: 'user',
+      content: 'Old message',
+      // no reasoningLevel field at all
+    })
+
+    // Retry on old message — should not crash, should default to provider-default
+    await service.retry({
+      conversation,
+      messages: [oldUser],
+      userMessageId: oldUser.id,
+      settings,
+    })
+
+    // No reasoning override should be sent
+    expect(streamRequestCalls[0].reasoning).toBeUndefined()
+  })
+
+  it('reasoning warnings from the stream completion event merge into contextWarnings', async () => {
+    const repository = createRepository()
+    const collectedWarnings = []
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const service = createChatService({
+      repository,
+      sourceService: {
+        getActiveTab: async () => ({ id: 1, title: 'Example' }),
+        getCachedActiveSource: async () => ({ source: activeSource }),
+      },
+      buildPipeline: async (input) => ({
+        system: 'System',
+        messages: [{ role: 'user', content: input.currentUserMessage.content }],
+        warnings: ['Pipeline warning from context assembly'],
+      }),
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield {
+          chunk: '',
+          fullText: 'Answer',
+          isComplete: true,
+          reasoningWarnings: ['High reasoning is not supported by this model; the provider used Medium.'],
+        }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'Test warnings',
+      reasoningLevel: 'high',
+      settings,
+      onWarnings: (warnings) => { collectedWarnings.push(...warnings) },
+    })
+
+    // Should contain both the pipeline warning and the reasoning warning
+    expect(collectedWarnings).toContain('Pipeline warning from context assembly')
+    expect(collectedWarnings).toContain('High reasoning is not supported by this model; the provider used Medium.')
+  })
+})
+
+describe('enriched onDiagnostics payload (Phase 3)', () => {
+  it('onDiagnostics fires with input/output/cached/providerId/modelId/sourceTokens from mocked usage', async () => {
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const collectedDiagnostics = []
+    const service = createChatService({
+      repository,
+      sourceService: {
+        getActiveTab: async () => ({ id: 1, title: 'Example' }),
+        getCachedActiveSource: async () => ({ source: activeSource }),
+      },
+      buildPipeline: async (input) => ({
+        system: 'System',
+        messages: [{ role: 'user', content: input.currentUserMessage.content }],
+        warnings: [],
+        inputBudgetTokens: 120_000,
+        capabilities: { contextWindowTokens: 128_000, source: 'known-model' },
+        sourceTokens: { 'source-1': 42 },
+      }),
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield {
+          chunk: '',
+          fullText: 'Answer',
+          isComplete: true,
+          usage: {
+            promptTokens: 1500,
+            completionTokens: 200,
+            totalTokens: 1700,
+            inputTokens: 1500,
+            outputTokens: 200,
+            cachedInputTokens: 160000,
+          },
+        }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'Test diagnostics',
+      settings,
+      onDiagnostics: (d) => collectedDiagnostics.push(d),
+    })
+
+    expect(collectedDiagnostics).toHaveLength(1)
+    const diag = collectedDiagnostics[0]
+
+    // Legacy keys unchanged
+    expect(diag.used).toBe(1500)
+    expect(diag.inputBudget).toBe(120_000)
+    expect(diag.window).toBe(128_000)
+    expect(diag.source).toBe('known-model')
+
+    // New keys
+    expect(diag.input).toBe(1500)
+    expect(diag.output).toBe(200)
+    expect(diag.cached).toBe(160000)
+    expect(diag.providerId).toBe('gemini')
+    expect(diag.modelId).toBe('gemini-test')
+    expect(diag.sourceTokens).toEqual({ 'source-1': 42 })
+  })
+
+  it('cached is null when the provider reports no cache figure', async () => {
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const collectedDiagnostics = []
+    const service = createChatService({
+      repository,
+      sourceService: {
+        getActiveTab: async () => ({ id: 1, title: 'Example' }),
+        getCachedActiveSource: async () => ({ source: activeSource }),
+      },
+      buildPipeline: async (input) => ({
+        system: 'System',
+        messages: [{ role: 'user', content: input.currentUserMessage.content }],
+        warnings: [],
+        inputBudgetTokens: 120_000,
+        capabilities: { contextWindowTokens: 128_000, source: 'known-model' },
+        sourceTokens: {},
+      }),
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield {
+          chunk: '',
+          fullText: 'Answer',
+          isComplete: true,
+          usage: {
+            promptTokens: 500,
+            completionTokens: 100,
+            totalTokens: 600,
+            // no cachedInputTokens
+          },
+        }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'No cache',
+      settings,
+      onDiagnostics: (d) => collectedDiagnostics.push(d),
+    })
+
+    expect(collectedDiagnostics).toHaveLength(1)
+    expect(collectedDiagnostics[0].cached).toBeNull()
+    // Legacy keys still present
+    expect(collectedDiagnostics[0].used).toBe(500)
+    expect(collectedDiagnostics[0].inputBudget).toBe(120_000)
+    expect(collectedDiagnostics[0].available).toBe(true)
+  })
+
+  it('still fires with available:false when the provider reports no usage', async () => {
+    // The blocking fallback path (Firefox mobile) always yields usage:null. The
+    // meter has to hear about it, otherwise it keeps showing the previous turn.
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const collectedDiagnostics = []
+    const service = createChatService({
+      repository,
+      sourceService: {
+        getActiveTab: async () => ({ id: 1, title: 'Example' }),
+        getCachedActiveSource: async () => ({ source: activeSource }),
+      },
+      buildPipeline: async (input) => ({
+        system: 'System',
+        messages: [{ role: 'user', content: input.currentUserMessage.content }],
+        warnings: [],
+        inputBudgetTokens: 120_000,
+        capabilities: { contextWindowTokens: 128_000, source: 'known-model' },
+        sourceTokens: {},
+      }),
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield { chunk: '', fullText: 'Answer', isComplete: true, usage: null }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'No usage reported',
+      settings,
+      onDiagnostics: (d) => collectedDiagnostics.push(d),
+    })
+
+    expect(collectedDiagnostics).toHaveLength(1)
+    const diag = collectedDiagnostics[0]
+    expect(diag.available).toBe(false)
+    expect(diag.used).toBeNull()
+    expect(diag.input).toBeNull()
+    expect(diag.output).toBeNull()
+    // Model and window stay real — only the token counts are unknown.
+    expect(diag.window).toBe(128_000)
+    expect(diag.modelId).toBe('gemini-test')
+  })
+
+  it('reads v5-only usage keys for input and output', async () => {
+    // A provider (or SDK path) that reports only inputTokens/outputTokens must
+    // not leave the Input/Output rows blank while `used` is populated.
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const collectedDiagnostics = []
+    const service = createChatService({
+      repository,
+      sourceService: {
+        getActiveTab: async () => ({ id: 1, title: 'Example' }),
+        getCachedActiveSource: async () => ({ source: activeSource }),
+      },
+      buildPipeline: async (input) => ({
+        system: 'System',
+        messages: [{ role: 'user', content: input.currentUserMessage.content }],
+        warnings: [],
+        inputBudgetTokens: 120_000,
+        capabilities: { contextWindowTokens: 128_000, source: 'known-model' },
+        sourceTokens: {},
+      }),
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield {
+          chunk: '',
+          fullText: 'Answer',
+          isComplete: true,
+          usage: { inputTokens: 900, outputTokens: 120 },
+        }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'v5 usage',
+      settings,
+      onDiagnostics: (d) => collectedDiagnostics.push(d),
+    })
+
+    const diag = collectedDiagnostics[0]
+    expect(diag.available).toBe(true)
+    expect(diag.input).toBe(900)
+    expect(diag.output).toBe(120)
+  })
+})
+
+describe('conversation-model resolution (Phase 2)', () => {
+  function createModelRoutingService() {
+    const repository = createRepository()
+    const streamRequestCalls = []
+    const service = createChatService({
+      repository,
+      sourceService: { getActiveTab: async () => ({ id: 1, title: 'Example' }) },
+      buildPipeline: createPipelineProbe().build,
+      streamRequest: async function* (req) {
+        streamRequestCalls.push(req)
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield { chunk: '', fullText: 'Answer', isComplete: true }
+      },
+    })
+    return { repository, service, streamRequestCalls }
+  }
+
+  it('conversation.modelId wins over settings.chat.model and reaches resolveAdapterCall', async () => {
+    const { repository, service, streamRequestCalls } = createModelRoutingService()
+
+    const chatSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      geminiApiKey: 'key',
+      chat: { provider: 'gemini', model: 'gemini-3-flash-preview' },
+    }
+
+    const { conversation } = await service.startConversationForActiveTab({ settings: chatSettings })
+
+    // Manually stamp a different model on the conversation
+    await repository.updateConversationMetadata(conversation.id, {
+      providerId: 'gemini',
+      modelId: 'gemini-2.5-pro-preview',
+    })
+    const updatedConversation = await repository.getConversation(conversation.id)
+
+    await service.send({
+      conversation: updatedConversation,
+      content: 'Hello',
+      settings: chatSettings,
+      sourceRequired: false,
+    })
+
+    // The stream request must carry the conversation's explicit model, NOT settings.chat.model
+    expect(streamRequestCalls[0].settings.selectedGeminiModel).toBe('gemini-2.5-pro-preview')
+  })
+
+  it('cerebras conversation with modelId:null stays on cerebras with its own default model', async () => {
+    const { repository, service, streamRequestCalls } = createModelRoutingService()
+
+    const chatSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      geminiApiKey: 'key',
+      cerebrasApiKey: 'cerebras-key',
+      selectedCerebrasModel: 'llama-3.3-70b',
+      chat: { provider: 'gemini', model: 'gemini-3-flash-preview' },
+    }
+
+    // Create a conversation with cerebras provider but no stored model
+    const { conversation } = await service.startConversationForActiveTab({ settings: chatSettings })
+    await repository.updateConversationMetadata(conversation.id, {
+      providerId: 'cerebras',
+      modelId: null,
+    })
+    const cerebrasConversation = await repository.getConversation(conversation.id)
+
+    await service.send({
+      conversation: cerebrasConversation,
+      content: 'Hello from cerebras',
+      settings: chatSettings,
+      sourceRequired: false,
+    })
+
+    // Must resolve to cerebras adapter — NOT gemini
+    expect(streamRequestCalls[0].providerId).toBe('cerebras')
+    // Must use cerebras' own legacy model, not settings.chat.model
+    expect(streamRequestCalls[0].settings.selectedCerebrasModel).toBe('llama-3.3-70b')
+  })
+
+  it('dynamic profile conversation with modelId:null resolves to the profile defaultModel', async () => {
+    const { repository, service, streamRequestCalls } = createModelRoutingService()
+
+    const profileSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      geminiApiKey: 'key',
+      chat: { provider: 'gemini', model: 'gemini-3-flash-preview' },
+      openaiCompatibleProfiles: [
+        {
+          id: 'openai-compatible-profile-abc',
+          name: 'My Profile',
+          baseUrl: 'https://api.custom.com/v1',
+          apiKey: 'custom-key',
+          defaultModel: 'custom-default-model',
+        },
+      ],
+    }
+
+    const { conversation } = await service.startConversationForActiveTab({ settings: profileSettings })
+    // Stamp the profile provider with no explicit model
+    await repository.updateConversationMetadata(conversation.id, {
+      providerId: 'openai-compatible-profile-abc',
+      modelId: null,
+    })
+    const profileConversation = await repository.getConversation(conversation.id)
+
+    await service.send({
+      conversation: profileConversation,
+      content: 'Hello from profile',
+      settings: profileSettings,
+      sourceRequired: false,
+    })
+
+    // Must route to the openaiCompatible adapter
+    expect(streamRequestCalls[0].providerId).toBe('openaiCompatible')
+    // Must use the profile's defaultModel, not settings.chat.model
+    expect(streamRequestCalls[0].settings.selectedOpenAICompatibleModel).toBe('custom-default-model')
+    expect(streamRequestCalls[0].settings.openaiCompatibleApiKey).toBe('custom-key')
+    expect(streamRequestCalls[0].settings.openaiCompatibleBaseUrl).toBe('https://api.custom.com/v1')
+  })
+
+  it('conversation with no stored provider falls back to settings.chat provider/model', async () => {
+    const { repository, service, streamRequestCalls } = createModelRoutingService()
+
+    const chatSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      geminiApiKey: 'key',
+      chat: { provider: 'gemini', model: 'gemini-2.5-flash-preview' },
+    }
+
+    const { conversation } = await service.startConversationForActiveTab({ settings: chatSettings })
+    // Clear the stored provider and model (simulates a legacy conversation)
+    await repository.updateConversationMetadata(conversation.id, {
+      providerId: null,
+      modelId: null,
+    })
+    const legacyConversation = await repository.getConversation(conversation.id)
+
+    await service.send({
+      conversation: legacyConversation,
+      content: 'Hello legacy',
+      settings: chatSettings,
+      sourceRequired: false,
+    })
+
+    // Must use settings.chat's provider and model
+    expect(streamRequestCalls[0].providerId).toBe('gemini')
+    expect(streamRequestCalls[0].settings.selectedGeminiModel).toBe('gemini-2.5-flash-preview')
+  })
+
+  it('switching a conversation model mid-conversation affects the next generation', async () => {
+    const { repository, service, streamRequestCalls } = createModelRoutingService()
+
+    const chatSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      geminiApiKey: 'key',
+      chat: { provider: 'gemini', model: 'gemini-3-flash-preview' },
+    }
+
+    const { conversation } = await service.startConversationForActiveTab({ settings: chatSettings })
+
+    // First send — uses the default model
+    await service.send({
+      conversation,
+      content: 'First message',
+      settings: chatSettings,
+      sourceRequired: false,
+    })
+    expect(streamRequestCalls[0].settings.selectedGeminiModel).toBe('gemini-3-flash-preview')
+
+    // Switch the model mid-conversation
+    await repository.updateConversationMetadata(conversation.id, {
+      modelId: 'gemini-2.5-pro-preview',
+    })
+    const switchedConversation = await repository.getConversation(conversation.id)
+
+    // Second send — must use the switched model
+    await service.send({
+      conversation: switchedConversation,
+      content: 'Second message',
+      settings: chatSettings,
+      sourceRequired: false,
+    })
+    expect(streamRequestCalls[1].settings.selectedGeminiModel).toBe('gemini-2.5-pro-preview')
+  })
+
+  it('startConversationForActiveTab honors modelOverride over settings.chat', async () => {
+    const { service } = createModelRoutingService()
+
+    const chatSettings = {
+      selectedProvider: 'gemini',
+      selectedGeminiModel: 'gemini-3-flash-preview',
+      chat: { provider: 'gemini', model: 'gemini-3-flash-preview' },
+    }
+
+    const { conversation } = await service.startConversationForActiveTab({
+      settings: chatSettings,
+      modelOverride: { provider: 'cerebras', model: 'llama-3.3-70b' },
+    })
+
+    expect(conversation.providerId).toBe('cerebras')
+    expect(conversation.modelId).toBe('llama-3.3-70b')
+  })
+})

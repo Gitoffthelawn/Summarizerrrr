@@ -25,13 +25,6 @@
         "system": "Sistema",
         "system_desc": "Usa el tema de tu dispositivo."
       },
-      "responseMode": "Modo de respuesta (Solo funciona en el panel lateral)",
-      "response_mode": {
-        "streaming": "Streaming",
-        "streaming_desc": "Respuestas instantáneas. Recomendado.",
-        "non_streaming": "Blocking",
-        "non_streaming_desc": "Para conexiones lentas. Evita pausas."
-      },
       "floatingButton": "Botón Flotante",
       "floating_button": {
         "show": "Mostrar",
@@ -196,8 +189,18 @@
         "youtube_comment": "Comentario de YouTube",
         "override_note": "* Los prompts activos anulan los ajustes básicos."
       },
+      "reasoning": {
+        "title": "Razonamiento",
+        "off": "Desactivado",
+        "off_desc": "Respuesta directa, más rápido.",
+        "low": "Bajo",
+        "low_desc": "Razonamiento ligero.",
+        "medium": "Medio",
+        "medium_desc": "Equilibrio entre profundidad y velocidad."
+      },
       "comment_limit": "Límite de comentarios de YouTube",
-      "comment_limit_desc": "Número máximo de comentarios para analizar."
+      "comment_limit_desc": "Número máximo de comentarios para analizar.",
+      "uses_gemini_basic": "Usa Gemini Básico"
     },
     "chatgpt_config": {
       "api_key_label": "Clave API",
@@ -221,13 +224,7 @@
       "select_model_label": "Modelo Gemini Advanced",
       "select_model_placeholder": "Selecciona un modelo",
       "select_gemini_model_aria_label": "Seleccionar modelo Gemini",
-      "auto_fallback_label": "Recurso automático por sobrecarga",
-      "thinking_level": "Nivel de pensamiento",
-      "thinking_levels": {
-        "minimal": "Mínimo",
-        "medium": "Medio",
-        "high": "Alto"
-      }
+      "auto_fallback_label": "Recurso automático por sobrecarga"
     },
     "gemini_basic_config": {
       "api_key_label": "Clave API de Gemini",
@@ -254,7 +251,7 @@
       "api_key_placeholder": "Introduce tu clave API de Groq",
       "model_label": "Nombre del modelo",
       "get_a_key": "Obtener clave",
-      "model_placeholder": "mixtral-8x7b-32768",
+      "model_placeholder": "llama-3.3-70b-versatile",
       "saved_status": "¡Guardado!",
       "view_models": "Ver modelos"
     },
@@ -306,39 +303,99 @@
         "generate_new_questions": "Generar nuevas preguntas",
         "previous_questions": "Preguntas anteriores",
         "next_questions": "Siguientes preguntas",
-        "ask_own_question_in_chat": "Haz tu propia pregunta en el chat"
-      },
-      "perTabCache": {
-        "title": "Pestaña en el panel lateral",
-        "description": "Mantener estado de resumen separado para cada pestaña del navegador.",
-        "enabled": "Activado",
-        "disabled": "Desactivado",
-        "clear_on_navigation": {
-          "title": "Borrar al navegar",
-          "description": "Qué sucede con el resumen en caché cuando cambia la URL de la página.",
-          "keep_summary": "Mantener resumen",
-          "keep_summary_desc": "El resumen permanece en caché cuando cambia la URL",
-          "auto_clear": "Borrar automático",
-          "auto_clear_desc": "Borrar resumen cuando cambia la URL"
-        },
-        "auto_scroll": {
-          "title": "Desplazar automáticamente a la pestaña activa",
-          "description": "Desplazar automáticamente para mostrar el botón de la pestaña activa.",
-          "off": "Desactivado",
-          "off_desc": "No desplazar automáticamente",
-          "jump": "Saltar",
-          "jump_desc": "Desplazamiento instantáneo",
-          "smooth": "Suave",
-          "smooth_desc": "Desplazamiento animado"
-        },
-        "nav": {
-          "previous_tab": "Pestaña anterior",
-          "next_tab": "Pestaña siguiente",
-          "remove_tab": "Eliminar (Clic central)"
-        },
-        "blocking_note": "Nota: El modo de respuesta está configurado en Blocking para un mejor rendimiento."
+        "ask_own_question_in_chat": "Haz tu propia pregunta en el chat",
+        "api_keys_info_restructured": "Las claves API se gestionan globalmente. Vaya a la pestaña",
+        "api_keys_link_text": "Proveedores y claves API",
+        "api_keys_info_restructured_end": "para configurar las credenciales.",
+        "reasoning_title": "Razonamiento",
+        "reasoning_description": "Controla cuánto razonamiento usa el modelo para las preguntas de Deep Dive.",
+        "reasoning_off": "Desactivado",
+        "reasoning_off_desc": "Respuesta directa, más rápido.",
+        "reasoning_low": "Bajo",
+        "reasoning_low_desc": "Razonamiento ligero.",
+        "reasoning_medium": "Medio",
+        "reasoning_medium_desc": "Equilibrio entre profundidad y velocidad."
       }
+    },
+    "feature_model_picker": {
+      "provider_label": "Proveedor de modelos",
+      "model_label": "Nombre del modelo",
+      "model_placeholder": "Buscar o seleccionar modelo",
+      "view_models": "Ver modelos",
+      "unconfigured_suffix": "no configurado",
+      "unconfigured_warning": "Este proveedor no está configurado.",
+      "configure_link": "Configurar clave API",
+      "free_text_placeholder": "Introducir ID del modelo"
+    },
+    "provider_key_config": {
+      "status_configured": "configurado",
+      "status_unconfigured": "no configurado",
+      "base_url_label": "URL base",
+      "endpoint_label": "URL de endpoint",
+      "api_key_label": "Clave API",
+      "api_key_placeholder": "Introducir clave API",
+      "get_a_key": "Obtener clave API",
+      "api_keys_section_title": "Claves API y endpoints",
+      "add_provider": "Añadir proveedor",
+      "remove_provider": "Eliminar"
+    },
+    "openai_profile_config": {
+      "name_label": "Nombre del perfil",
+      "name_required": "El nombre es obligatorio",
+      "base_url_label": "URL base",
+      "base_url_invalid": "Debe ser una URL HTTP/HTTPS válida",
+      "api_key_label": "Clave API",
+      "api_key_required": "La clave API es obligatoria",
+      "default_model_label": "ID de modelo predeterminado",
+      "default_model_required": "El ID de modelo predeterminado es obligatorio",
+      "delete_profile": "Eliminar perfil"
+    },
+    "chat": {
+      "add_to_quick_models": "Añadir a modelos rápidos",
+      "quick_models": "Modelos rápidos",
+      "quick_models_hint": "Hasta {max} modelos para cambiar rápidamente en el compositor.",
+      "remove_quick_model": "Quitar de modelos rápidos",
+      "default_reasoning": "Nivel de razonamiento predeterminado",
+      "default_reasoning_hint": "Se aplica al selector de razonamiento de las pestañas nuevas. Los ajustes por pestaña son independientes."
     }
+  },
+  "chat": {
+    "time": {
+      "justNow": "Justo ahora",
+      "minutesAgo": "hace {count} min"
+    },
+    "context_donut": {
+      "aria_usage": "Context window usage:",
+      "aria_unknown": "Context usage not known yet",
+      "model": "Model",
+      "unknown_provider": "Unknown provider",
+      "context_window": "Context window",
+      "input_budget": "Input budget",
+      "input": "Input",
+      "output": "Output",
+      "cache": "Cache",
+      "source": "Source"
+    },
+    "context_warning": {
+      "source_dropped": "\"{title}\" era demasiado largo para el contexto de este modelo y se omitió. La respuesta a continuación no se basa en él — intente con un modelo con una ventana de contexto más grande.",
+      "source_dropped_untitled": "Una fuente era demasiado larga para el contexto de este modelo y se omitió. La respuesta a continuación no se basa en ella.",
+      "source_truncated": "Solo parte de \"{title}\" cupo en el contexto de este modelo.",
+      "history_trimmed": "Se descartaron {count} turno(s) anterior(es) para ajustarse al contexto de este modelo.",
+      "source_unresolved": "No se pudo cargar una fuente adjuntada anteriormente.",
+      "input_too_large": "Su mensaje es demasiado largo para la ventana de contexto de este modelo, incluso si se eliminan todas las fuentes. Rételo o cambie a un modelo con un contexto más grande."
+    },
+    "model_select": {
+      "aria_label": "Modelo de chat: {model}",
+      "default_label": "Predeterminado ({model})",
+      "manage_models": "Administrar modelos...",
+      "reasoning": "Razonamiento",
+      "warning_unresolvable": "Perfil desconocido"
+    }
+  },
+  "tab_navigation": {
+    "previous_tab": "Pestaña anterior",
+    "next_tab": "Pestaña siguiente",
+    "remove_tab": "Eliminar (Clic central)"
   },
   "prompts": {
     "title": "Prompts",

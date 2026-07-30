@@ -5,8 +5,8 @@
   import 'overlayscrollbars/overlayscrollbars.css'
   import Dialog from './Dialog.svelte'
   import { useOverlayScrollbars } from 'overlayscrollbars-svelte'
-  import { slideScaleFade } from '@/lib/ui/slideScaleFade.js'
-  import ExportMarkdownFAB from '@/components/buttons/ExportMarkdownFAB.svelte'
+  import { slideScaleFade } from '@/lib/utils/slideScaleFade.js'
+  import ExportMarkdownFAB from '@/entrypoints/archive/components/ExportMarkdownFAB.svelte'
 
   // Load icons for archive states
   loadIcons(['heroicons:archive-box', 'heroicons:archive-box-solid'])
@@ -21,11 +21,11 @@
     softDeleteHistory,
     removeFromArchiveByHistoryId,
   } from '@/lib/db/indexedDBService'
-  import TabArchive from '@/components/navigation/TabArchive.svelte'
-  import TagManagement from '@/components/displays/archive/TagManagement.svelte'
-  import HistoryTagFilter from '@/components/displays/history/HistoryTagFilter.svelte'
-  import AssignTagsModal from '@/components/modals/AssignTagsModal.svelte' // Import the new modal
-  import ActionDropdownMenu from '@/components/ui/ActionDropdownMenu.svelte' // Import the new dropdown menu
+  import TabArchive from '@/entrypoints/archive/components/TabArchive.svelte'
+  import TagManagement from '@/entrypoints/archive/components/displays/TagManagement.svelte'
+  import HistoryTagFilter from '@/entrypoints/archive/components/displays/HistoryTagFilter.svelte'
+  import AssignTagsModal from '@/entrypoints/archive/components/AssignTagsModal.svelte' // Import the new modal
+  import ActionDropdownMenu from '@/entrypoints/archive/components/ActionDropdownMenu.svelte' // Import the new dropdown menu
   import {
     archiveFilterStore,
     refreshTagCounts,
@@ -36,6 +36,7 @@
     clearContentTypeFilter,
   } from '@/stores/historyFilterStore.svelte.js'
   import { preloadTagsData } from '@/stores/tagsCacheStore.svelte.js'
+  import ConversationList from '@/entrypoints/archive/components/displays/ConversationList.svelte'
 
   const {
     list,
@@ -395,6 +396,10 @@
         <HistoryTagFilter />
       {/if}
 
+      {#if activeTab === 'conversations'}
+        <ConversationList onRefresh={onRefresh} />
+      {:else}
+
       <!-- Render matched items -->
       {#each categorizedList.matchedItems as item (item.id)}
         <div class="relative group h-10">
@@ -627,6 +632,7 @@
       {/if}
 
       <div class="">&nbsp;</div>
+      {/if}
     </div>
   </div>
 

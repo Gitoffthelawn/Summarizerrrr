@@ -7,7 +7,7 @@
   import { useOverlayScrollbars } from 'overlayscrollbars-svelte'
   import { appStateStorage } from '@/services/wxtStorageService.js'
   import SidePanel from './SidePanel.svelte'
-  import { fadeOnly } from '@/lib/ui/slideScaleFade.js'
+  import { fadeOnly } from '@/lib/utils/slideScaleFade.js'
   import {
     settings,
     loadSettings,
@@ -19,13 +19,19 @@
     themeSettings,
     applyThemeToDocument,
   } from '@/stores/themeStore.svelte.js'
-  import SummaryDisplay from '@/components/displays/archive/SummaryDisplay.svelte'
+  import SummaryDisplay from '@/entrypoints/archive/components/displays/SummaryDisplay.svelte'
   import '@fontsource-variable/geist-mono'
   import '@fontsource-variable/noto-serif'
   import '@fontsource/opendyslexic'
   import '@fontsource/mali'
   import { formatDate } from '@/lib/utils/utils.js'
   import { archiveStore } from '@/stores/archiveStore.svelte.js'
+  import {
+    conversationArchiveStore,
+    loadConversationArchive,
+    clearConversationSelection,
+  } from '@/stores/conversationArchiveStore.svelte.js'
+  import ConversationTranscript from '@/entrypoints/archive/components/displays/ConversationTranscript.svelte'
   import { animationService } from '@/services/animationService.js'
   import {
     archiveFilterStore,
@@ -52,6 +58,10 @@
   })
 
   // Event handlers
+  async function refreshArchiveData() {
+    await Promise.all([archiveStore.loadData(), loadConversationArchive()])
+  }
+
   function toggleSidePanel() {
     isSidePanelVisible = !isSidePanelVisible
     if (isSidePanelVisible) {
@@ -138,6 +148,7 @@
       // Scroll to hash after data is loaded
       setTimeout(scrollToHashHeading, 100)
     })
+    loadConversationArchive()
 
     // Listen for archive updates
     const unsubscribe = appStateStorage.watch((newValue, oldValue) => {
@@ -151,7 +162,7 @@
     window.addEventListener('resize', handleResize)
 
     // Keyboard navigation for arrow keys
-    function handleKeydown(e) {
+    async function handleKeydown(e) {
       // Don't navigate if user is typing in an input/textarea
       const activeElement = document.activeElement
       const isTyping =
@@ -163,12 +174,12 @@
 
       if (e.key === 'ArrowLeft') {
         e.preventDefault()
-        if (archiveStore.navigatePrevious(activeTab)) {
+        if (await archiveStore.navigatePrevious(activeTab)) {
           window.scrollTo({ top: 0, behavior: 'smooth' })
         }
       } else if (e.key === 'ArrowRight') {
         e.preventDefault()
-        if (archiveStore.navigateNext(activeTab)) {
+        if (await archiveStore.navigateNext(activeTab)) {
           window.scrollTo({ top: 0, behavior: 'smooth' })
         }
       }
@@ -265,9 +276,7 @@
 
     {#if isSidePanelVisible}
       <SidePanel
-        list={activeTab === 'archive'
-          ? archiveStore.archiveList
-          : archiveStore.historyList}
+        list={activeTab === 'archive' ? archiveStore.archiveList : archiveStore.historyList}
         selectedSummary={archiveStore.selectedSummary}
         selectSummary={(summary) => {
           archiveStore.selectSummary(summary, activeTab)
@@ -281,9 +290,14 @@
         selectTab={(tabName) => {
           activeTab = tabName
           archiveStore.selectTab(tabName) // Select first item of new tab
+          if (tabName === 'conversations') {
+            loadConversationArchive()
+          } else {
+            clearConversationSelection()
+          }
           clearAllTagFilters() // Reset filter when changing tabs
         }}
-        onRefresh={archiveStore.loadData}
+        onRefresh={refreshArchiveData}
       />
     {/if}
   </div>
@@ -293,13 +307,23 @@
     class="flex-1 w-full wrap-break-word relative bg-surface-1 z-20 flex flex-col gap-2
    pl-0"
   >
-    <SummaryDisplay
-      selectedSummary={archiveStore.selectedSummary}
-      {formatDate}
-      {activeTab}
-      archiveList={archiveStore.archiveList}
-      {isSidePanelVisible}
-    />
+    {#if activeTab === 'conversations'}
+      <ConversationTranscript
+        conversation={conversationArchiveStore.selectedConversation}
+        messages={conversationArchiveStore.selectedMessages}
+        sources={conversationArchiveStore.selectedSources}
+        onRefresh={loadConversationArchive}
+        {isSidePanelVisible}
+      />
+    {:else}
+      <SummaryDisplay
+        selectedSummary={archiveStore.selectedSummary}
+        {formatDate}
+        {activeTab}
+        archiveList={archiveStore.archiveList}
+        {isSidePanelVisible}
+      />
+    {/if}
     <div
       class="sticky bg-linear-to-t from-surface-1 to-surface-1/40 bottom-8 md:bottom-0 mask-t-from-50% h-16 backdrop-blur-[2px] w-full z-10 pointer-events-none"
     ></div>

@@ -25,7 +25,7 @@ npm run zip
 npm run zip:firefox
 
 # Type checking
-npm check
+npm run check
 
 # Android testing
 npm run android
@@ -35,6 +35,43 @@ npm run android:win
 The extension outputs to the `.output` folder, which you load as an unpacked extension in your browser's developer mode.
 
 ## Architecture Overview
+
+### Code Layering & Component Rules
+
+**Layering (dependency direction):**
+
+| Layer | May import |
+|---|---|
+| `src/lib/**` | `src/lib/**` only |
+| `src/services/**` | `lib`, `services`, **and `stores/settingsStore` only** |
+| `src/stores/**` | `lib`, `services`, `stores` |
+| `src/components/**`, `src/entrypoints/**` | anything |
+| everything | **never** import from `src/entrypoints/**` |
+
+Enforced by `tests/architecture/layering.test.js`, for **static and dynamic** imports alike — `await import('@/stores/…')` is not a loophole.
+
+**How `lib/` reaches downward:** through a registered port or reporter, never a direct import. The store/service registers itself at module load; the port keeps a lazy fallback so ordering can't break it.
+
+| Need | Port | Registered by |
+|---|---|---|
+| read/write settings | `lib/config/settingsPort.js` | `stores/settingsStore` |
+| WXT storage items | `lib/config/storagePort.js` | lazily resolves `services/wxtStorageService` |
+| report model status | `lib/api/modelStatusReporter.js` | `stores/summaryStore` |
+| bump capability signal | `lib/chat/capabilitiesSignal.js` | `stores/chatStore` |
+
+Those port files are the **only** entries in the test's `LAZY_PORT_ALLOWLIST`. Adding one is a design decision, not a fix for a failing test.
+
+> The `settingsStore` carve-out for `services/` is deliberate and named: `animationService`, `deepDiveService`, `toolProviderService`, and `cloudSyncService` read it directly (the last also writes back). One named, greppable exception with a test watching it beats a leaky abstraction.
+
+**Reading settings from `lib/`:** import `settings` from `settingsPort`, not the store. Reads are synchronous and safe from module load onward (the port holds the live `$state` object, which is only ever mutated in place) — so transitions like `lib/utils/slideScaleFade.js` see real values without awaiting. Call `ensureSettingsLoaded()` only when you need storage-backed values guaranteed present, e.g. before building a prompt.
+
+**Where components go:** `src/components/*` is **only** for things used by **2 or more surfaces** — measured, not aspirational: it currently holds exactly 6 folders / 32 files (`buttons` 9, `icons` 5, `inputs` 3, `markdown` 3, `ui` 6, `welcome` 6). Everything else lives next to the entrypoint that owns it, under `src/entrypoints/<surface>/components/`.
+
+`settings` and `popop` count as **one surface**, not two: `popop/App.svelte` has no `components/` directory of its own and mounts settings' `@/entrypoints/settings/components/Setting.svelte` directly. A settings-only component doesn't become "shared" just because popop also renders it.
+
+The guard test enforces **Rules 1–6**. Rule 5 bans cross-surface component imports (a file under `entrypoints/<A>/components/` must not be imported from `entrypoints/<B>/`, `A !== B`). Rule 6 requires every file under `src/components/` to be reachable — by static or dynamic import — from **2 or more** entrypoint roots. Rule 6 is what makes the placement rule stick: a new shared component needs a second real consumer before it's allowed to live in `src/components/`; there's no way to place it there "in advance" of that second usage.
+
+**Filenames must be unique:** no two `.svelte` files anywhere under `src/` may share a basename (`App.svelte` excepted — one per entrypoint). Two different `ShadowTooltip.svelte` implementations once sat in folders imported side by side; the guard test blocks a repeat.
 
 ### High-Level Structure
 
@@ -58,7 +95,13 @@ The extension is organized around **multiple entrypoints** (handled by WXT):
 
 #### Entrypoints (`src/entrypoints/`)
 
-- **`background.js`** - Main background service worker. Handles message routing, AI API proxying (especially for Ollama CORS), tab detection, storage migration, and context menus.
+- **`background/`** - Background service worker, a directory entrypoint (`background/index.js`). `index.js` keeps only what has to run at worker start-up: platform branching, the cloud-sync alarms, context menus, and the port/command/tab listeners. Everything reachable from a message lives in siblings:
+  - `messageRouter.js` — `createMessageRouter([...groups])`, one dispatch table replacing the old ~540-line `if` chain. A handler returns `true` to keep the channel open for an async `sendResponse`, `undefined` to close it — **that distinction is load-bearing**, and `message.type` is tried before `message.action` (a `REQUEST_SUMMARY` message carries `type: 'selectedText'`). Pinned by `tests/background/messageRouter.test.js`.
+  - `handlers/` — one module per domain (sync, summarize, permissions, ollama, storage, external-chat, navigation). Each exports a `create*Handlers(deps)` factory; mutable worker state (`sidePanelPort`) is passed as a getter, never captured.
+  - `ollamaService.js` — `OllamaCorsService` (declarativeNetRequest rules) + `OllamaApiProxyService` (runs `generateText` in the worker).
+  - `externalChat.js` — opening Gemini/ChatGPT/Perplexity/Grok and driving their content scripts, with the Cloudflare/SPA readiness polling and send retries that requires.
+  - `settingsBootstrap.js` — the worker's own settings loader. **Still a duplicate of `settingsStore`'s logic** (seam (f) in `docs/refactor/03-god-files.md`, not yet done).
+  - `tabInfo.js` — `describeTab()`, the single YouTube/Udemy/Coursera classification the worker sends to the side panel.
 - **`content.js`** - Shadow DOM UI injection for all websites. Uses `settingsStore` to determine if FAB (floating action button) should show.
 - **`sidepanel/`** - Main UI for the side panel; connects to background via port for messages.
 - **`settings/`** - Settings page for API keys, provider configuration, and UI preferences.
@@ -198,7 +241,7 @@ Firefox requires optional permissions for sites. The flow:
 ### 4. Mobile & Browser Detection
 
 - `browserDetection.js` - Detects mobile, Firefox, browser capabilities
-- Special handling for mobile in `background.js` (forces popup instead of side panel)
+- Special handling for mobile in `background/index.js` (forces popup instead of side panel)
 - Firefox Android uses sidebar instead of side panel
 
 ## Common Tasks
@@ -225,8 +268,8 @@ Firefox requires optional permissions for sites. The flow:
 ### Adding New Shortcuts
 
 - Update manifest in `wxt.config.ts` under `commands`
-- Add listener in `background.js` via `browser.commands.onCommand.addListener()`
-- Add corresponding message handler
+- Add listener in `background/index.js` via `browser.commands.onCommand.addListener()`
+- Add corresponding message handler in the right `background/handlers/*.js` module (a new file there needs registering in `index.js`'s `createMessageRouter([...])` call)
 
 ## Important Notes
 
@@ -239,7 +282,9 @@ Firefox requires optional permissions for sites. The flow:
 
 ## Testing
 
-Currently no explicit test configuration in package.json. For manual testing:
+`npm test` runs `vitest run` — 51 test files, including the architecture guard at `tests/architecture/layering.test.js`. Run `npm test` before considering any layering or component-placement change done.
+
+For manual testing:
 
 1. Run `npm run dev` to build with HMR
 2. Load `.output/chrome` or `.output/firefox` folder as unpacked extension

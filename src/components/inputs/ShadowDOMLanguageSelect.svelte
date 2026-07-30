@@ -3,7 +3,7 @@
   import {
     settings,
     updateSettings,
-  } from '../../stores/settingsStore.svelte.js'
+  } from '@/stores/settingsStore.svelte.js'
 
   const languages = [
     { value: 'Arabic', label: 'Arabic' },

@@ -25,13 +25,6 @@
         "system": "Hệ thống",
         "system_desc": "Sử dụng giao diện hệ thống."
       },
-      "responseMode": "Chế độ phản hồi (Chỉ làm việc trên Thanh bên)",
-      "response_mode": {
-        "streaming": "Streaming",
-        "streaming_desc": "Hiển thị phản hồi thời gian thực, trải nghiệm tốt hơn.",
-        "non_streaming": "Blocking",
-        "non_streaming_desc": "Phù hợp cho thiết bị yếu, giảm giật lag."
-      },
       "floatingButton": "Nút nổi",
       "floating_button": {
         "show": "Hiển thị",
@@ -86,7 +79,7 @@
         "position_left": "Trái",
         "position_right": "Phải"
       },
-       "one_click_mode": "1 Click tóm tắt",
+      "one_click_mode": "1 Click tóm tắt",
       "one_click_disabled_title": "Tắt",
       "one_click_disabled_desc": "Click nút FAB mở hanh bên (mặc dịnh)",
       "one_click_enabled_title": "Bật",
@@ -196,8 +189,18 @@
         "youtube_comment": "Bình luận YouTube",
         "override_note": "* Prompt tùy chỉnh sẽ ghi đè cài đặt mặc định."
       },
+      "reasoning": {
+        "title": "Suy luận",
+        "off": "Tắt",
+        "off_desc": "Trả lời trực tiếp, nhanh nhất.",
+        "low": "Thấp",
+        "low_desc": "Suy luận nhẹ.",
+        "medium": "Trung bình",
+        "medium_desc": "Cân bằng độ sâu và tốc độ."
+      },
       "comment_limit": "Giới hạn bình luận YouTube",
-      "comment_limit_desc": "Số lượng bình luận tối đa để phân tích."
+      "comment_limit_desc": "Số lượng bình luận tối đa để phân tích.",
+      "uses_gemini_basic": "Sử dụng Gemini Cơ bản"
     },
     "chatgpt_config": {
       "api_key_label": "Khóa API",
@@ -221,13 +224,7 @@
       "select_model_label": "Mô hình Gemini Advanced",
       "select_model_placeholder": "Chọn một mô hình",
       "select_gemini_model_aria_label": "Chọn mô hình Gemini",
-      "auto_fallback_label": "Tự động chuyển đổi khi quá tải",
-      "thinking_level": "Mức độ suy nghĩ",
-      "thinking_levels": {
-        "minimal": "Tối thiểu",
-        "medium": "Trung bình",
-        "high": "Cao"
-      }
+      "auto_fallback_label": "Tự động chuyển đổi khi quá tải"
     },
     "gemini_basic_config": {
       "api_key_label": "Khóa API Gemini",
@@ -235,13 +232,7 @@
       "select_model_label": "Chọn mô hình Gemini",
       "placeholder_additional_key": "Nhập khóa API Gemini bổ sung #{index}",
       "remove_api_key": "Xóa khóa API",
-      "add_key_for_higher_limit": "Thêm key để tăng giới hạn",
-      "thinking_level": "Mức độ suy nghĩ",
-      "thinking_levels": {
-        "minimal": "Tối thiểu",
-        "medium": "Trung bình",
-        "high": "Cao"
-      }
+      "add_key_for_higher_limit": "Thêm key để tăng giới hạn"
     },
     "ollama_config": {
       "endpoint_label": "Điểm cuối Ollama",
@@ -260,7 +251,7 @@
       "api_key_placeholder": "Nhập khóa API Groq của bạn",
       "model_label": "Tên mô hình",
       "get_a_key": "Lấy khóa",
-      "model_placeholder": "mixtral-8x7b-32768",
+      "model_placeholder": "llama-3.3-70b-versatile",
       "saved_status": "Đã lưu!",
       "view_models": "Xem mô hình"
     },
@@ -312,39 +303,109 @@
         "generate_new_questions": "Tạo câu hỏi mới",
         "previous_questions": "Câu hỏi trước đó",
         "next_questions": "Câu hỏi tiếp theo",
-        "ask_own_question_in_chat": "Đặt câu hỏi của bạn"
-      },
-      "perTabCache": {
-        "title": "Tab trên Sidepanel",
-        "description": "Giữ trạng thái tóm tắt riêng cho mỗi tab trình duyệt.",
-        "enabled": "Đang bật",
-        "disabled": "Đang tắt",
-        "clear_on_navigation": {
-          "title": "Xóa khi điều hướng",
-          "description": "Điều gì xảy ra với tóm tắt được lưu khi URL trang thay đổi.",
-          "keep_summary": "Giữ tóm tắt",
-          "keep_summary_desc": "Tóm tắt vẫn được lưu khi URL thay đổi",
-          "auto_clear": "Tự động xóa",
-          "auto_clear_desc": "Xóa tóm tắt khi URL thay đổi"
-        },
-        "auto_scroll": {
-          "title": "Tự động cuộn đến Tab đang hoạt động",
-          "description": "Tự động cuộn để đưa nút tab đang hoạt động vào tầm nhìn.",
-          "off": "Tắt",
-          "off_desc": "Không tự động cuộn",
-          "jump": "Nhảy",
-          "jump_desc": "Cuộn tức thì",
-          "smooth": "Mượt",
-          "smooth_desc": "Cuộn có hiệu ứng"
-        },
-        "nav": {
-          "previous_tab": "Tab trước",
-          "next_tab": "Tab tiếp theo",
-          "remove_tab": "Xóa (Click chuột giữa)"
-        },
-        "blocking_note": "Lưu ý: Chế độ phản hồi Blocking được bật để đảm bảo hiệu năng."
+        "ask_own_question_in_chat": "Đặt câu hỏi của bạn",
+        "api_keys_info_restructured": "API Keys được quản lý toàn cục. Đi tới tab",
+        "api_keys_link_text": "Providers & API Keys",
+        "api_keys_info_restructured_end": "để cấu hình thông tin đăng nhập.",
+        "reasoning_title": "Suy luận",
+        "reasoning_description": "Điều chỉnh mức độ suy luận cho câu hỏi Deep Dive.",
+        "reasoning_off": "Tắt",
+        "reasoning_off_desc": "Trả lời trực tiếp, nhanh nhất.",
+        "reasoning_low": "Thấp",
+        "reasoning_low_desc": "Suy luận nhẹ.",
+        "reasoning_medium": "Trung bình",
+        "reasoning_medium_desc": "Cân bằng độ sâu và tốc độ."
       }
+    },
+    "feature_model_picker": {
+      "provider_label": "Nhà cung cấp mô hình",
+      "model_label": "Tên mô hình",
+      "model_placeholder": "Tìm kiếm hoặc chọn mô hình",
+      "view_models": "Xem mô hình",
+      "unconfigured_suffix": "chưa cấu hình",
+      "unconfigured_warning": "Nhà cung cấp này chưa được cấu hình.",
+      "configure_link": "Cấu hình API Key",
+      "free_text_placeholder": "Nhập ID mô hình"
+    },
+    "provider_key_config": {
+      "status_configured": "đã cấu hình",
+      "status_unconfigured": "chưa cấu hình",
+      "base_url_label": "Base URL",
+      "endpoint_label": "Endpoint URL",
+      "api_key_label": "API Key",
+      "api_key_placeholder": "Nhập API Key",
+      "get_a_key": "Lấy API Key",
+      "api_keys_section_title": "API Keys & Endpoints",
+      "add_provider": "Thêm nhà cung cấp",
+      "remove_provider": "Xóa"
+    },
+    "openai_profile_config": {
+      "name_label": "Tên cấu hình",
+      "name_required": "Vui lòng nhập tên",
+      "base_url_label": "Base URL",
+      "base_url_invalid": "URL không hợp lệ (phải bắt đầu bằng http/https)",
+      "api_key_label": "API Key",
+      "api_key_required": "Vui lòng nhập API Key",
+      "default_model_label": "Model ID mặc định",
+      "default_model_required": "Vui lòng nhập Model ID mặc định",
+      "delete_profile": "Xóa cấu hình"
+    },
+    "chat": {
+      "add_to_quick_models": "Thêm vào mô hình nhanh",
+      "quick_models": "Mô hình nhanh",
+      "quick_models_hint": "Tối đa {max} mô hình để chuyển nhanh trong trình soạn.",
+      "remove_quick_model": "Xóa khỏi mô hình nhanh",
+      "default_reasoning": "Mức suy luận mặc định",
+      "default_reasoning_hint": "Áp dụng cho các tab mới. Tùy chỉnh theo tab là độc lập."
     }
+  },
+  "chat": {
+    "time": {
+      "justNow": "Vừa xong",
+      "minutesAgo": "{count} phút trước"
+    },
+    "context_donut": {
+      "aria_usage": "Mức dùng cửa sổ ngữ cảnh:",
+      "aria_unknown": "Chưa rõ mức dùng ngữ cảnh",
+      "model": "Mô hình",
+      "unknown_provider": "Unknown provider",
+      "context_window": "Cửa sổ ngữ cảnh",
+      "input_budget": "Ngân sách đầu vào",
+      "input": "Đầu vào",
+      "output": "Đầu ra",
+      "cache": "Bộ nhớ đệm",
+      "source": "Nguồn",
+      "cached_row": "đã cache",
+      "session_turns": "Session · {count} lượt",
+      "cost": "Chi phí",
+      "near_limit": "Ngữ cảnh đã dùng {percent}% — nên mở chat mới.",
+      "near_limit_turns": "Ngữ cảnh đã dùng {percent}%, còn khoảng {count} lượt — nên mở chat mới."
+    },
+    "message_meta": {
+      "aria_label": "Chi tiết tin nhắn",
+      "created": "Thời gian",
+      "sources": "{count} nguồn"
+    },
+    "context_warning": {
+      "source_dropped": "Nguồn \"{title}\" quá dài so với ngữ cảnh của mô hình này và đã bị bỏ qua. Câu trả lời bên dưới không dựa trên nguồn này — hãy thử một mô hình có cửa sổ ngữ cảnh lớn hơn.",
+      "source_dropped_untitled": "Một nguồn quá dài so với ngữ cảnh của mô hình này và đã bị bỏ qua. Câu trả lời bên dưới không dựa trên nguồn này.",
+      "source_truncated": "Chỉ một phần của \"{title}\" vừa với ngữ cảnh của mô hình này.",
+      "history_trimmed": "{count} lượt trò chuyện cũ hơn đã bị bỏ qua để phù hợp với ngữ cảnh của mô hình này.",
+      "source_unresolved": "Không thể tải nguồn được đính kèm trước đó.",
+      "input_too_large": "Tin nhắn của bạn quá dài so với cửa sổ ngữ cảnh của mô hình này, ngay cả khi đã xóa tất cả các nguồn. Hãy rút ngắn tin nhắn hoặc chuyển sang mô hình có ngữ cảnh lớn hơn."
+    },
+    "model_select": {
+      "aria_label": "Mô hình chat: {model}",
+      "default_label": "Mặc định ({model})",
+      "manage_models": "Quản lý mô hình...",
+      "reasoning": "Suy luận",
+      "warning_unresolvable": "Không rõ cấu hình"
+    }
+  },
+  "tab_navigation": {
+    "previous_tab": "Tab trước",
+    "next_tab": "Tab tiếp theo",
+    "remove_tab": "Xóa (Click chuột giữa)"
   },
   "prompts": {
     "title": "Prompts",

@@ -4,9 +4,9 @@
   import { onMount, onDestroy } from 'svelte'
 
   let { videoTitle = '', hasTranscript = true, videoUrl = '' } = $props()
-  let currentVideoTitle = $state(videoTitle) // Reactive state for video title
-  let currentHasTranscript = $state(hasTranscript) // Track transcript availability
-  let currentVideoUrl = $state(videoUrl) // Track video URL
+  let currentVideoTitle = $state((() => videoTitle)()) // Reactive state for video title
+  let currentHasTranscript = $state((() => hasTranscript)()) // Track transcript availability
+  let currentVideoUrl = $state((() => videoUrl)()) // Track video URL
   let isLoading = $state(false)
   let loadingStates = $state({
     gemini: false,

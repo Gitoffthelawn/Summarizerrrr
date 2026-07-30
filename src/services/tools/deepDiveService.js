@@ -15,6 +15,10 @@ import {
   buildHistorySection,
 } from '@/lib/prompts/tools/deepDive.js'
 import { settings } from '@/stores/settingsStore.svelte.js'
+import {
+  buildReasoningRequestOptions,
+  normalizeTaskReasoningLevel,
+} from '@/lib/api/reasoningConfig.js'
 
 /**
  * Generates follow-up questions based on summary content
@@ -32,7 +36,8 @@ export async function generateFollowUpQuestions(
   pageUrl,
   summaryLang = 'English',
   questionHistory = [],
-  isRegenerate = false
+  isRegenerate = false,
+  { abortSignal } = {},
 ) {
   console.log('[deepDiveService] Generating follow-up questions...')
   console.log('[deepDiveService] History size:', questionHistory.length)
@@ -86,9 +91,12 @@ export async function generateFollowUpQuestions(
     // ✅ Build full settings object từ providerConfig
     const toolSettings = buildModelSettings(providerConfig, settings)
 
-    // ✅ Build providerOptions to disable thinking for faster question generation
-    // Thinking models (Gemini 2.5+, Gemini 3+) waste time reasoning for simple tasks
-    const noThinkingOptions = buildNoThinkingProviderOptions(providerConfig.provider, providerConfig.model)
+    // Build reasoning options from user setting (default 'off' = no thinking)
+    const reasoningOptions = buildReasoningRequestOptions(
+      providerConfig.provider,
+      normalizeTaskReasoningLevel(settings.tools?.deepDive?.reasoningLevel),
+      providerConfig.model
+    )
 
     // Attempt 1: Try with standard prompt
     let response = await generateContent(
@@ -96,7 +104,7 @@ export async function generateFollowUpQuestions(
       toolSettings,
       systemInstruction,
       userPrompt,
-      { providerOptions: noThinkingOptions }
+      { abortSignal, ...reasoningOptions }
     )
 
     console.log('[deepDiveService] Raw AI response (attempt 1):', response)
@@ -125,7 +133,7 @@ export async function generateFollowUpQuestions(
           toolSettings,
           correctedSystemInstruction,
           userPrompt,
-          { providerOptions: noThinkingOptions }
+          { abortSignal, ...reasoningOptions }
         )
 
         console.log(
@@ -536,60 +544,4 @@ export function validateDeepDiveAvailability() {
   }
 }
 
-/**
- * Builds providerOptions to disable/minimize thinking for faster question generation.
- * Thinking is unnecessary for generating follow-up questions and wastes significant time.
- * 
- * Only supported models:
- * - Gemini 2.5 series: uses thinkingBudget (0 = disable)
- * - Gemini 3/3.1 series: uses thinkingLevel ('minimal')
- * - Gemma, older Gemini, and non-Google models: no thinking config support
- * 
- * @param {string} providerId - The provider identifier
- * @param {string} modelName - The model name to check compatibility
- * @returns {Object} providerOptions object to pass to generateText
- */
-function buildNoThinkingProviderOptions(providerId, modelName) {
-  // Only Google/Gemini models support thinkingConfig
-  if (providerId !== 'gemini' && providerId !== 'openrouter') {
-    return {}
-  }
 
-  const lowerModel = (modelName || '').toLowerCase()
-
-  // Gemma 4 models: support thinkingLevel ('minimal' and 'high' only)
-  if (lowerModel.includes('gemma')) {
-    return {
-      google: {
-        thinkingConfig: {
-          thinkingLevel: 'minimal', // Fastest response, minimal reasoning
-        },
-      },
-    }
-  }
-
-  // Gemini 2.5 series: use thinkingBudget
-  if (lowerModel.includes('gemini-2.5')) {
-    return {
-      google: {
-        thinkingConfig: {
-          thinkingBudget: 0, // 0 = disable thinking (except Pro which has min 128)
-        },
-      },
-    }
-  }
-
-  // Gemini 3/3.1 series: use thinkingLevel
-  if (lowerModel.includes('gemini-3')) {
-    return {
-      google: {
-        thinkingConfig: {
-          thinkingLevel: 'minimal', // Lowest thinking for fastest response
-        },
-      },
-    }
-  }
-
-  // Other Gemini models (older, or unknown) - don't set thinkingConfig
-  return {}
-}

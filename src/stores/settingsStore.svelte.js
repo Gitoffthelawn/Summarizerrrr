@@ -2,7 +2,21 @@
 import { get } from 'svelte/store'
 import { locale } from 'svelte-i18n'
 import { settingsStorage } from '@/services/wxtStorageService.js'
-import { sanitizeSettings } from '@/lib/config/settingsSchema.js'
+import {
+  setSettingsProvider,
+  setSettingsObject,
+  setSettingsWriter,
+} from '@/lib/config/settingsPort.js'
+import { sanitizeSettings, migrateLegacyGeminiAdvanced } from '@/lib/config/settingsSchema.js'
+import { normalizeProviderId, getLegacyModel, getProvider, getDefaultModel, listConfiguredProviders, isProviderConfigured } from '@/lib/providers/providerRegistry.js'
+import {
+  normalizeProfiles,
+  isOpenAICompatibleProfileId,
+  findProfileById,
+  validateProfile,
+  generateProfileId,
+  getNextDefaultName
+} from '@/lib/providers/openAICompatibleProfiles.js'
 
 // --- Default Settings (Merged) ---
 const DEFAULT_SETTINGS = {
@@ -16,33 +30,27 @@ const DEFAULT_SETTINGS = {
   geminiApiKey: '',
   geminiAdditionalApiKeys: [], // New storage for extra keys
   selectedGeminiModel: 'gemini-3-flash-preview',
-  geminiAdvancedApiKey: '',
-  geminiAdvancedAdditionalApiKeys: [], // Additional API keys for Gemini Advanced mode
-  selectedGeminiAdvancedModel: 'gemini-3-flash-preview',
-  geminiAdvancedEnableAutoFallback: true, // Enable auto-fallback for Advanced mode
-  geminiThinkingLevel: 'minimal', // 'minimal' | 'medium' | 'high' — for Basic mode
-  geminiAdvancedThinkingLevel: 'minimal', // 'minimal' | 'medium' | 'high' — for Advanced mode
+  geminiEnableAutoFallback: true, // Enable auto-fallback for both modes
   openaiCompatibleApiKey: '',
   openaiCompatibleBaseUrl: '',
   selectedOpenAICompatibleModel: '',
   openrouterApiKey: '',
-  selectedOpenrouterModel: 'deepseek/deepseek-r1-0528:free',
+  selectedOpenrouterModel: 'openrouter/free',
   deepseekApiKey: '',
   deepseekBaseUrl: 'https://api.deepseek.com/',
-  selectedDeepseekModel: 'deepseek-chat',
+  selectedDeepseekModel: 'deepseek-v4-flash',
   chatgptApiKey: '',
   chatgptBaseUrl: 'https://api.openai.com/v1',
-  selectedChatgptModel: 'gpt-5-mini',
+  selectedChatgptModel: 'gpt-5.6-luna',
   ollamaEndpoint: 'http://127.0.0.1:11434/',
   selectedOllamaModel: 'deepseek-r1:8b',
   lmStudioEndpoint: 'http://localhost:1234/v1',
   selectedLmStudioModel: 'lmstudio-community/gemma-2b-it-GGUF',
   groqApiKey: '',
-  selectedGroqModel: 'moonshotai/kimi-k2-instruct',
+  selectedGroqModel: 'llama-3.3-70b-versatile',
   cerebrasApiKey: '',
-  selectedCerebrasModel: 'llama-3.3-70b',
+  selectedCerebrasModel: 'gpt-oss-120b',
   selectedFont: 'default',
-  enableStreaming: true,
   uiLang: 'en',
   mobileSheetHeight: 80, // Chiều cao MobileSheet (40-100 svh)
   mobileSheetBackdropOpacity: false, // Enable backdrop opacity for MobileSheet
@@ -120,10 +128,19 @@ const DEFAULT_SETTINGS = {
   commentCustomPromptContent: '',
   commentCustomSystemInstructionContent: '',
 
+  // Chat (Phase 6A). This is deliberately separate from summary tone and
+  // prompt templates: it contains stable, conversation-level instructions.
+  chatGlobalPersona: {
+    content: '',
+    language: null,
+    tone: null,
+    version: 1,
+  },
+  chatUserSkills: [],
+  chatSkillMigrationVersion: 0,
+
   // Advanced Mode (from former stores)
   isAdvancedMode: false,
-  temperature: 0.7,
-  topP: 0.9,
 
   // Tools Configuration
   tools: {
@@ -134,16 +151,28 @@ const DEFAULT_SETTINGS = {
       customModel: 'gemma-4-26b-a4b-it',
       autoGenerate: true,
       defaultChatProvider: 'gemini',
+      reasoningLevel: 'off',
     },
     cloudSync: {
       enabled: true, // Default enabled for backward compatibility
     },
-    perTabCache: {
-      enabled: true, // Keep separate summary state for each tab
-      autoResetOnNavigation: true, // Reset cache when navigating to new URL in same tab
-      autoScrollBehavior: 'smooth', // 'off' | 'jump' | 'smooth'
-    },
   },
+  summarize: {
+    provider: 'gemini',
+    model: 'gemini-3-flash-preview',
+    reasoningLevel: 'off',
+  },
+  chat: {
+    provider: 'gemini',
+    model: 'gemini-3-flash-preview',
+    defaultReasoningLevel: 'provider-default',
+    quickModels: [],
+  },
+
+  // Added Providers ("Add provider" flow)
+  addedProviders: ['gemini'],
+
+  openaiCompatibleProfiles: [],
 
   // Metadata
   lastModified: 0,
@@ -153,6 +182,19 @@ const DEFAULT_SETTINGS = {
 export let settings = $state({ ...DEFAULT_SETTINGS })
 let _isInitializedPromise = null
 let _isSyncingFromCloud = false // Flag to prevent sync loop when applying cloud settings
+
+// Register with settings port to break lib -> store dependency.
+// `setSettingsObject` runs synchronously at module load so that synchronous
+// readers in lib/ (e.g. the transitions in lib/utils/slideScaleFade.js) see
+// DEFAULT_SETTINGS immediately instead of `undefined` until the first
+// `ensureSettingsLoaded()` await. `settings` is only ever mutated in place, so
+// this reference stays live.
+setSettingsObject(settings)
+setSettingsProvider(async () => {
+  await loadSettings()
+  return settings
+})
+setSettingsWriter((patch) => updateSettings(patch))
 
 // --- Helper Functions ---
 
@@ -215,6 +257,58 @@ function migrateDeprecatedGeminiProModels(settings) {
 }
 
 /**
+ * Replaces DeepSeek's retired compatibility aliases everywhere they can be
+ * persisted in settings. Both aliases previously routed to V4 Flash; thinking
+ * mode is controlled independently by the feature reasoning setting.
+ *
+ * @param {Object} settings - Settings object to migrate
+ * @returns {boolean} - True if any migration was performed
+ */
+function migrateDeprecatedDeepSeekModels(settings) {
+  const deprecatedModels = new Set(['deepseek-chat', 'deepseek-reasoner'])
+  const newModel = 'deepseek-v4-flash'
+  let migrated = false
+
+  if (deprecatedModels.has(settings.selectedDeepseekModel)) {
+    settings.selectedDeepseekModel = newModel
+    migrated = true
+  }
+
+  for (const feature of [settings.summarize, settings.chat]) {
+    if (feature?.provider === 'deepseek' && deprecatedModels.has(feature.model)) {
+      feature.model = newModel
+      migrated = true
+    }
+  }
+
+  if (
+    settings.tools?.deepDive?.customProvider === 'deepseek' &&
+    deprecatedModels.has(settings.tools.deepDive.customModel)
+  ) {
+    settings.tools.deepDive.customModel = newModel
+    migrated = true
+  }
+
+  if (Array.isArray(settings.chat?.quickModels)) {
+    settings.chat.quickModels = settings.chat.quickModels.map((quickModel) => {
+      if (
+        quickModel?.provider === 'deepseek' &&
+        deprecatedModels.has(quickModel.model)
+      ) {
+        migrated = true
+        return { ...quickModel, model: newModel }
+      }
+      return quickModel
+    })
+  }
+
+  if (migrated) {
+    console.log(`[settingsStore] Migration: DeepSeek legacy aliases -> ${newModel}`)
+  }
+  return migrated
+}
+
+/**
  * Migrates deprecated 'alien' tone to 'witty'
  * @param {Object} settings - Settings object to migrate
  * @returns {boolean} - True if any migration was performed
@@ -268,6 +362,241 @@ function normalizeFabWhitelist(whitelist) {
   return ['youtube.com', 'coursera.org', 'udemy.com']
 }
 
+/**
+ * Migrates feature model settings if they are absent.
+ * If the incoming payload is full and missing `summarize`, it treats it as legacy data
+ * and derives the blocks from legacy keys.
+ *
+ * @param {Object} cleanStoredSettings - Clean settings object
+ * @param {boolean} isSummarizeAbsent - Whether the summarize block was absent before default-merging
+ * @param {boolean} isChatAbsent - Whether the chat block was absent before default-merging
+ * @returns {Object} - Migrated settings object
+ */
+function migrateFeatureModelSettings(cleanStoredSettings, isSummarizeAbsent, isChatAbsent) {
+  const settings = cleanStoredSettings
+
+  // If summarize block is absent, derive it from legacy keys
+  if (isSummarizeAbsent) {
+    let provider = 'gemini'
+    let model = settings.selectedGeminiModel || 'gemini-3-flash-preview'
+
+    if (settings.isAdvancedMode === true) {
+      if (settings.selectedProvider === 'gemini') {
+        provider = 'gemini'
+        model = settings.selectedGeminiModel || 'gemini-3-flash-preview'
+      } else {
+        provider = normalizeProviderId(settings.selectedProvider)
+        model = getLegacyModel(provider, settings) || getDefaultModel(provider, settings) || 'gemini-3-flash-preview'
+      }
+    }
+
+    settings.summarize = {
+      ...(settings.summarize || {}),
+      provider,
+      model,
+    }
+    console.log('[settingsStore] Migration: Derived summarize block:', settings.summarize)
+  }
+
+  // If chat block is absent, derive it from the same logic (chat follows the global provider today)
+  if (isChatAbsent) {
+    let provider = 'gemini'
+    let model = settings.selectedGeminiModel || 'gemini-3-flash-preview'
+
+    if (settings.isAdvancedMode === true) {
+      if (settings.selectedProvider === 'gemini') {
+        provider = 'gemini'
+        model = settings.selectedGeminiModel || 'gemini-3-flash-preview'
+      } else {
+        provider = normalizeProviderId(settings.selectedProvider)
+        model = getLegacyModel(provider, settings) || getDefaultModel(provider, settings) || 'gemini-3-flash-preview'
+      }
+    }
+
+    settings.chat = {
+      provider,
+      model,
+      defaultReasoningLevel: 'provider-default',
+      quickModels: [],
+    }
+    console.log('[settingsStore] Migration: Derived chat block:', settings.chat)
+  }
+
+  return settings
+}
+
+/**
+ * Normalizes and migrates raw settings objects entering the extension.
+ * Routes every full-object ingress path.
+ *
+ * @param {Object} rawSettings - Raw settings object
+ * @returns {Object} - Normalized and migrated settings object
+ */
+export function normalizeStoredSettings(rawSettings) {
+  if (!rawSettings || typeof rawSettings !== 'object') {
+    return { ...DEFAULT_SETTINGS }
+  }
+
+  // 0. Migrate legacy geminiAdvanced keys BEFORE sanitize strips them
+  const migratedSettings = migrateLegacyGeminiAdvanced(rawSettings)
+
+  // 1. Sanitize the settings object
+  let cleanSettings = sanitizeSettings(migratedSettings)
+
+  // 2. Determine if the summarize or chat blocks are absent *before* deep-merging defaults.
+  // Test `provider`, not the block itself: migrateLegacyGeminiAdvanced synthesises a
+  // `summarize` block to carry the migrated reasoning level, and a block holding only
+  // that level must still be treated as absent so the legacy provider/model derivation
+  // in step 4 still runs.
+  const isSummarizeAbsent = cleanSettings.summarize?.provider === undefined
+  const isChatAbsent = cleanSettings.chat?.provider === undefined
+
+  // 3. Deep-merge of the summarize and chat blocks with defaults
+  if (!isSummarizeAbsent) {
+    cleanSettings.summarize = {
+      ...DEFAULT_SETTINGS.summarize,
+      ...cleanSettings.summarize,
+    }
+  }
+  if (!isChatAbsent) {
+    cleanSettings.chat = {
+      ...DEFAULT_SETTINGS.chat,
+      ...cleanSettings.chat,
+    }
+  }
+
+  // 4. Migrate feature model settings
+  cleanSettings = migrateFeatureModelSettings(cleanSettings, isSummarizeAbsent, isChatAbsent)
+
+  // 5. Seed addedProviders if absent (migration for existing users)
+  if (cleanSettings.addedProviders === undefined) {
+    const configuredIds = listConfiguredProviders(cleanSettings).map(p => p.id)
+    const seeded = ['gemini', ...configuredIds.filter(id => id !== 'gemini')]
+    cleanSettings.addedProviders = seeded
+    console.log('[settingsStore] Migration: Seeded addedProviders:', seeded)
+  }
+
+  // 6. Migrate and normalize openaiCompatibleProfiles
+  let profiles = cleanSettings.openaiCompatibleProfiles;
+  if (profiles === undefined) {
+    const legacyKey = cleanSettings.openaiCompatibleApiKey || '';
+    const legacyUrl = cleanSettings.openaiCompatibleBaseUrl || '';
+    const legacyModel = cleanSettings.selectedOpenAICompatibleModel || '';
+    const hasAddedLegacy = Array.isArray(cleanSettings.addedProviders) && cleanSettings.addedProviders.includes('openaiCompatible');
+
+    if (legacyKey.trim() || legacyUrl.trim() || legacyModel.trim() || hasAddedLegacy) {
+      profiles = [{
+        id: 'openai-compatible-legacy',
+        name: 'OpenAI Compatible',
+        baseUrl: legacyUrl.trim(),
+        apiKey: legacyKey.trim(),
+        defaultModel: legacyModel.trim()
+      }];
+      console.log('[settingsStore] Migration: Created legacy OpenAI Compatible profile from flat fields');
+    } else {
+      profiles = [];
+    }
+  }
+  cleanSettings.openaiCompatibleProfiles = normalizeProfiles(profiles);
+
+  // 7. Reference Migration: Replace 'openaiCompatible' with 'openai-compatible-legacy' if it exists in profiles
+  const hasLegacyProfile = (cleanSettings.openaiCompatibleProfiles || []).some(p => p.id === 'openai-compatible-legacy')
+  if (hasLegacyProfile) {
+    // 7.1. Repair summarize
+    if (cleanSettings.summarize?.provider === 'openaiCompatible') {
+      cleanSettings.summarize.provider = 'openai-compatible-legacy'
+      if (!cleanSettings.summarize.model && cleanSettings.selectedOpenAICompatibleModel) {
+        cleanSettings.summarize.model = cleanSettings.selectedOpenAICompatibleModel
+      }
+    }
+
+    // 7.2. Repair chat
+    if (cleanSettings.chat?.provider === 'openaiCompatible') {
+      cleanSettings.chat.provider = 'openai-compatible-legacy'
+      if (!cleanSettings.chat.model && cleanSettings.selectedOpenAICompatibleModel) {
+        cleanSettings.chat.model = cleanSettings.selectedOpenAICompatibleModel
+      }
+    }
+    // 7.3. Repair deepDive
+    if (cleanSettings.tools?.deepDive?.customProvider === 'openaiCompatible') {
+      cleanSettings.tools.deepDive.customProvider = 'openai-compatible-legacy'
+      if (!cleanSettings.tools.deepDive.customModel && cleanSettings.selectedOpenAICompatibleModel) {
+        cleanSettings.tools.deepDive.customModel = cleanSettings.selectedOpenAICompatibleModel
+      }
+    }
+
+    // 7.4. Repair quickModels
+    if (Array.isArray(cleanSettings.chat?.quickModels)) {
+      cleanSettings.chat.quickModels = cleanSettings.chat.quickModels.map(qm => {
+        if (qm.provider === 'openaiCompatible') {
+          return { ...qm, provider: 'openai-compatible-legacy' }
+        }
+        return qm
+      })
+    }
+
+    // 7.5. Remove static 'openaiCompatible' from addedProviders
+    if (Array.isArray(cleanSettings.addedProviders)) {
+      cleanSettings.addedProviders = cleanSettings.addedProviders.filter(id => id !== 'openaiCompatible')
+    }
+  }
+
+  // 8. DeepSeek V4 renamed the public API models and is retiring the old
+  // deepseek-chat/deepseek-reasoner compatibility aliases.
+  migrateDeprecatedDeepSeekModels(cleanSettings)
+
+  return cleanSettings
+}
+
+/**
+ * Applies mirrors from summarize settings block changes to legacy keys.
+ *
+ * @param {Object} patch - The settings patch to apply
+ * @returns {Object} - The extended patch containing mirrored values
+ */
+export function applyFeatureModelMirrors(patch) {
+  if (!patch || !patch.summarize) {
+    return patch
+  }
+
+  const { provider: providerId, model } = patch.summarize
+
+  if (isOpenAICompatibleProfileId(providerId)) {
+    const profile = findProfileById(patch.openaiCompatibleProfiles || settings.openaiCompatibleProfiles, providerId)
+    if (profile) {
+      patch.openaiCompatibleApiKey = profile.apiKey
+      patch.openaiCompatibleBaseUrl = profile.baseUrl
+      patch.selectedOpenAICompatibleModel = model
+      patch.selectedProvider = 'openaiCompatible'
+      patch.isAdvancedMode = true
+      patch.isSummaryAdvancedMode = true
+    }
+  } else {
+    const provider = getProvider(providerId)
+    if (provider) {
+      // Determine adapterId and legacyModelField
+      const adapterId = provider.adapterId
+      const legacyModelField = provider.legacyModelField
+
+      // Apply mirroring rules
+      if (providerId === 'gemini') {
+        patch.selectedProvider = 'gemini'
+        // leave isAdvancedMode untouched
+      } else {
+        patch.selectedProvider = adapterId
+        patch.isAdvancedMode = true
+        patch.isSummaryAdvancedMode = true
+      }
+
+      if (legacyModelField) {
+        patch[legacyModelField] = model
+      }
+    }
+  }
+
+  return patch
+}
+
 // --- Actions ---
 
 /**
@@ -295,8 +624,8 @@ export async function loadSettings() {
           }
         })
 
-        // ✅ MIGRATION: Sanitize to ensure only valid keys remain
-        const cleanStoredSettings = sanitizeSettings(storedSettings)
+        // ✅ MIGRATION: Normalize stored settings (including sanitize, merge, and feature block migration)
+        const cleanStoredSettings = normalizeStoredSettings(storedSettings)
 
         // ✅ MIGRATION: Migrate deprecated Gemini model names
         migrateDeprecatedGeminiModels(cleanStoredSettings)
@@ -393,8 +722,21 @@ export async function loadSettings() {
           })
         }
 
+        // Tab behavior is now fixed by surface: Summary resets on navigation,
+        // while Chat keeps its per-tab conversation. Drop the legacy toggle.
+        delete cleanStoredSettings.tools.perTabCache
+
         // ✅ MIGRATION: Upgrade Deep Dive model to gemma-4-26b-a4b-it
         migrateDeepDiveModel(cleanStoredSettings)
+
+        // Keep legacy prompt settings intact while exposing customized pairs
+        // as compact chat skills. The migration also removes deprecated skill
+        // fields and is idempotent across every settings initialization.
+        const { migrateLegacyPromptsToSkills } = await import(
+          '@/lib/chat/skills/skillMigration.js'
+        )
+        const skillMigration = migrateLegacyPromptsToSkills(cleanStoredSettings)
+        Object.assign(cleanStoredSettings, skillMigration.settings)
 
         // MIGRATION: Split geminiApiKeys into geminiApiKey + geminiAdditionalApiKeys
         if (cleanStoredSettings.geminiApiKeys && cleanStoredSettings.geminiApiKeys.length > 0) {
@@ -465,14 +807,23 @@ export async function forceReloadSettings() {
  * Updates one or more settings and saves the entire settings object to storage.
  * @param {Partial<typeof DEFAULT_SETTINGS>} newSettings
  */
-export async function updateSettings(newSettings) {
+export async function updateSettings(newSettings, options = {}) {
   if (!_isInitializedPromise) {
     await loadSettings() // Ensure store is loaded before updating
   }
   await _isInitializedPromise
 
-  // ✅ FIX: Sanitize input để loại bỏ invalid keys (metadata, theme, nested settings)
-  const cleanNewSettings = sanitizeSettings(newSettings)
+  // Apply feature model mirrors if patch contains summarize
+  if (newSettings && newSettings.summarize) {
+    newSettings = applyFeatureModelMirrors(newSettings)
+  }
+
+  const isFullIngress = options.isFullIngress === true
+
+  // ✅ FIX: Sanitize input hoặc normalizeStoredSettings nếu là full ingress
+  const cleanNewSettings = isFullIngress
+    ? normalizeStoredSettings(newSettings)
+    : sanitizeSettings(newSettings)
 
   // Read current values from storage to compare (settings object may already be mutated by bind:value)
   const storedSettings = await settingsStorage.getValue()
@@ -544,7 +895,7 @@ export async function updateSettings(newSettings) {
 export async function updateSettingsFromCloud(newSettings) {
   _isSyncingFromCloud = true
   try {
-    await updateSettings(newSettings)
+    await updateSettings(newSettings, { isFullIngress: true })
   } finally {
     _isSyncingFromCloud = false
   }
@@ -595,9 +946,11 @@ export function subscribeToSettingsChanges() {
         }
       }
 
+      const normalized = normalizeStoredSettings(newValue)
+
       const mergedSettings = {
         ...DEFAULT_SETTINGS,
-        ...newValue,
+        ...normalized,
       }
       Object.assign(settings, mergedSettings)
       if (newValue.uiLang && newValue.uiLang !== get(locale)) {
@@ -726,4 +1079,214 @@ export function getToolSettings(toolName) {
  */
 export function isToolEnabled(toolName) {
   return settings.tools?.[toolName]?.enabled || false
+}
+
+/**
+ * Updates a specific feature's settings block (e.g. summarize or chat).
+ * Spreads the current block, applies the patch, and writes the whole block.
+ *
+ * @param {string} feature - Name of the feature ('summarize' or 'chat')
+ * @param {Object} updates - Settings patch to apply to the feature block
+ */
+export async function updateFeatureSettings(feature, updates) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  if (!settings[feature]) {
+    console.error(`[settingsStore] Feature "${feature}" settings block not found`)
+    return
+  }
+
+  const updatedFeature = {
+    ...settings[feature],
+    ...updates,
+  }
+
+  await updateSettings({ [feature]: updatedFeature })
+}
+
+// --- Added Provider Management ---
+
+/**
+ * Adds a provider to the addedProviders list (dedupe-append).
+ * @param {string} id - Provider ID to add
+ */
+export async function addProvider(id) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  const current = settings.addedProviders || ['gemini']
+  if (current.includes(id)) return // Already added
+
+  await updateSettings({ addedProviders: [...current, id] })
+}
+
+/**
+ * Removes a provider from the addedProviders list.
+ * Gemini cannot be removed. Does NOT clear the provider's API key (non-destructive).
+ * @param {string} id - Provider ID to remove
+ */
+export async function removeProvider(id) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  if (id === 'gemini') return // Never remove Gemini
+
+  const current = settings.addedProviders || ['gemini']
+  await updateSettings({ addedProviders: current.filter(p => p !== id) })
+}
+
+export function getFallbackProviderSelection() {
+  const configured = (settings.addedProviders || [])
+    .filter(pId => pId !== 'openaiCompatible')
+    .filter(pId => isProviderConfigured(pId, settings))
+  if (configured.length > 0) {
+    const fallbackId = configured[0]
+    const fallbackModel = getDefaultModel(fallbackId, settings) || 'gemini-3-flash-preview'
+    return { provider: fallbackId, model: fallbackModel }
+  }
+  return { provider: 'gemini', model: 'gemini-3-flash-preview' }
+}
+
+/**
+ * Adds a new OpenAI-compatible profile.
+ * @param {Object} [initialValues] - Optional initial profile values
+ * @returns {Promise<string>} - The created profile ID
+ */
+export async function addOpenAICompatibleProfile(initialValues = {}) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  const id = generateProfileId()
+  const name = initialValues.name && initialValues.name.trim().length > 0
+    ? initialValues.name.trim()
+    : getNextDefaultName(settings.openaiCompatibleProfiles || [])
+
+  const newProfile = {
+    id,
+    name,
+    baseUrl: typeof initialValues.baseUrl === 'string' ? initialValues.baseUrl.trim() : '',
+    apiKey: typeof initialValues.apiKey === 'string' ? initialValues.apiKey.trim() : '',
+    defaultModel: typeof initialValues.defaultModel === 'string' ? initialValues.defaultModel.trim() : '',
+  }
+
+  const updatedProfiles = [...(settings.openaiCompatibleProfiles || []), newProfile]
+  await updateSettings({ openaiCompatibleProfiles: updatedProfiles })
+  return id
+}
+
+/**
+ * Updates an OpenAI-compatible profile.
+ * @param {string} id - Profile ID to update
+ * @param {Object} patch - Profile patch containing allowed fields
+ */
+export async function updateOpenAICompatibleProfile(id, patch) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  const currentProfiles = settings.openaiCompatibleProfiles || []
+  const updatedProfiles = currentProfiles.map(p => {
+    if (p.id === id) {
+      const updated = { ...p }
+      if (patch.name !== undefined) updated.name = patch.name.trim()
+      if (patch.baseUrl !== undefined) updated.baseUrl = patch.baseUrl.trim()
+      if (patch.apiKey !== undefined) updated.apiKey = patch.apiKey.trim()
+      if (patch.defaultModel !== undefined) updated.defaultModel = patch.defaultModel.trim()
+      return updated
+    }
+    return p
+  })
+
+  const updates = { openaiCompatibleProfiles: updatedProfiles }
+
+  // If this profile is selected by Summary, refresh mirrors atomically
+  if (settings.summarize?.provider === id) {
+    const profile = updatedProfiles.find(p => p.id === id)
+    if (profile) {
+      updates.openaiCompatibleApiKey = profile.apiKey
+      updates.openaiCompatibleBaseUrl = profile.baseUrl
+      updates.selectedOpenAICompatibleModel = settings.summarize.model
+    }
+  }
+
+  await updateSettings(updates)
+}
+
+/**
+ * Removes an OpenAI-compatible profile and repairs references.
+ * @param {string} id - Profile ID to remove
+ */
+export async function removeOpenAICompatibleProfile(id) {
+  if (!_isInitializedPromise) {
+    await loadSettings()
+  }
+  await _isInitializedPromise
+
+  const currentProfiles = settings.openaiCompatibleProfiles || []
+  const updatedProfiles = currentProfiles.filter(p => p.id !== id)
+
+  const updates = { openaiCompatibleProfiles: updatedProfiles }
+
+  if (id === 'openai-compatible-legacy') {
+    updates.openaiCompatibleApiKey = ''
+    updates.openaiCompatibleBaseUrl = ''
+    updates.selectedOpenAICompatibleModel = ''
+  }
+
+  let fallback = null
+  const getFallback = () => {
+    if (!fallback) fallback = getFallbackProviderSelection()
+    return fallback
+  }
+
+  // Repair summarize
+  if (settings.summarize?.provider === id) {
+    updates.summarize = getFallback()
+  }
+
+  // Repair chat
+  if (settings.chat?.provider === id) {
+    const f = getFallback()
+    updates.chat = {
+      ...settings.chat,
+      provider: f.provider,
+      model: f.model,
+    }
+  }
+
+  // Repair tools.deepDive
+  if (settings.tools?.deepDive?.customProvider === id) {
+    const f = getFallback()
+    updates.tools = {
+      ...settings.tools,
+      deepDive: {
+        ...settings.tools.deepDive,
+        customProvider: f.provider,
+        customModel: f.model,
+      },
+    }
+  }
+
+  // Repair quickModels
+  if (Array.isArray(settings.chat?.quickModels)) {
+    const updatedQuickModels = settings.chat.quickModels.filter(qm => qm.provider !== id)
+    if (JSON.stringify(updatedQuickModels) !== JSON.stringify(settings.chat.quickModels)) {
+      if (!updates.chat) {
+        updates.chat = { ...settings.chat }
+      }
+      updates.chat.quickModels = updatedQuickModels
+    }
+  }
+
+  await updateSettings(updates)
 }

@@ -25,13 +25,6 @@
         "system": "跟随系统",
         "system_desc": "自动匹配您设备的主题。"
       },
-      "responseMode": "响应模式 (仅在侧边栏工作)",
-      "response_mode": {
-        "streaming": "流式",
-        "streaming_desc": "即时显示回答，推荐使用。",
-        "non_streaming": "普通",
-        "non_streaming_desc": "适用于网络较慢的情况，避免卡顿。"
-      },
       "floatingButton": "浮动按钮",
       "floating_button": {
         "show": "显示",
@@ -121,8 +114,18 @@
         "youtube_comment": "YouTube评论",
         "override_note": "* 激活的提示将覆盖基础设置。"
       },
+      "reasoning": {
+        "title": "推理",
+        "off": "关闭",
+        "off_desc": "直接回答，最快。",
+        "low": "低",
+        "low_desc": "轻度推理。",
+        "medium": "中",
+        "medium_desc": "平衡深度和速度。"
+      },
       "comment_limit": "YouTube评论限制",
-      "comment_limit_desc": "分析评论的最大数量。"
+      "comment_limit_desc": "分析评论的最大数量。",
+      "uses_gemini_basic": "使用 Gemini 基础版"
     },
     "chatgpt_config": {
       "api_key_label": "API 密钥",
@@ -146,13 +149,7 @@
       "select_model_label": "Gemini Advanced 模型",
       "select_model_placeholder": "选择模型",
       "select_gemini_model_aria_label": "选择 Gemini 模型",
-      "auto_fallback_label": "超载时自动回退",
-      "thinking_level": "思考水平",
-      "thinking_levels": {
-        "minimal": "最小",
-        "medium": "中",
-        "high": "高"
-      }
+      "auto_fallback_label": "超载时自动回退"
     },
     "gemini_basic_config": {
       "api_key_label": "Gemini API 密钥",
@@ -179,7 +176,7 @@
       "api_key_placeholder": "输入您的 Groq API 密钥",
       "model_label": "模型名称",
       "get_a_key": "获取密钥",
-      "model_placeholder": "mixtral-8x7b-32768",
+      "model_placeholder": "llama-3.3-70b-versatile",
       "saved_status": "已保存!",
       "view_models": "查看模型"
     },
@@ -306,39 +303,99 @@
         "generate_new_questions": "生成新问题",
         "previous_questions": "上一个问题",
         "next_questions": "下一个问题",
-        "ask_own_question_in_chat": "在聊天中提出自己的问题"
-      },
-      "perTabCache": {
-        "title": "侧边栏标签页",
-        "description": "为每个浏览器标签页保持独立的摘要状态。",
-        "enabled": "已启用",
-        "disabled": "已禁用",
-        "clear_on_navigation": {
-          "title": "导航时清除",
-          "description": "当页面URL更改时，缓存的摘要会发生什么。",
-          "keep_summary": "保留摘要",
-          "keep_summary_desc": "URL更改时摘要保持缓存",
-          "auto_clear": "自动清除",
-          "auto_clear_desc": "URL更改时清除摘要"
-        },
-        "auto_scroll": {
-          "title": "自动滚动到活动标签页",
-          "description": "自动滚动以使活动标签页按钮可见。",
-          "off": "关闭",
-          "off_desc": "不自动滚动",
-          "jump": "跳转",
-          "jump_desc": "即时滚动",
-          "smooth": "平滑",
-          "smooth_desc": "动画滚动"
-        },
-        "nav": {
-          "previous_tab": "上一个标签页",
-          "next_tab": "下一个标签页",
-          "remove_tab": "移除（中键点击）"
-        },
-        "blocking_note": "注：为获得最佳性能，响应模式已设置为 Blocking。"
+        "ask_own_question_in_chat": "在聊天中提出自己的问题",
+        "api_keys_info_restructured": "API 密钥为全局管理。请前往",
+        "api_keys_link_text": "服务商与 API 密钥",
+        "api_keys_info_restructured_end": "选项卡配置凭据。",
+        "reasoning_title": "推理",
+        "reasoning_description": "控制模型在 Deep Dive 问题中使用多少推理。",
+        "reasoning_off": "关闭",
+        "reasoning_off_desc": "直接回答，最快。",
+        "reasoning_low": "低",
+        "reasoning_low_desc": "轻度推理。",
+        "reasoning_medium": "中等",
+        "reasoning_medium_desc": "平衡深度与速度。"
       }
+    },
+    "feature_model_picker": {
+      "provider_label": "模型商",
+      "model_label": "模型名称",
+      "model_placeholder": "搜索或选择模型",
+      "view_models": "查看模型",
+      "unconfigured_suffix": "未配置",
+      "unconfigured_warning": "该供应商未配置。",
+      "configure_link": "配置 API Key",
+      "free_text_placeholder": "输入模型 ID"
+    },
+    "provider_key_config": {
+      "status_configured": "已配置",
+      "status_unconfigured": "未配置",
+      "base_url_label": "基础 URL",
+      "endpoint_label": "端点 URL",
+      "api_key_label": "API 密钥",
+      "api_key_placeholder": "输入 API 密钥",
+      "get_a_key": "获取 API 密钥",
+      "api_keys_section_title": "API 密钥与端点",
+      "add_provider": "添加提供商",
+      "remove_provider": "移除"
+    },
+    "openai_profile_config": {
+      "name_label": "配置名称",
+      "name_required": "名称是必填项",
+      "base_url_label": "接口地址 (Base URL)",
+      "base_url_invalid": "必须是有效的 HTTP/HTTPS 链接",
+      "api_key_label": "API 密钥 (API Key)",
+      "api_key_required": "API 密钥是必填项",
+      "default_model_label": "默认模型 ID",
+      "default_model_required": "默认模型 ID 是必填项",
+      "delete_profile": "删除配置"
+    },
+    "chat": {
+      "add_to_quick_models": "添加到快捷模型",
+      "quick_models": "快捷模型",
+      "quick_models_hint": "最多 {max} 个模型，用于在编辑器中快速切换。",
+      "remove_quick_model": "从快捷模型中移除",
+      "default_reasoning": "默认推理级别",
+      "default_reasoning_hint": "应用于新标签页的推理选择器。每个标签页的设置是独立的。"
     }
+  },
+  "chat": {
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{count} 分钟前"
+    },
+    "context_donut": {
+      "aria_usage": "Context window usage:",
+      "aria_unknown": "Context usage not known yet",
+      "model": "Model",
+      "unknown_provider": "Unknown provider",
+      "context_window": "Context window",
+      "input_budget": "Input budget",
+      "input": "Input",
+      "output": "Output",
+      "cache": "Cache",
+      "source": "Source"
+    },
+    "context_warning": {
+      "source_dropped": "“{title}”超出了此模型的上下文限制，已被排除。以下回答未基于该内容，请尝试使用具有更大上下文窗口的模型。",
+      "source_dropped_untitled": "部分来源超出了此模型的上下文限制，已被排除。以下回答未基于该内容。",
+      "source_truncated": "“{title}”中只有一部分被包含在此模型的上下文中。",
+      "history_trimmed": "为了适应此模型的上下文限制，较旧的 {count} 轮对话已被忽略。",
+      "source_unresolved": "无法加载之前附加的来源。",
+      "input_too_large": "即使删除了所有来源，您的消息对于此模型的上下文窗口仍然过长。请缩短消息或切换到具有更大上下文窗口的模型。"
+    },
+    "model_select": {
+      "aria_label": "对话模型: {model}",
+      "default_label": "默认 ({model})",
+      "manage_models": "管理模型...",
+      "reasoning": "推理",
+      "warning_unresolvable": "未知配置"
+    }
+  },
+  "tab_navigation": {
+    "previous_tab": "上一个标签页",
+    "next_tab": "下一个标签页",
+    "remove_tab": "移除（中键点击）"
   },
   "prompts": {
     "title": "提示词",
