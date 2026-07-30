@@ -78,11 +78,13 @@
         content={$t(`custom_actions.${action.key}_description`)}
       >
         {#snippet children({ builder })}
+          <!-- `{...builder}` first: the bits-ui trigger props carry their own
+               `onclick`, and the last writer wins in a spread. -->
           <button
+            {...builder}
             class="action-btn font-mono w-full relative py-2 px-4 text-sm rounded-full border border-border hover:bg-blackwhite-5 text-text-secondary hover:text-text-primary transition-colors duration-125 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             class:animate={showAnimations}
             onclick={() => handleActionClick(action.key)}
-            {...builder}
             style="animation-delay: {300 + i * 150}ms"
           >
             <Icon

@@ -3,6 +3,8 @@ import { chatSessionService } from '@/services/chat/chatSessionService.js'
 import { chatSourceService } from '@/services/chat/chatSourceService.js'
 import { estimateTokens } from '@/lib/chat/contextPipeline/contextBudgeter.js'
 import { setCapabilitiesSignalReporter } from '@/lib/chat/capabilitiesSignal.js'
+import { lastTurn, toTurns } from '@/lib/chat/usageMetrics.js'
+import { getProviderCapabilities } from '@/lib/chat/providerCapabilities.js'
 import { conversationRepository } from '@/lib/db/conversationRepository.js'
 import { settings } from './settingsStore.svelte.js'
 import { handleError } from '@/lib/error/simpleErrorHandler.js'
@@ -53,7 +55,20 @@ function createChatSessionState() {
     streamingMessage: null,
     error: null,
     contextWarnings: [],
+    /**
+     * Context occupancy of the last generated turn — `input + output` of a
+     * single turn, never a sum across turns (a turn's input already contains
+     * every earlier reply). Belongs to one conversation, so it must be cleared
+     * or rebuilt whenever the active conversation or model changes.
+     */
     contextUsage: null,
+    /**
+     * Raw per-request usage for this conversation, oldest first — one entry per
+     * API call, including abandoned regenerations (they were billed too).
+     * Deliberately unaggregated: the context snapshot and the session totals are
+     * different reductions of this list, derived at render time.
+     */
+    usageTurns: [],
     abortController: null,
     currentUrl: null,
     /** Real browser tab title from `browser.tabs` metadata — refreshes on every sync. */
@@ -62,6 +77,35 @@ function createChatSessionState() {
     currentFavIconUrl: null,
     /** True when there are earlier messages not yet loaded into the visible window. */
     hasEarlierMessages: false,
+    /**
+     * One-shot request to scroll a just-submitted user message to the top of
+     * the viewport. Chat never auto-scrolls otherwise, so this is the only way
+     * the view moves on its own. Set on submit, consumed and cleared by
+     * `ChatShell`.
+     */
+    scrollTargetMessageId: null,
+    /**
+     * Document scroll offset for this tab, captured when the view swaps away
+     * and handed back on return — the chat counterpart of the summary
+     * surface's per-tab `scrollY` (`services/tabCacheService.js`).
+     */
+    scrollTop: 0,
+    /**
+     * One-shot restore request consumed by `ChatShell`: the offset to scroll
+     * the document to, or `null` for "nothing to restore". `0` is a real
+     * target (the tab was at the top), so never test this for truthiness.
+     */
+    pendingScrollRestore: null,
+    /**
+     * Armed by pressing Enter while a reply is still streaming. The message
+     * itself stays in the composer — this only says "send it as soon as the
+     * current generation finishes cleanly". Aborts and errors clear it without
+     * sending, so Stop never triggers a send.
+     *
+     * While armed the composer is locked: what you queued is what gets sent.
+     * Cancelling the queue is what unlocks it for editing again.
+     */
+    queuedSend: false,
     /**
      * Per-tab reasoning effort level. `null` is a sentinel meaning "use the
      * global default from settings" — resolved at read time via
@@ -118,6 +162,16 @@ function getSession(tabId) {
   if (!tabId) return null
   if (!tabSessions.has(tabId)) tabSessions.set(tabId, createChatSessionState())
   return tabSessions.get(tabId)
+}
+
+/**
+ * Current document scroll offset. Chat has no local overflow container, so the
+ * scroller is the document itself — same element the summary surface scrolls.
+ * Guarded for the worker/node contexts the store is also imported from.
+ */
+function readViewportScroll() {
+  if (typeof document === 'undefined') return 0
+  return (document.scrollingElement || document.documentElement)?.scrollTop ?? 0
 }
 
 /** Copy the live view into a tab's stored snapshot (drafts included). */
@@ -264,6 +318,27 @@ export function canSendChat() {
   return Boolean(chatState.composerText.trim() || chatState.selectedSkill) && !chatState.isSending
 }
 
+/**
+ * Send whatever is sitting in the composer if the user armed it with Enter
+ * during the generation that just finished. Called only on a clean finish —
+ * never after an abort or an error.
+ */
+function drainQueuedSend(tabId, completed) {
+  const session = readSession(tabId)
+  if (!session.queuedSend) return
+  // Always disarm, even on an abort or an error. A flag left set would other-
+  // wise survive until some later generation finished and fire there, sending
+  // a message the user never asked for.
+  writeSession(tabId, { queuedSend: false })
+  if (!completed) return
+  // `sendChatMessage` always acts on the tab currently on screen. If the user
+  // moved away, drop the arming and leave the draft — they can press Enter
+  // again when they come back.
+  if (tabId !== activeTabId) return
+  if (!session.composerText.trim() && !session.selectedSkill) return
+  sendChatMessage()
+}
+
 export function selectChatSkill(skill) {
   const invocation = skillService.select(skill)
   if (!invocation) return null
@@ -390,6 +465,53 @@ async function resolveCommittedSources(messages) {
   })
 }
 
+/**
+ * Read every request this conversation has made, oldest first. Not an
+ * incrementing counter: `messages` in a session is capped at
+ * `VISIBLE_MESSAGE_WINDOW`, so a counter fed from it would undercount long
+ * conversations and reset on reload.
+ *
+ * @param {string} conversationId
+ * @returns {Promise<import('@/lib/chat/usageMetrics.js').Turn[]>}
+ */
+async function readUsageTurns(conversationId) {
+  try {
+    return toTurns(await conversationRepository.listMessagesByConversation(conversationId))
+  } catch {
+    // The token panel is a nice-to-have; never fail a send or an open over it.
+    return []
+  }
+}
+
+/**
+ * Rebuild context occupancy for a conversation being opened, from the last turn
+ * on its active path that reported usage. Without this the meter would show the
+ * *previous* conversation's numbers until the next send.
+ *
+ * @param {object} conversation
+ * @param {Array<object>} activePath ordered oldest → newest
+ */
+function rebuildContextUsage(conversation, activePath) {
+  const turn = lastTurn(toTurns(activePath))
+  if (!turn) return null
+  const { providerId, modelId } = resolveConversationModel(conversation, settings)
+  const capabilities = getProviderCapabilities(providerId, modelId)
+  const output = capabilities.defaultOutputTokens || 0
+  return {
+    available: true,
+    used: turn.input,
+    window: capabilities.contextWindowTokens,
+    inputBudget: Math.max(0, capabilities.contextWindowTokens - output),
+    source: capabilities.source,
+    input: turn.input,
+    output: turn.output,
+    cached: turn.cached,
+    providerId,
+    modelId,
+    sourceTokens: {},
+  }
+}
+
 async function reloadActivePath(tabId, result) {
   const owner = readSession(tabId)
   if (!owner.conversation) return
@@ -404,6 +526,7 @@ async function reloadActivePath(tabId, result) {
     hasEarlierMessages: hasEarlier,
     streamingMessage: null,
     error: result?.error || null,
+    usageTurns: await readUsageTurns(owner.conversation.id),
   })
 }
 
@@ -421,6 +544,9 @@ export async function startConversationForActiveTab() {
     messages: [],
     error: null,
     contextWarnings: [],
+    // A fresh conversation carries none of the previous one's token figures.
+    contextUsage: null,
+    usageTurns: [],
     modelOverride: null, // consumed
   })
   return conversation
@@ -445,6 +571,10 @@ export async function setChatModel({ provider, model }) {
     )
     writeSession(activeTabId, {
       conversation: updated,
+      // The window and model name in the meter belonged to the old model.
+      // Rebuilding keeps the last turn's real token counts while re-resolving
+      // the limits they are measured against.
+      contextUsage: rebuildContextUsage(updated, chatState.messages),
     })
   } else {
     writeSession(activeTabId, {
@@ -498,6 +628,10 @@ export async function openConversation(id) {
     hasEarlierMessages: hasEarlier,
     error: null,
     contextWarnings: [],
+    // Both belong to the conversation being left behind. Rebuild them from this
+    // one's records rather than carrying stale numbers forward.
+    contextUsage: rebuildContextUsage(conversation, fullPath),
+    usageTurns: await readUsageTurns(id),
   })
   if (activeTabId != null) chatSessionService.setConversationId(activeTabId, id)
   return conversation
@@ -574,7 +708,12 @@ export async function syncChatForActiveTab(tabId, { url = null, title = undefine
     return chatState.conversation
   }
 
-  if (activeTabId != null) stashViewInto(getSession(activeTabId))
+  if (activeTabId != null) {
+    // The DOM has been scrolled without the state knowing, so read it back
+    // before the stash — otherwise the snapshot keeps a stale offset.
+    chatState.scrollTop = readViewportScroll()
+    stashViewInto(getSession(activeTabId))
+  }
   activeTabId = tabId
 
   const session = getSession(tabId)
@@ -583,6 +722,9 @@ export async function syncChatForActiveTab(tabId, { url = null, title = undefine
   if (title !== undefined) session.currentTitle = title
   if (favIconUrl !== undefined) session.currentFavIconUrl = favIconUrl
   projectSessionToView(session)
+  // After the projection: it would otherwise overwrite the request with the
+  // snapshot's own stale value.
+  chatState.pendingScrollRestore = session.scrollTop ?? 0
   markChatTabsChanged()
 
   if (!session.conversation) {
@@ -603,7 +745,12 @@ export async function syncChatForActiveTab(tabId, { url = null, title = undefine
           session.committedSources = committedSources
           session.hasEarlierMessages = hasEarlier
           // Only repaint if the user is still on this tab after the async load.
-          if (activeTabId === tabId) projectSessionToView(session)
+          if (activeTabId === tabId) {
+            projectSessionToView(session)
+            // The messages only just landed, so the earlier restore ran against
+            // a near-empty document and was clamped. Ask for it again.
+            chatState.pendingScrollRestore = session.scrollTop ?? 0
+          }
           markChatTabsChanged()
         }
       } catch (error) {
@@ -644,6 +791,9 @@ export async function sendChatMessage(content = chatState.composerText) {
   invalidateConversationDeepDive(conversation.id)
 
   const abortController = new AbortController()
+  // Gates the queued-send drain in `finally`: only a clean finish sends the
+  // next message. Aborts and errors leave it false.
+  let completed = false
   const skillInvocation = chatState.selectedSkill
     ? $state.snapshot(chatState.selectedSkill)
     : null
@@ -697,10 +847,9 @@ export async function sendChatMessage(content = chatState.composerText) {
       abortController,
       onUserMessage: (message) => {
         const session = readSession(targetTabId)
-        writeSession(targetTabId, {
+        const patch = {
           messages: [...session.messages, message],
-          composerText: '',
-          selectedSkill: null,
+          scrollTargetMessageId: message.id,
           pendingAttachments: session.pendingAttachments.map((attachment) => ({
             ...attachment,
             submitted: true,
@@ -708,7 +857,19 @@ export async function sendChatMessage(content = chatState.composerText) {
           activeSourceEstimate: session.activeSourceEstimate
             ? { ...session.activeSourceEstimate, submitted: true }
             : null,
-        })
+        }
+        // This callback lands asynchronously — after the page capture and
+        // `addMessage` — and the composer stays editable while streaming now.
+        // Only clear what is still the message we sent; never wipe the next
+        // question the user has already started typing.
+        if (session.composerText === content) patch.composerText = ''
+        if (
+          skillInvocation &&
+          session.selectedSkill?.skillId === skillInvocation.skillId
+        ) {
+          patch.selectedSkill = null
+        }
+        writeSession(targetTabId, patch)
       },
       onChunk: (message) => {
         writeSession(targetTabId, { streamingMessage: message })
@@ -721,6 +882,7 @@ export async function sendChatMessage(content = chatState.composerText) {
       },
     })
     await reloadActivePath(targetTabId, result)
+    completed = true
     return result
   } catch (error) {
     writeSession(targetTabId, {
@@ -730,6 +892,7 @@ export async function sendChatMessage(content = chatState.composerText) {
     return null
   } finally {
     writeSession(targetTabId, { isSending: false, abortController: null })
+    drainQueuedSend(targetTabId, completed)
   }
 }
 
@@ -749,6 +912,9 @@ export async function retryChatMessage(userMessageId) {
   const targetTabId = activeTabId
   const owner = readSession(targetTabId)
   const abortController = new AbortController()
+  // Gates the queued-send drain in `finally`: only a clean finish sends the
+  // next message. Aborts and errors leave it false.
+  let completed = false
 
   writeSession(targetTabId, {
     error: null,
@@ -780,6 +946,7 @@ export async function retryChatMessage(userMessageId) {
       },
     })
     await reloadActivePath(targetTabId, result)
+    completed = true
     return result
   } catch (error) {
     writeSession(targetTabId, {
@@ -789,6 +956,7 @@ export async function retryChatMessage(userMessageId) {
     return null
   } finally {
     writeSession(targetTabId, { isSending: false, abortController: null })
+    drainQueuedSend(targetTabId, completed)
   }
 }
 
@@ -829,6 +997,9 @@ export async function regenerateChatMessage(assistantMessageId) {
   const targetTabId = activeTabId
   const owner = readSession(targetTabId)
   const abortController = new AbortController()
+  // Gates the queued-send drain in `finally`: only a clean finish sends the
+  // next message. Aborts and errors leave it false.
+  let completed = false
 
   const allMessages = owner.messages
   const assistantMessage = allMessages.find((m) => m.id === assistantMessageId)
@@ -863,6 +1034,7 @@ export async function regenerateChatMessage(assistantMessageId) {
       },
     })
     await reloadActivePath(targetTabId, result)
+    completed = true
     return result
   } catch (error) {
     writeSession(targetTabId, {
@@ -872,6 +1044,7 @@ export async function regenerateChatMessage(assistantMessageId) {
     return null
   } finally {
     writeSession(targetTabId, { isSending: false, abortController: null })
+    drainQueuedSend(targetTabId, completed)
   }
 }
 
@@ -881,6 +1054,9 @@ export async function editChatMessage(messageId, content) {
   const targetTabId = activeTabId
   const owner = readSession(targetTabId)
   const abortController = new AbortController()
+  // Gates the queued-send drain in `finally`: only a clean finish sends the
+  // next message. Aborts and errors leave it false.
+  let completed = false
 
   writeSession(targetTabId, {
     error: null,
@@ -912,6 +1088,7 @@ export async function editChatMessage(messageId, content) {
       },
     })
     await reloadActivePath(targetTabId, result)
+    completed = true
     return result
   } catch (error) {
     writeSession(targetTabId, {
@@ -921,6 +1098,7 @@ export async function editChatMessage(messageId, content) {
     return null
   } finally {
     writeSession(targetTabId, { isSending: false, abortController: null })
+    drainQueuedSend(targetTabId, completed)
   }
 }
 
@@ -930,6 +1108,9 @@ export async function continueChatMessage(assistantMessageId) {
   const targetTabId = activeTabId
   const owner = readSession(targetTabId)
   const abortController = new AbortController()
+  // Gates the queued-send drain in `finally`: only a clean finish sends the
+  // next message. Aborts and errors leave it false.
+  let completed = false
 
   const assistantMessage = owner.messages.find((m) => m.id === assistantMessageId)
 
@@ -938,6 +1119,9 @@ export async function continueChatMessage(assistantMessageId) {
     isSending: true,
     abortController,
     streamingMessage: {
+      // Same id as the message being continued: the list overlays that row
+      // rather than rendering the partial answer twice.
+      id: assistantMessageId,
       role: 'assistant',
       content: assistantMessage?.content || '',
       status: 'complete',
@@ -961,6 +1145,7 @@ export async function continueChatMessage(assistantMessageId) {
       },
     })
     await reloadActivePath(targetTabId, result)
+    completed = true
     return result
   } catch (error) {
     writeSession(targetTabId, {
@@ -970,20 +1155,7 @@ export async function continueChatMessage(assistantMessageId) {
     return null
   } finally {
     writeSession(targetTabId, { isSending: false, abortController: null })
+    drainQueuedSend(targetTabId, completed)
   }
 }
 
-export async function deleteChatMessage(messageId) {
-  if (!chatState.conversation) return null
-
-  try {
-    const result = await conversationRepository.deleteSubtree(messageId)
-    await reloadActivePath(activeTabId)
-    return result
-  } catch (error) {
-    writeSession(activeTabId, {
-      error: handleError(error, { source: 'chatDelete' }),
-    })
-    return null
-  }
-}

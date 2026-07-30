@@ -17,6 +17,18 @@ import {
   checkAndResetTabState,
   saveScrollForTab,
 } from '@/services/tabCacheService.js'
+import { sidepanelViewState } from '@/stores/sidepanelViewStore.svelte.js'
+
+/**
+ * The document scroller is shared with the chat surface, which keeps its own
+ * per-tab offset in `chatStore`. Every scroll write below belongs to the
+ * summary surface, so it must stay quiet while chat is the one on screen —
+ * otherwise a tab switch saves chat's offset into the summary cache and then
+ * restores the summary's (usually 0) over the chat view.
+ */
+function summarySurfaceVisible() {
+  return sidepanelViewState.surface === 'summary'
+}
 
 /**
  * Syncs the global summaryState/deepDiveState with a tab's state
@@ -84,8 +96,8 @@ function handleTabSwitch(newTabId) {
   // STEP 1: Save scroll position for previous tab BEFORE anything else
   // This is the ONLY place scroll is saved - simple and no race condition
   if (previousTabId) {
-    saveScrollForTab(previousTabId)
-    
+    if (summarySurfaceVisible()) saveScrollForTab(previousTabId)
+
     // Sync summary/deepDive state to previous tab
     const prevTabState = getOrCreateTabState(previousTabId)
     if (prevTabState) {
@@ -102,13 +114,16 @@ function handleTabSwitch(newTabId) {
     
     // STEP 4: Restore scroll position after DOM update
     const scrollY = newTabState.scrollY || 0
-    console.log(`[messageHandler.js] Restoring scrollY=${scrollY} for tab ${newTabId}`)
-    
-    // Use requestAnimationFrame to ensure DOM is updated before scrolling
-    requestAnimationFrame(() => {
-      window.scrollTo({ top: scrollY, behavior: 'instant' })
-    })
-    
+
+    if (summarySurfaceVisible()) {
+      console.log(`[messageHandler.js] Restoring scrollY=${scrollY} for tab ${newTabId}`)
+
+      // Use requestAnimationFrame to ensure DOM is updated before scrolling
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollY, behavior: 'instant' })
+      })
+    }
+
     console.log(`[messageHandler.js] Loaded state for tab ${newTabId}`, {
       hasSummary: !!summaryState.summary || !!summaryState.courseSummary,
       scrollY: scrollY,
@@ -178,7 +193,7 @@ function handleBackgroundMessage(request) {
         request
       )
       // Scroll to top to show loading state when re-summarizing
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      if (summarySurfaceVisible()) window.scrollTo({ top: 0, behavior: 'smooth' })
       resetDisplayState()
       summaryState.lastSummaryTypeDisplayed = 'selectedText'
       summarizeSelectedText(request.selectedText)
@@ -189,7 +204,7 @@ function handleBackgroundMessage(request) {
         request
       )
       // Scroll to top to show loading state when re-summarizing
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      if (summarySurfaceVisible()) window.scrollTo({ top: 0, behavior: 'smooth' })
       resetDisplayState()
       if (request.isYouTube) {
         summaryState.lastSummaryTypeDisplayed = 'youtube'

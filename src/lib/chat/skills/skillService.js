@@ -29,8 +29,15 @@ export function getAvailableSkills(userSkills = []) {
   const custom = [...overrides.values()]
     .filter((skill) => !BUILT_IN_SKILLS.some((builtIn) => builtIn.id === skill.id))
     .map((skill) => ({ ...skill, version: 1, builtIn: false }))
-  return [...builtIns, ...custom]
-    .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || a.name.localeCompare(b.name))
+  // Plain alphabetical. `pinned` is *not* a list-ordering flag — it decides
+  // which skills the empty chat screen offers as chips (ChatEmptyState), so
+  // sorting by it here would leak that meaning into the `/` picker.
+  return [...builtIns, ...custom].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** The skills the empty chat screen surfaces as one-click chips. */
+export function getPinnedSkills(userSkills = []) {
+  return getAvailableSkills(userSkills).filter((skill) => skill.pinned)
 }
 
 export function toSkillInvocation(skill) {
@@ -82,6 +89,10 @@ export function createSkillService({
   return {
     listSkills(currentSettings = getSettings()) {
       return getAvailableSkills(currentSettings?.chatUserSkills)
+    },
+
+    listPinnedSkills(currentSettings = getSettings()) {
+      return getPinnedSkills(currentSettings?.chatUserSkills)
     },
 
     getPersonaSnapshot(current = getSettings()) {

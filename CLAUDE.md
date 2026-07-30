@@ -95,7 +95,13 @@ The extension is organized around **multiple entrypoints** (handled by WXT):
 
 #### Entrypoints (`src/entrypoints/`)
 
-- **`background.js`** - Main background service worker. Handles message routing, AI API proxying (especially for Ollama CORS), tab detection, storage migration, and context menus.
+- **`background/`** - Background service worker, a directory entrypoint (`background/index.js`). `index.js` keeps only what has to run at worker start-up: platform branching, the cloud-sync alarms, context menus, and the port/command/tab listeners. Everything reachable from a message lives in siblings:
+  - `messageRouter.js` — `createMessageRouter([...groups])`, one dispatch table replacing the old ~540-line `if` chain. A handler returns `true` to keep the channel open for an async `sendResponse`, `undefined` to close it — **that distinction is load-bearing**, and `message.type` is tried before `message.action` (a `REQUEST_SUMMARY` message carries `type: 'selectedText'`). Pinned by `tests/background/messageRouter.test.js`.
+  - `handlers/` — one module per domain (sync, summarize, permissions, ollama, storage, external-chat, navigation). Each exports a `create*Handlers(deps)` factory; mutable worker state (`sidePanelPort`) is passed as a getter, never captured.
+  - `ollamaService.js` — `OllamaCorsService` (declarativeNetRequest rules) + `OllamaApiProxyService` (runs `generateText` in the worker).
+  - `externalChat.js` — opening Gemini/ChatGPT/Perplexity/Grok and driving their content scripts, with the Cloudflare/SPA readiness polling and send retries that requires.
+  - `settingsBootstrap.js` — the worker's own settings loader. **Still a duplicate of `settingsStore`'s logic** (seam (f) in `docs/refactor/03-god-files.md`, not yet done).
+  - `tabInfo.js` — `describeTab()`, the single YouTube/Udemy/Coursera classification the worker sends to the side panel.
 - **`content.js`** - Shadow DOM UI injection for all websites. Uses `settingsStore` to determine if FAB (floating action button) should show.
 - **`sidepanel/`** - Main UI for the side panel; connects to background via port for messages.
 - **`settings/`** - Settings page for API keys, provider configuration, and UI preferences.
@@ -235,7 +241,7 @@ Firefox requires optional permissions for sites. The flow:
 ### 4. Mobile & Browser Detection
 
 - `browserDetection.js` - Detects mobile, Firefox, browser capabilities
-- Special handling for mobile in `background.js` (forces popup instead of side panel)
+- Special handling for mobile in `background/index.js` (forces popup instead of side panel)
 - Firefox Android uses sidebar instead of side panel
 
 ## Common Tasks
@@ -262,8 +268,8 @@ Firefox requires optional permissions for sites. The flow:
 ### Adding New Shortcuts
 
 - Update manifest in `wxt.config.ts` under `commands`
-- Add listener in `background.js` via `browser.commands.onCommand.addListener()`
-- Add corresponding message handler
+- Add listener in `background/index.js` via `browser.commands.onCommand.addListener()`
+- Add corresponding message handler in the right `background/handlers/*.js` module (a new file there needs registering in `index.js`'s `createMessageRouter([...])` call)
 
 ## Important Notes
 
@@ -276,7 +282,7 @@ Firefox requires optional permissions for sites. The flow:
 
 ## Testing
 
-`npm test` runs `vitest run` — 50 test files, including the architecture guard at `tests/architecture/layering.test.js`. Run `npm test` before considering any layering or component-placement change done.
+`npm test` runs `vitest run` — 51 test files, including the architecture guard at `tests/architecture/layering.test.js`. Run `npm test` before considering any layering or component-placement change done.
 
 For manual testing:
 

@@ -2,6 +2,14 @@
   // @ts-nocheck
   import { Popover, Tooltip, mergeProps } from 'bits-ui'
   import { formatK } from '@/lib/utils/formatTokens.js'
+  import {
+    contextSnapshot,
+    ctxGrowthPerTurn,
+    sessionCumulative,
+    turnsRemaining,
+  } from '@/lib/chat/usageMetrics.js'
+  import { estimateCost } from '@/lib/chat/usagePricing.js'
+  import { formatModelDisplayName } from '@/lib/chat/modelDisplayName.js'
   import { _ } from 'svelte-i18n'
 
   let {
@@ -9,20 +17,70 @@
     usage = null,
     /** Sum of estimated tokens for @tab chips not yet sent. */
     pendingEstimate = 0,
+    /** Raw per-request usage for this conversation, oldest first. */
+    turns = [],
   } = $props()
 
-  // Total tokens consumed in this turn: input (promptTokens) + output (completionTokens).
-  // Both count against the model's context window simultaneously.
-  const totalUsed = $derived((usage?.used || 0) + (usage?.output || 0))
+  // The provider reported nothing for the last turn (the blocking fallback path
+  // never has usage). Show "unknown" rather than the previous turn's numbers.
+  const unavailable = $derived(usage?.available === false)
 
-  const percent = $derived(
-    usage && usage.window > 0
-      ? Math.min(100, Math.max(0, Math.round((totalUsed / usage.window) * 100)))
-      : 0,
+  // The live last turn, shaped as a Turn so the tested reducers apply to it. Its
+  // `cache` is a subset of its `input`, never an addition — see usageMetrics.js.
+  const currentTurn = $derived(
+    usage && !unavailable && (usage.input != null || usage.output != null)
+      ? {
+          input: usage.input || 0,
+          output: usage.output || 0,
+          cache: usage.cached || 0,
+        }
+      : null,
   )
 
+  // Two reductions of the same raw data, deliberately kept apart: the snapshot is
+  // the last turn alone (a turn's input is the whole history re-sent, so summing
+  // would double-count), the session totals sum every request (each one was
+  // billed separately).
+  const snapshot = $derived(contextSnapshot(currentTurn, usage?.window))
+  const session = $derived(sessionCumulative(turns))
+  // Cost never reads a displayed number: `Input` on screen is the total, and only
+  // `input - cache` is billed at the full rate. `sessionCumulative` does that
+  // subtraction, `estimateCost` consumes the split.
+  const cost = $derived(estimateCost(session, usage?.modelId))
+
+  const percent = $derived(Math.round((snapshot.ctxPercent || 0) * 100))
+
+  // Room left, in turns, from how fast occupancy has been growing. An estimate,
+  // and labelled as one.
+  const remaining = $derived(
+    turnsRemaining(snapshot.ctx, usage?.window, ctxGrowthPerTurn(turns)),
+  )
+  const nearLimit = $derived((snapshot.ctxPercent || 0) > 0.8)
+
+  function pct(count) {
+    if (!usage || !(usage.window > 0)) return 0
+    return Math.min(100, Math.max(0, (count / usage.window) * 100))
+  }
+
+  // What the next send would occupy: current usage plus the @tab chips already
+  // attached but not yet submitted. Drives the colour so the warning appears
+  // before the oversized send, not after it.
+  const pendingPercent = $derived(
+    unavailable
+      ? 0
+      : Math.max(
+          0,
+          pct(snapshot.ctx + (pendingEstimate || 0)) - pct(snapshot.ctx),
+        ),
+  )
+  const projectedPercent = $derived(Math.round(percent + pendingPercent))
+
   const level = $derived(
-    percent >= 95 ? 'error' : percent >= 80 ? 'warning' : 'normal',
+    projectedPercent >= 95
+      ? 'error'
+      : projectedPercent >= 80
+        ? 'warning'
+        : 'normal',
   )
 
   const fillColor = $derived(
@@ -47,7 +105,11 @@
 
   // Fill width follows percent. Skewed rect (see SKEW_DEG) gives it a slanted
   // leading edge parallel to the notches; clip keeps it inside the shape.
-  const fillWidth = $derived((percent / 100) * (W - SLANT))
+  const TRACK = W - SLANT
+  const fillWidth = $derived((percent / 100) * TRACK)
+  // Pending segment sits directly after the fill, in the same skewed space, so
+  // its leading edge stays parallel to the notches.
+  const pendingWidth = $derived((pendingPercent / 100) * TRACK)
 
   // 4 interior dividers (fractions 1/5..4/5), each parallel to the slanted edge.
   const dividers = $derived(
@@ -60,7 +122,7 @@
   )
 
   const ariaLabel = $derived(
-    usage
+    usage && !unavailable
       ? `${$_('chat.context_donut.aria_usage', { default: 'Context window usage:' })} ${percent}%`
       : $_('chat.context_donut.aria_unknown', {
           default: 'Context usage not known yet',
@@ -106,6 +168,20 @@
                       transform="skewX({SKEW_DEG})"
                       style="transition: width 300ms ease, fill 300ms ease;"
                     />
+                    <!-- Not-yet-sent @tab chips, in the same colour at low
+                         opacity: clearly "would be used", not "is used". -->
+                    {#if pendingWidth > 0}
+                      <rect
+                        x={fillWidth}
+                        y="0"
+                        width={pendingWidth}
+                        height={H}
+                        fill={fillColor}
+                        opacity="0.4"
+                        transform="skewX({SKEW_DEG})"
+                        style="transition: width 300ms ease, x 300ms ease, fill 300ms ease;"
+                      />
+                    {/if}
                   </g>
 
                   <!-- Segment dividers (visual markers only) -->
@@ -141,100 +217,139 @@
           sideOffset={6}
           class="z-50 text-[10px] px-2 py-0.5 bg-surface-2 border border-border rounded-md shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-text-primary tabular-nums"
         >
-          {percent}%
+          {#if unavailable}
+            —
+          {:else if pendingPercent > 0}
+            {percent}% → {projectedPercent}%
+          {:else}
+            {percent}%
+          {/if}
         </Tooltip.Content>
       </Tooltip.Portal>
     </Tooltip.Root>
 
     <Popover.Portal>
       <Popover.Content
-        class="z-50 min-w-[200px] p-0 bg-surface-1 border border-border rounded-lg shadow-[0_4px_16px_rgba(0,0,0,0.12)] animate-[donut-popover-in_120ms_ease-out] dark:bg-surface-2 dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
+        class="z-50 min-w-50 p-0 bg-surface-1 border border-border rounded-lg shadow-[0_4px_16px_rgba(0,0,0,0.12)] animate-[donut-popover-in_120ms_ease-out] dark:bg-surface-2 dark:shadow-[0_4px_16px_rgba(0,0,0,0.3)]"
         sideOffset={6}
         align="end"
         side="top"
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <div class="py-2 px-3 flex flex-col gap-1">
-          <!-- Model -->
-          <div
-            class="flex items-center justify-between gap-3 text-[0.6875rem] leading-[1.4]"
+        <!-- One grid for the whole panel, not one per row: the value column is
+             `auto`, so it can only share a right-hand axis across rows if the
+             rows are children of the SAME grid. Per-row grids would each size
+             that column to their own content and the numbers would not line up.
+             Indentation therefore lives on the label cell only, never on the row,
+             which is what puts `cached` visually inside `Input`. -->
+        {#snippet row(label, value, sub = false)}
+          <span
+            class="whitespace-nowrap {sub
+              ? 'pl-2 text-muted/70'
+              : 'text-muted'}">{label}</span
           >
-            <span class="text-muted whitespace-nowrap"
-              >{$_('chat.context_donut.model', { default: 'Model' })}</span
-            >
-            <span
-              class="text-text-primary text-right tabular-nums overflow-hidden text-ellipsis whitespace-nowrap max-w-40"
-            >
-              {#if usage?.modelId}
-                {usage.modelId}
-              {:else}
-                <span class="text-muted">—</span>
-              {/if}
-            </span>
+          <span
+            class="text-text-primary text-right tabular-nums overflow-hidden text-ellipsis whitespace-nowrap"
+            >{value}</span
+          >
+        {/snippet}
+
+        {#snippet heading(label)}
+          <div
+            class="col-span-2 mt-1.5 pt-1.5 border-t border-border/60 text-[0.625rem] uppercase tracking-wide text-muted/70"
+          >
+            {label}
           </div>
+        {/snippet}
+
+        <div
+          class="grid grid-cols-[1fr_auto] items-baseline gap-x-2 gap-y-1 py-2 px-2.5 min-w-[186px] text-[0.6875rem] leading-[1.4]"
+        >
+          <span class="text-muted whitespace-nowrap"
+            >{$_('chat.context_donut.model', { default: 'Model' })}</span
+          >
+          <span
+            class="text-text-primary text-right overflow-hidden text-ellipsis whitespace-nowrap max-w-[9rem]"
+            title={usage?.modelId || ''}
+            >{usage?.modelId ? formatModelDisplayName(usage.modelId) : '\u2014'}</span
+          >
 
           {#if usage}
-            <!-- Context window: used / window -->
+            {@render row(
+              $_('chat.context_donut.context_window', {
+                default: 'Context window',
+              }),
+              unavailable
+                ? `\u2014 / ${formatK(usage.window)}`
+                : `${formatK(snapshot.ctx)} / ${formatK(usage.window)}`,
+            )}
+
+            <!-- Input and Output are peers that add up to the line above, so both
+                 sit flat. Only `cached` is indented and lower-case: a breakdown of
+                 the Input directly above it, not a third peer. -->
+            {#if currentTurn}
+              {@render row(
+                $_('chat.context_donut.input', { default: 'Input' }),
+                formatK(currentTurn.input),
+              )}
+              {#if currentTurn.cache}
+                {@render row(
+                  `\u2514 ${$_('chat.context_donut.cached_row', { default: 'cached' })}`,
+                  formatK(currentTurn.cache),
+                  true,
+                )}
+              {/if}
+              {@render row(
+                $_('chat.context_donut.output', { default: 'Output' }),
+                formatK(currentTurn.output),
+              )}
+            {/if}
+          {/if}
+
+          {#if session.requests > 0}
+            {@render heading(
+              $_('chat.context_donut.session_turns', {
+                values: { count: session.requests },
+                default: `Session \u00b7 ${session.requests} turns`,
+              }),
+            )}
+            {@render row(
+              $_('chat.context_donut.input', { default: 'Input' }),
+              formatK(session.input),
+            )}
+            {#if session.cached}
+              {@render row(
+                `\u2514 ${$_('chat.context_donut.cached_row', { default: 'cached' })}`,
+                formatK(session.cached),
+                true,
+              )}
+            {/if}
+            {@render row(
+              $_('chat.context_donut.output', { default: 'Output' }),
+              formatK(session.output),
+            )}
+            {#if cost}
+              {@render row(
+                $_('chat.context_donut.cost', { default: 'Cost' }),
+                `$${cost.toFixed(cost < 0.01 ? 4 : 2)}`,
+              )}
+            {/if}
+          {/if}
+
+          {#if nearLimit}
             <div
-              class="flex items-center justify-between gap-3 text-[0.6875rem] leading-[1.4]"
+              class="col-span-2 mt-1.5 pt-1.5 border-t border-border/60 text-warning"
             >
-              <span class="text-muted whitespace-nowrap"
-                >{$_('chat.context_donut.context_window', {
-                  default: 'Context window',
-                })}</span
-              >
-              <span
-                class="text-text-primary text-right tabular-nums overflow-hidden text-ellipsis whitespace-nowrap max-w-40"
-                >{formatK(totalUsed)} / {formatK(usage.window)}</span
-              >
+              {remaining == null
+                ? $_('chat.context_donut.near_limit', {
+                    values: { percent },
+                    default: `Context is ${percent}% full \u2014 start a new chat.`,
+                  })
+                : $_('chat.context_donut.near_limit_turns', {
+                    values: { percent, count: remaining },
+                    default: `Context is ${percent}% full, roughly ${remaining} turns left \u2014 start a new chat.`,
+                  })}
             </div>
-
-            <!-- Input -->
-            {#if usage.input != null}
-              <div
-                class="flex items-center justify-between gap-3 text-[0.6875rem] leading-[1.4]"
-              >
-                <span class="text-muted whitespace-nowrap"
-                  >{$_('chat.context_donut.input', { default: 'Input' })}</span
-                >
-                <span
-                  class="text-text-primary text-right tabular-nums overflow-hidden text-ellipsis whitespace-nowrap max-w-40"
-                  >{formatK(usage.input)}</span
-                >
-              </div>
-            {/if}
-
-            <!-- Output -->
-            {#if usage.output != null}
-              <div
-                class="flex items-center justify-between gap-3 text-[0.6875rem] leading-[1.4]"
-              >
-                <span class="text-muted whitespace-nowrap"
-                  >{$_('chat.context_donut.output', {
-                    default: 'Output',
-                  })}</span
-                >
-                <span
-                  class="text-text-primary text-right tabular-nums overflow-hidden text-ellipsis whitespace-nowrap max-w-40"
-                  >{formatK(usage.output)}</span
-                >
-              </div>
-            {/if}
-
-            <!-- Cache (only when reported) -->
-            {#if usage.cached != null}
-              <div
-                class="flex items-center justify-between gap-3 text-[0.6875rem] leading-[1.4]"
-              >
-                <span class="text-muted whitespace-nowrap"
-                  >{$_('chat.context_donut.cache', { default: 'Cache' })}</span
-                >
-                <span
-                  class="text-text-primary text-right tabular-nums overflow-hidden text-ellipsis whitespace-nowrap max-w-40"
-                  >{formatK(usage.cached)}</span
-                >
-              </div>
-            {/if}
           {/if}
         </div>
       </Popover.Content>

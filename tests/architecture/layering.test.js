@@ -163,12 +163,15 @@ function report(label, violations) {
  * and `firefox.content.js`, literally load `content/main.js`), matching the
  * "measured starting state" methodology at the top of the reorg plan. `popop`
  * collapses to `settings` per SURFACE_ALIAS.
+ *
+ * `background` is a directory entrypoint (`background/index.js` plus its
+ * `handlers/`), so it needs no special case — the first path segment is already
+ * the surface name.
  */
 function canonicalSurface(entrypointsRel) {
   const top = entrypointsRel.split('/')[1]
   if (!top) return null
   if (top.endsWith('.content.js')) return 'content'
-  if (top === 'background.js') return 'background'
   return SURFACE_ALIAS[top] ?? top
 }
 
@@ -224,9 +227,14 @@ function reachableFrom(root, graph) {
 
 /**
  * The entrypoint roots per the reorg plan: every surface's `main.js`, the
- * content surface's `main.js`, every top-level `*.content.js` script, and
- * `background.js`. Enumerated from disk, not hardcoded, so a new entrypoint
- * doesn't silently fall outside Rule 6's coverage.
+ * content surface's `main.js`, every top-level `*.content.js` script, and the
+ * background service worker. Enumerated from disk, not hardcoded, so a new
+ * entrypoint doesn't silently fall outside Rule 6's coverage.
+ *
+ * Background is checked in both shapes because WXT accepts either
+ * `background.js` or the directory form `background/index.js` — it was split
+ * into the latter (see docs/refactor/03-god-files.md seams a–c), and silently
+ * dropping the root would have weakened Rule 6 rather than failed a test.
  */
 function enumerateEntrypointRoots() {
   const ENTRYPOINTS = path.join(SRC, 'entrypoints')
@@ -235,8 +243,10 @@ function enumerateEntrypointRoots() {
     const main = path.join(ENTRYPOINTS, surface, 'main.js')
     if (fs.existsSync(main)) roots.push(main)
   }
-  const background = path.join(ENTRYPOINTS, 'background.js')
-  if (fs.existsSync(background)) roots.push(background)
+  const background = ['background/index.js', 'background.js']
+    .map((rel) => path.join(ENTRYPOINTS, rel))
+    .find((abs) => fs.existsSync(abs))
+  if (background) roots.push(background)
   for (const entry of fs.readdirSync(ENTRYPOINTS)) {
     if (entry.endsWith('.content.js')) roots.push(path.join(ENTRYPOINTS, entry))
   }

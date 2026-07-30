@@ -10,6 +10,7 @@
 
   let {
     value = '',
+    skill = null,
     disabled = false,
     placeholder = 'Ask about this page...',
     autofocus = false,
@@ -17,6 +18,7 @@
     onsubmit = null,
     onmentionchange = null,
     onskillchange = null,
+    onskilltokenchange = null,
     oniniterror = null,
     onkeydown = null,
     'aria-label': ariaLabel = 'Chat message',
@@ -50,6 +52,30 @@
     }
   }
 
+  /** Replace the typed `/query` at `range` with the inline skill token. */
+  export function insertSkillToken(nextSkill, range = null) {
+    if (!editor || !nextSkill) return
+    editor.commands.setSkillToken(
+      {
+        skillId: nextSkill.skillId || nextSkill.id || null,
+        name: nextSkill.name || nextSkill.skillId || '',
+      },
+      range,
+    )
+  }
+
+  function hasSkillToken() {
+    if (!editor) return false
+    let found = false
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === 'skillToken') {
+        found = true
+        return false
+      }
+    })
+    return found
+  }
+
   // Update editor when value changes externally
   $effect(() => {
     if (editor && value !== undefined) {
@@ -62,7 +88,23 @@
           editor.commands.focus('end')
         }
         isUpdatingFromProp = false
+        // The token serializes to nothing, so setContent just wiped it. Put it
+        // back if the skill is still selected.
+        if (skill && !hasSkillToken()) insertSkillToken(skill)
       }
+    }
+  })
+
+  // Keep the inline token in step with the selected skill, in both directions.
+  // Removing it is not optional housekeeping: the token serializes to '', so
+  // clearing `composerText` on submit leaves `value === getMarkdown()` and the
+  // effect above never runs — this is the only thing that takes the token out.
+  $effect(() => {
+    if (!editor) return
+    if (skill) {
+      if (!hasSkillToken()) insertSkillToken(skill)
+    } else if (hasSkillToken()) {
+      editor.commands.unsetSkillToken()
     }
   })
 
@@ -150,9 +192,14 @@
           if (!isUpdatingFromProp) {
             const markdown = editor.getMarkdown()
             onchange?.(markdown)
+            // Backspacing over the token is how the user clears the skill, so
+            // the store has to learn about it from the document.
+            onskilltokenchange?.(hasSkillToken())
           }
         },
       })
+      // A remount (chat tab switch) rebuilds the doc from markdown, which
+      // carries no token — the sync effect above re-seeds it from `skill`.
     } catch (err) {
       if (editor) {
         editor.destroy()
@@ -170,8 +217,12 @@
 </script>
 
 <div class="relative w-full">
+  <!-- The editor is a contenteditable, so the `disabled:` Tailwind variant on
+       its class list never matches. Dim it here instead, otherwise a locked
+       input is indistinguishable from a live one. -->
   <div
-    class="chat-rich-text-input flex w-full items-start max-h-[220px] overflow-y-auto"
+    class="chat-rich-text-input flex w-full items-start max-h-[220px] overflow-y-auto transition-opacity"
+    class:opacity-60={disabled}
   >
     <div bind:this={editorContainer} class="w-full"></div>
   </div>
@@ -249,6 +300,19 @@
     background-color: var(--color-primary-10, rgba(99, 102, 241, 0.12));
     border-radius: 0.25rem;
     padding: 0 0.125rem;
+  }
+
+  /* The selected skill, inline in the input. Plain `/name` — it should read as
+     part of what you typed, not as a badge. */
+  :global(.tiptap .skill-token) {
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    margin-right: 0.25rem;
+  }
+
+  :global(.tiptap .skill-token.ProseMirror-selectednode) {
+    background-color: var(--color-blackwhite-5);
+    border-radius: 0.25rem;
   }
 
   :global(.tiptap code) {

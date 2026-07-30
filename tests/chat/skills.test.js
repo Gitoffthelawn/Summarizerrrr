@@ -4,6 +4,7 @@ import {
   createPersonaSnapshot,
   createSkillService,
   getAvailableSkills,
+  getPinnedSkills,
   toSkillInvocation,
 } from '@/lib/chat/skills/skillService.js'
 import {
@@ -23,6 +24,24 @@ describe('chat skills', () => {
     expect(skills[0]).not.toHaveProperty('description')
     expect(skills[0]).not.toHaveProperty('starterPrompt')
     expect(skills[0]).not.toHaveProperty('enabled')
+  })
+
+  it('orders the picker alphabetically and keeps `pinned` for the empty screen only', () => {
+    const userSkills = [{ id: 'user-zebra', name: 'Zebra notes', instruction: 'Notes.', pinned: true }]
+
+    const listed = getAvailableSkills(userSkills)
+    expect(listed.map((skill) => skill.name)).toEqual(
+      [...listed.map((skill) => skill.name)].sort((a, b) => a.localeCompare(b)),
+    )
+    // Pinning must not hoist anything: 'Analyze' is first because of its name.
+    expect(listed[0].id).toBe('analyze')
+
+    expect(getPinnedSkills(userSkills).map((skill) => skill.id)).toEqual([
+      'analyze',
+      'explain',
+      'summarize',
+      'user-zebra',
+    ])
   })
 
   it('keeps an old turn snapshot stable when the source skill is later edited', () => {

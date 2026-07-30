@@ -93,9 +93,6 @@
       >
         <Icon icon="heroicons:bolt" width="16" height="16" />
         <span class="min-w-0 flex-1 truncate font-medium">{skill.name}</span>
-        {#if skill.pinned}
-          <Icon icon="heroicons:bookmark-solid" width="13" height="13" class="text-text-secondary" />
-        {/if}
       </button>
     {:else}
       <p class="p-2 text-xs text-text-secondary">No matching skills.</p>

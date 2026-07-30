@@ -173,4 +173,74 @@ describe('ChatRichTextInput Component', () => {
     // Clean up
     host.remove()
   })
+
+  it('locks and unlocks the editor with the disabled prop', () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+
+    // This is the mechanism the queued-send lock rides on: arming the queue
+    // sets disabled, and cancelling it must give editing back.
+    const props = $state({ value: 'queued question', disabled: true })
+
+    mount(ChatRichTextInput, { target: host, props })
+    flushSync()
+
+    expect(host.querySelector('.tiptap').getAttribute('contenteditable')).toBe(
+      'false',
+    )
+
+    props.disabled = false
+    flushSync()
+
+    expect(host.querySelector('.tiptap').getAttribute('contenteditable')).toBe(
+      'true',
+    )
+
+    host.remove()
+  })
+
+  it('seeds the skill token from the skill prop', () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+
+    mount(ChatRichTextInput, {
+      target: host,
+      props: { value: '', skill: { skillId: 'explain', name: 'Explain' } },
+    })
+
+    flushSync()
+
+    const token = host.querySelector('[data-skill-id="explain"]')
+    expect(token).not.toBeNull()
+    expect(token.textContent).toBe('/Explain')
+
+    host.remove()
+  })
+
+  it('removes the token when the skill is cleared on submit', () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+
+    // Submit clears skill and composerText together. `value` is '' both before
+    // and after (the token serializes to nothing), so the token can only go
+    // away by watching `skill` — this is the regression this test pins.
+    const props = $state({
+      value: '',
+      disabled: false,
+      skill: { skillId: 'explain', name: 'Explain' },
+    })
+
+    mount(ChatRichTextInput, { target: host, props })
+    flushSync()
+
+    expect(host.querySelector('[data-skill-id="explain"]')).not.toBeNull()
+
+    props.skill = null
+    props.disabled = true // a read-only editor must still drop the token
+    flushSync()
+
+    expect(host.querySelector('[data-skill-id="explain"]')).toBeNull()
+
+    host.remove()
+  })
 })

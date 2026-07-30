@@ -365,16 +365,26 @@
       "minutesAgo": "{count} phút trước"
     },
     "context_donut": {
-      "aria_usage": "Context window usage:",
-      "aria_unknown": "Context usage not known yet",
-      "model": "Model",
+      "aria_usage": "Mức dùng cửa sổ ngữ cảnh:",
+      "aria_unknown": "Chưa rõ mức dùng ngữ cảnh",
+      "model": "Mô hình",
       "unknown_provider": "Unknown provider",
-      "context_window": "Context window",
-      "input_budget": "Input budget",
-      "input": "Input",
-      "output": "Output",
-      "cache": "Cache",
-      "source": "Source"
+      "context_window": "Cửa sổ ngữ cảnh",
+      "input_budget": "Ngân sách đầu vào",
+      "input": "Đầu vào",
+      "output": "Đầu ra",
+      "cache": "Bộ nhớ đệm",
+      "source": "Nguồn",
+      "cached_row": "đã cache",
+      "session_turns": "Session · {count} lượt",
+      "cost": "Chi phí",
+      "near_limit": "Ngữ cảnh đã dùng {percent}% — nên mở chat mới.",
+      "near_limit_turns": "Ngữ cảnh đã dùng {percent}%, còn khoảng {count} lượt — nên mở chat mới."
+    },
+    "message_meta": {
+      "aria_label": "Chi tiết tin nhắn",
+      "created": "Thời gian",
+      "sources": "{count} nguồn"
     },
     "context_warning": {
       "source_dropped": "Nguồn \"{title}\" quá dài so với ngữ cảnh của mô hình này và đã bị bỏ qua. Câu trả lời bên dưới không dựa trên nguồn này — hãy thử một mô hình có cửa sổ ngữ cảnh lớn hơn.",

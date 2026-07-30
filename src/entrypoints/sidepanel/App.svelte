@@ -76,12 +76,18 @@
   import ChatHeader from '@/entrypoints/sidepanel/components/chat/ChatHeader.svelte'
   import ChatTabTitleBar from '@/entrypoints/sidepanel/components/chat/ChatTabTitleBar.svelte'
   import { openConversation } from '@/stores/chatStore.svelte.js'
+  import {
+    sidepanelViewState,
+    showLegacySummarySurface,
+  } from '@/stores/sidepanelViewStore.svelte.js'
 
   // Track if settings are loaded
   let settingsLoaded = $state(false)
 
-  // Legacy summary UI remains reachable behind an explicit toggle
-  let showLegacySummary = $state(false)
+  // Legacy summary UI remains reachable behind an explicit toggle. The flag
+  // lives in a store because `messageHandler` needs it too: whichever surface
+  // is off screen must not touch the shared document scroll.
+  const showLegacySummary = $derived(sidepanelViewState.surface === 'summary')
 
   // Permission state for Firefox
   let hasPermission = $state(true) // Default to true for non-Firefox
@@ -679,7 +685,8 @@
   class="flex min-h-screen min-w-[22.5rem] w-full flex-col bg-surface-1"
   data-per-tab="true"
 >
-  <div class="sticky top-0 z-40 bg-surface-1">
+  <!-- `data-sticky-header`: ChatShell measures this to offset its submit scroll. -->
+  <div class="sticky top-0 z-40 bg-surface-1" data-sticky-header>
     <div
       class="relative flex h-9 shrink-0 items-center justify-center bg-surface-1"
     >
@@ -690,7 +697,7 @@
     </div>
     <ChatHeader
       onOpenConversation={openConversation}
-      onShowLegacySummary={() => (showLegacySummary = true)}
+      onShowLegacySummary={showLegacySummarySurface}
     />
   </div>
 

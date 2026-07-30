@@ -1,17 +1,17 @@
 <script>
   // @ts-nocheck
-  import { onMount, tick } from 'svelte'
+  import { tick } from 'svelte'
   import ChatMessage from '@/entrypoints/sidepanel/components/chat/ChatMessage.svelte'
   import Icon from '@iconify/svelte'
   import { loadEarlierMessages, chatState } from '@/stores/chatStore.svelte.js'
 
   let { messages = [], streamingMessage = null, onRetry = null, conversation = null, onFollowUp = null } = $props()
 
-  let isNearBottom = $state(true)
   let isLoadingEarlier = $state(false)
 
-  // Scroll is owned by the document/body (not a local overflow container), so
-  // we read/write the document scroller and listen on `window`.
+  // Chat never auto-scrolls; the only scroll we perform is holding the
+  // viewport still when earlier messages are prepended. Scroll is owned by the
+  // document/body (there is no local overflow container).
   function getScroller() {
     if (typeof document === 'undefined') return null
     return document.scrollingElement || document.documentElement
@@ -26,16 +26,26 @@
     return null
   }
 
-  const allMessages = $derived(
-    streamingMessage ? [...messages, { ...streamingMessage, id: '__streaming__' }] : messages
-  )
-
-  function handleScroll() {
-    const el = getScroller()
-    if (!el) return
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    isNearBottom = distanceFromBottom < 120
-  }
+  // The streaming bubble is keyed by the id of the row it will become, so when
+  // the stream ends and the persisted message replaces it the each block
+  // patches that node instead of remounting it. A remount rendered one frame of
+  // empty markdown (svelte-markdown fills its streaming tokens from an effect),
+  // which collapsed the document height and made the browser clamp the scroll
+  // to the top the moment a reply finished.
+  // `continueResponse` streams into a message that is already persisted, so its
+  // transient overlays that row (live combined content, no second copy below
+  // it) rather than being appended. An id-less transient falls back to the
+  // sentinel key.
+  const allMessages = $derived.by(() => {
+    if (!streamingMessage) return messages
+    const transient = { ...streamingMessage, isTransient: true }
+    if (!transient.id) return [...messages, { ...transient, id: '__streaming__' }]
+    const index = messages.findIndex((message) => message.id === transient.id)
+    if (index === -1) return [...messages, transient]
+    const merged = [...messages]
+    merged[index] = { ...messages[index], ...transient }
+    return merged
+  })
 
   async function handleLoadEarlier() {
     if (isLoadingEarlier) return
@@ -47,33 +57,21 @@
       await loadEarlierMessages()
       await tick()
       // Preserve viewport position after prepending earlier messages.
-      if (el) el.scrollTop = prevTop + (el.scrollHeight - prevHeight)
+      // `behavior: 'instant'` is required: a plain `scrollTop =` would animate
+      // against `html { scroll-behavior: smooth }` and drift.
+      if (el)
+        el.scrollTo({
+          top: prevTop + (el.scrollHeight - prevHeight),
+          behavior: 'instant',
+        })
     } finally {
       isLoadingEarlier = false
     }
   }
-
-  onMount(() => {
-    handleScroll() // initialize isNearBottom
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  })
-
-  $effect(() => {
-    // Track dependency so this effect reruns whenever content grows.
-    const _length = allMessages.length
-    const _lastContent = allMessages.at(-1)?.content
-    if (isNearBottom) {
-      const el = getScroller()
-      // Assign scrollTop directly (instant) so streaming doesn't animate
-      // against `html { scroll-behavior: smooth }`.
-      if (el) el.scrollTop = el.scrollHeight
-    }
-  })
 </script>
 
 <div
-  class="flex w-full flex-col gap-5 px-6 pt-8 pb-4 max-w-[52rem] mx-auto"
+  class="flex w-full flex-col gap-5 px-6 pt-8 pb-24 max-w-[52rem] mx-auto"
 >
   {#if chatState.hasEarlierMessages}
     <div class="flex justify-center py-2">
@@ -91,7 +89,7 @@
   {#each allMessages as message, index (message.id)}
     <ChatMessage
       {message}
-      isStreaming={message.id === '__streaming__'}
+      isStreaming={message.isTransient === true}
       retryTargetId={message.role === 'assistant' ? retryTargetFor(index) : null}
       {onRetry}
       {conversation}

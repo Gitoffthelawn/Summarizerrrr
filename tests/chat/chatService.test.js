@@ -222,6 +222,38 @@ describe('chat orchestration', () => {
     expect(source.condensationVersion).toBe(0)
   })
 
+  it('streams chunks under the id of the message they will be persisted as', async () => {
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const sourceService = {
+      getActiveTab: async () => ({ id: 1, title: 'Example' }),
+      getCachedActiveSource: async () => ({ source: activeSource }),
+    }
+    const service = createChatService({
+      repository,
+      sourceService,
+      buildPipeline: createPipelineProbe().build,
+      streamRequest: async function* () {
+        yield { chunk: 'Half', fullText: 'Half', isComplete: false }
+        yield { chunk: ' done', fullText: 'Half done', isComplete: false }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+    const chunkIds = []
+    const result = await service.send({
+      conversation,
+      content: 'Keep my scroll still',
+      settings,
+      onChunk: (message) => chunkIds.push(message.id),
+    })
+
+    // The side panel keys the streaming bubble by this id: a mismatch would
+    // remount the message when the stream ends and yank the scroll to the top.
+    expect(chunkIds.length).toBe(2)
+    expect(new Set(chunkIds)).toEqual(new Set([result.assistant.id]))
+  })
+
   it('persists non-empty partial output as aborted and clears the terminal lifecycle', async () => {
     const repository = createRepository()
     const activeSource = source()
@@ -710,6 +742,99 @@ describe('enriched onDiagnostics payload (Phase 3)', () => {
     // Legacy keys still present
     expect(collectedDiagnostics[0].used).toBe(500)
     expect(collectedDiagnostics[0].inputBudget).toBe(120_000)
+    expect(collectedDiagnostics[0].available).toBe(true)
+  })
+
+  it('still fires with available:false when the provider reports no usage', async () => {
+    // The blocking fallback path (Firefox mobile) always yields usage:null. The
+    // meter has to hear about it, otherwise it keeps showing the previous turn.
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const collectedDiagnostics = []
+    const service = createChatService({
+      repository,
+      sourceService: {
+        getActiveTab: async () => ({ id: 1, title: 'Example' }),
+        getCachedActiveSource: async () => ({ source: activeSource }),
+      },
+      buildPipeline: async (input) => ({
+        system: 'System',
+        messages: [{ role: 'user', content: input.currentUserMessage.content }],
+        warnings: [],
+        inputBudgetTokens: 120_000,
+        capabilities: { contextWindowTokens: 128_000, source: 'known-model' },
+        sourceTokens: {},
+      }),
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield { chunk: '', fullText: 'Answer', isComplete: true, usage: null }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'No usage reported',
+      settings,
+      onDiagnostics: (d) => collectedDiagnostics.push(d),
+    })
+
+    expect(collectedDiagnostics).toHaveLength(1)
+    const diag = collectedDiagnostics[0]
+    expect(diag.available).toBe(false)
+    expect(diag.used).toBeNull()
+    expect(diag.input).toBeNull()
+    expect(diag.output).toBeNull()
+    // Model and window stay real — only the token counts are unknown.
+    expect(diag.window).toBe(128_000)
+    expect(diag.modelId).toBe('gemini-test')
+  })
+
+  it('reads v5-only usage keys for input and output', async () => {
+    // A provider (or SDK path) that reports only inputTokens/outputTokens must
+    // not leave the Input/Output rows blank while `used` is populated.
+    const repository = createRepository()
+    const activeSource = source()
+    repository.sources.set(activeSource.id, activeSource)
+    const collectedDiagnostics = []
+    const service = createChatService({
+      repository,
+      sourceService: {
+        getActiveTab: async () => ({ id: 1, title: 'Example' }),
+        getCachedActiveSource: async () => ({ source: activeSource }),
+      },
+      buildPipeline: async (input) => ({
+        system: 'System',
+        messages: [{ role: 'user', content: input.currentUserMessage.content }],
+        warnings: [],
+        inputBudgetTokens: 120_000,
+        capabilities: { contextWindowTokens: 128_000, source: 'known-model' },
+        sourceTokens: {},
+      }),
+      streamRequest: async function* () {
+        yield { chunk: 'Answer', fullText: 'Answer', isComplete: false }
+        yield {
+          chunk: '',
+          fullText: 'Answer',
+          isComplete: true,
+          usage: { inputTokens: 900, outputTokens: 120 },
+        }
+      },
+    })
+    const { conversation } = await service.startConversationForActiveTab({ settings })
+
+    await service.send({
+      conversation,
+      content: 'v5 usage',
+      settings,
+      onDiagnostics: (d) => collectedDiagnostics.push(d),
+    })
+
+    const diag = collectedDiagnostics[0]
+    expect(diag.available).toBe(true)
+    expect(diag.input).toBe(900)
+    expect(diag.output).toBe(120)
   })
 })
 

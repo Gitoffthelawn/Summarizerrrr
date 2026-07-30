@@ -68,6 +68,32 @@ function realInputTokens(usage) {
   return typeof n === 'number' && n > 0 ? n : null
 }
 
+/**
+ * Build the context-meter payload for a finished turn.
+ *
+ * Fires even when the provider reported nothing — the blocking fallback path
+ * (Firefox mobile, see `defaultStreamRequest`) always yields `usage: null`, and
+ * a meter left showing the previous turn's numbers is worse than one that says
+ * it doesn't know. `available: false` is that signal; the token fields are null
+ * alongside it while the model/window fields stay real.
+ */
+function contextDiagnostics(usage, pipeline, providerId, modelId) {
+  const used = realInputTokens(usage)
+  return {
+    available: used != null,
+    used,
+    inputBudget: pipeline.inputBudgetTokens,
+    window: pipeline.capabilities?.contextWindowTokens,
+    source: pipeline.capabilities?.source,
+    input: used,
+    output: usage?.completionTokens ?? usage?.outputTokens ?? null,
+    cached: usage?.cachedInputTokens ?? null,
+    providerId,
+    modelId,
+    sourceTokens: pipeline.sourceTokens || {},
+  }
+}
+
 function isAbortError(error, abortController) {
   return Boolean(
     abortController?.signal.aborted ||
@@ -253,6 +279,10 @@ export function createChatService({
         modelId: conversationModelId,
       })
       streamingMessageId = streamingMessage.id
+      // Every chunk carries the id of the row this reply will become, so the
+      // message list can key the streaming bubble by its final id and patch it
+      // in place when the persisted message arrives (see ChatMessageList).
+      transient.id = streamingMessage.id
 
       pipeline = await buildPipeline(
         {
@@ -297,22 +327,10 @@ export function createChatService({
       })) {
         if (event.isComplete) {
           usage = event.usage || null
-          // Report the provider's real input-token count to the context meter.
-          const realUsed = realInputTokens(usage)
-          if (realUsed != null) {
-            onDiagnostics?.({
-              used: realUsed,
-              inputBudget: pipeline.inputBudgetTokens,
-              window: pipeline.capabilities?.contextWindowTokens,
-              source: pipeline.capabilities?.source,
-              input: usage?.promptTokens ?? null,
-              output: usage?.completionTokens ?? null,
-              cached: usage?.cachedInputTokens ?? null,
-              providerId: conversationProviderId,
-              modelId: conversationModelId,
-              sourceTokens: pipeline.sourceTokens || {},
-            })
-          }
+          // Report the turn's real token counts to the context meter.
+          onDiagnostics?.(
+            contextDiagnostics(usage, pipeline, conversationProviderId, conversationModelId)
+          )
           // Merge any reasoning-related warnings from the AI SDK into context
           // warnings so the user sees them alongside pipeline warnings.
           if (event.reasoningWarnings?.length) {
@@ -539,6 +557,9 @@ export function createChatService({
       const controller = abortController || new AbortController()
       const baseContent = assistantMessage.content || ''
       const transient = {
+        // Continue writes back into the existing row, so chunks stream under
+        // that id and the list overlays it instead of adding a second bubble.
+        id: assistantMessageId,
         role: 'assistant',
         content: '',
         status: 'complete',
@@ -633,22 +654,10 @@ export function createChatService({
         })) {
           if (event.isComplete) {
             usage = event.usage || null
-            // Report the provider's real input-token count to the context meter.
-            const realUsed = realInputTokens(usage)
-            if (realUsed != null) {
-              onDiagnostics?.({
-                used: realUsed,
-                inputBudget: pipeline.inputBudgetTokens,
-                window: pipeline.capabilities?.contextWindowTokens,
-                source: pipeline.capabilities?.source,
-                input: usage?.promptTokens ?? null,
-                output: usage?.completionTokens ?? null,
-                cached: usage?.cachedInputTokens ?? null,
-                providerId: conversationProviderId,
-                modelId: conversationModelId,
-                sourceTokens: pipeline.sourceTokens || {},
-              })
-            }
+            // Report the turn's real token counts to the context meter.
+            onDiagnostics?.(
+              contextDiagnostics(usage, pipeline, conversationProviderId, conversationModelId)
+            )
             // Merge any reasoning-related warnings from the AI SDK.
             if (event.reasoningWarnings?.length) {
               const existing = pipeline.warnings || []

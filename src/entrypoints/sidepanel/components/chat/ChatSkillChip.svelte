@@ -6,15 +6,16 @@
 </script>
 
 {#if skill}
+  <!-- Plain `/name`, matching how the skill is typed. No pill, no accent colour:
+       it sits inside the composer box, so it should read as part of the input. -->
   <span
-    class="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs text-primary"
+    class="inline-flex min-w-0 items-center gap-1 text-xs text-text-secondary"
   >
-    <Icon icon="heroicons:sparkles" width="14" height="14" />
-    <span class="max-w-40 truncate">{skill.name || skill.skillId}</span>
+    <span class="truncate">/{skill.name || skill.skillId}</span>
     {#if onClear}
       <button
         type="button"
-        class="ml-0.5 rounded-full p-0.5 hover:bg-primary/20"
+        class="shrink-0 text-muted transition-colors hover:text-text-primary"
         aria-label="Clear selected skill"
         onclick={onClear}
       >

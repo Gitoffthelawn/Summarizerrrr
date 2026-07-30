@@ -1,5 +1,6 @@
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
+import { SkillTokenExtension } from './skillTokenExtension.js';
 
 /**
  * Returns the locked list of extensions for the TipTap composer/editor.
@@ -11,6 +12,9 @@ import Placeholder from '@tiptap/extension-placeholder';
  *   Heading, Blockquote and HorizontalRule are disabled — only bullet list,
  *   ordered list and code block are supported as block-level formatting.
  * - Placeholder extension.
+ * - SkillToken: the selected skill, shown inline in the input. Part of the
+ *   locked schema so the headless markdown codec shares it and can serialize
+ *   a document containing one (to nothing — see the extension).
  *
  * @param {Object} options Configuration options
  * @param {string} [options.placeholder] Placeholder text
@@ -29,5 +33,6 @@ export function getEditorExtensions(options = {}) {
       placeholder,
       emptyEditorClass: 'is-editor-empty',
     }),
+    SkillTokenExtension,
   ];
 }

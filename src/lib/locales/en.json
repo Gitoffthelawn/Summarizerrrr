@@ -374,7 +374,17 @@
       "input": "Input",
       "output": "Output",
       "cache": "Cache",
-      "source": "Source"
+      "source": "Source",
+      "cached_row": "cached",
+      "session_turns": "Session · {count} turns",
+      "cost": "Cost",
+      "near_limit": "Context is {percent}% full — start a new chat.",
+      "near_limit_turns": "Context is {percent}% full, roughly {count} turns left — start a new chat."
+    },
+    "message_meta": {
+      "aria_label": "Message details",
+      "created": "Time",
+      "sources": "{count} source(s)"
     },
     "context_warning": {
       "source_dropped": "\"{title}\" was too long for this model's context and was left out. The answer below is not grounded in it — try a model with a larger context window.",

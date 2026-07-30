@@ -2,6 +2,8 @@
   // @ts-nocheck
   import Icon from '@iconify/svelte'
   import { _ } from 'svelte-i18n'
+  import { Tooltip as BitsTooltip } from 'bits-ui'
+  import Tooltip from '@/entrypoints/sidepanel/components/Tooltip.svelte'
   import StreamingMarkdownV2 from '@/components/markdown/StreamingMarkdownV2.svelte'
   import ChatUserBubble from '@/entrypoints/sidepanel/components/chat/ChatUserBubble.svelte'
   import ChatMessageEditor from '@/entrypoints/sidepanel/components/chat/ChatMessageEditor.svelte'
@@ -11,13 +13,14 @@
     regenerateChatMessage,
     editChatMessage,
     continueChatMessage,
-    deleteChatMessage,
   } from '@/stores/chatStore.svelte.js'
   import { conversationRepository } from '@/lib/db/conversationRepository.js'
   import { getElapsedDisplay } from '@/lib/utils/utils.js'
   import { nowState } from '@/stores/nowStore.svelte.js'
   import ChatDeepDive from '@/entrypoints/sidepanel/components/chat/ChatDeepDive.svelte'
   import ChatSourceDrawer from '@/entrypoints/sidepanel/components/chat/ChatSourceDrawer.svelte'
+  import ChatThinkingIndicator from '@/entrypoints/sidepanel/components/chat/ChatThinkingIndicator.svelte'
+  import ChatMessageMeta from '@/entrypoints/sidepanel/components/chat/ChatMessageMeta.svelte'
 
   let {
     message,
@@ -34,6 +37,7 @@
   const isError = $derived(message.status === 'error')
   const isInterrupted = $derived(message.status === 'interrupted')
   const canContinue = $derived(isAborted || isInterrupted)
+  const hasContent = $derived(Boolean(message.content?.trim()))
 
   let siblings = $state([])
   let isEditing = $state(false)
@@ -42,8 +46,17 @@
 
   const hasGroundingRefs = $derived(!isUser && Array.isArray(message.groundingRefs) && message.groundingRefs.length > 0)
 
+  const sourcesLabel = $derived(
+    $_('chat.message_meta.sources', {
+      default: `${message.groundingRefs?.length ?? 0} source(s)`,
+      values: { count: message.groundingRefs?.length ?? 0 },
+    }),
+  )
+
   $effect(() => {
-    if (message.id && message.id !== '__streaming__' && message.conversationId) {
+    // The streaming bubble carries its future id but no conversationId yet;
+    // siblings load once the persisted message lands in this same node.
+    if (!isStreaming && message.id && message.conversationId) {
       conversationRepository.getSiblings(message.conversationId, message.parentKey || '__root__')
         .then((res) => {
           siblings = res
@@ -58,6 +71,14 @@
 
   const siblingIndex = $derived(siblings.findIndex((s) => s.id === message.id))
   const hasSiblings = $derived(siblings.length > 1)
+
+  // Footer buttons are all the same shape (14px icon + tooltip), so they render
+  // through the `actionBtn` snippet below; only the class differs per variant.
+  // The user row sets its own `text-text-secondary`; the assistant row inherits
+  // `text-muted` from its container.
+  const BTN = 'rounded-md p-1 transition-colors hover:bg-blackwhite-5 hover:text-text-primary'
+  const BTN_USER = `${BTN} text-text-secondary`
+  const BTN_NAV = 'rounded p-0.5 transition-colors hover:bg-blackwhite-5 hover:text-text-primary'
 
   function copyContent() {
     navigator.clipboard?.writeText(message.content || '')
@@ -90,29 +111,6 @@
     }
   }
 
-  const modelLabel = $derived.by(() => {
-    if (isUser || !message.modelId) return null
-    return message.modelId
-  })
-
-  const usageLabel = $derived.by(() => {
-    if (isUser || !message.usage) return null
-    const u = message.usage
-    const promptTokens = u.promptTokens ?? u.inputTokens
-    const completionTokens = u.completionTokens ?? u.outputTokens
-    const cachedTokens = u.cachedInputTokens
-    const parts = []
-    if (promptTokens != null) {
-      parts.push(
-        cachedTokens != null && cachedTokens > 0
-          ? `${promptTokens} in (${cachedTokens} cached)`
-          : `${promptTokens} in`
-      )
-    }
-    if (completionTokens != null) parts.push(`${completionTokens} out`)
-    return parts.length > 0 ? parts.join(' · ') : null
-  })
-
   const timeLabel = $derived.by(() => {
     const elapsed = getElapsedDisplay(message.createdAt, nowState.value)
     if (!elapsed) return null
@@ -134,9 +132,25 @@
   })
 </script>
 
+<!-- The tooltip label doubles as the accessible name — one string, no drift.
+     `{...builder}` MUST come before `{onclick}`: the bits-ui trigger props
+     carry their own `onclick` (it closes the tooltip), and in a Svelte spread
+     the last writer wins — spreading after would silently swallow the action. -->
+{#snippet actionBtn(label, icon, onclick, cls)}
+  <Tooltip content={label} side="top" delayDuration={300}>
+    {#snippet children({ builder })}
+      <button type="button" {...builder} class={cls} aria-label={label} {onclick}>
+        <Icon {icon} width="14" height="14" />
+      </button>
+    {/snippet}
+  </Tooltip>
+{/snippet}
+
 <div
   class="flex w-full flex-col gap-1 {isUser ? 'items-end' : 'items-start'}"
   data-message-status={message.status}
+  data-message-id={message.id}
+  data-message-role={message.role}
 >
   {#if isUser}
     {#if isEditing}
@@ -154,60 +168,57 @@
       <ChatUserBubble {message} />
     {/if}
     {#if !isStreaming && !isEditing}
-      <div class="mt-0.5 flex items-center justify-end gap-1">
-        {#if timeLabel}
-          <span class="mr-1 flex items-center gap-1 text-[11px] text-text-secondary/60" title={message.createdAt}>
-            <Icon icon="heroicons:clock" width="12" height="12" />
-            {timeLabel}
-          </span>
-        {/if}
-        {#if hasSiblings}
-          <div class="flex items-center gap-1 select-none text-xs text-text-secondary">
-            <button
-              type="button"
-              class="rounded p-0.5 hover:bg-blackwhite-5 hover:text-text-primary transition-colors"
-              onclick={() => switchBranch(siblings[(siblingIndex - 1 + siblings.length) % siblings.length].id)}
-              aria-label="Previous branch"
+      <BitsTooltip.Provider>
+        <div class="mt-0.5 flex flex-wrap items-center justify-end gap-1">
+          {#if hasSiblings}
+            <div class="flex items-center gap-1 select-none text-xs text-text-secondary">
+              {@render actionBtn(
+                'Previous branch',
+                'heroicons:chevron-left',
+                () => switchBranch(siblings[(siblingIndex - 1 + siblings.length) % siblings.length].id),
+                BTN_NAV,
+              )}
+              <span>{siblingIndex + 1}/{siblings.length}</span>
+              {@render actionBtn(
+                'Next branch',
+                'heroicons:chevron-right',
+                () => switchBranch(siblings[(siblingIndex + 1) % siblings.length].id),
+                BTN_NAV,
+              )}
+            </div>
+          {/if}
+          {@render actionBtn('Edit message', 'heroicons:pencil-square', startEditing, BTN_USER)}
+          {@render actionBtn(
+            'Copy message',
+            'heroicons:document-duplicate-20-solid',
+            copyContent,
+            BTN_USER,
+          )}
+          {#if timeLabel}
+            <span
+              class="ml-1 text-[11px] text-text-secondary/60 tabular-nums"
+              title={message.createdAt}
             >
-              <Icon icon="heroicons:chevron-left" width="14" height="14" />
-            </button>
-            <span>{siblingIndex + 1}/{siblings.length}</span>
-            <button
-              type="button"
-              class="rounded p-0.5 hover:bg-blackwhite-5 hover:text-text-primary transition-colors"
-              onclick={() => switchBranch(siblings[(siblingIndex + 1) % siblings.length].id)}
-              aria-label="Next branch"
-            >
-              <Icon icon="heroicons:chevron-right" width="14" height="14" />
-            </button>
-          </div>
-        {/if}
-        <button
-          type="button"
-          class="rounded-md p-1 text-text-secondary transition-colors hover:bg-blackwhite-5 hover:text-text-primary"
-          aria-label="Edit message"
-          onclick={startEditing}
-        >
-          <Icon icon="heroicons:pencil-square" width="14" height="14" />
-        </button>
-        <button
-          type="button"
-          class="rounded-md p-1 text-text-secondary transition-colors hover:bg-blackwhite-5 hover:text-text-primary"
-          aria-label="Copy message"
-          onclick={copyContent}
-        >
-          <Icon icon="heroicons:document-duplicate-20-solid" width="14" height="14" />
-        </button>
-      </div>
+              {timeLabel}
+            </span>
+          {/if}
+        </div>
+      </BitsTooltip.Provider>
     {/if}
   {:else}
+    {#if isStreaming && !hasContent}
+      <ChatThinkingIndicator />
+    {/if}
+
+    <!-- No `content-visibility: auto` here: an offscreen streaming message
+         would report its 200px placeholder instead of its real height, so the
+         page height (and the scrollbar) would jump as you read down into it. -->
     <div
       class="prose main-sidepanel wrap-anywhere prose-h2:mt-4 w-full max-w-none text-text-primary"
-      style="content-visibility: auto; contain-intrinsic-size: auto 200px;"
     >
       <StreamingMarkdownV2
         sourceMarkdown={message.content}
-        enableCursor={isStreaming}
+        enableCursor={isStreaming && hasContent}
         enableHighlight={true}
         summaryLang={settings.summaryLang}
         isLoading={isStreaming}
@@ -241,118 +252,103 @@
     {/if}
 
     {#if !isStreaming}
-      <div class="flex items-center gap-2 text-muted">
-        {#if hasSiblings}
-          <div class="flex items-center gap-1 select-none text-xs text-text-secondary">
-            <button
-              type="button"
-              class="rounded p-0.5 hover:bg-blackwhite-5 hover:text-text-primary transition-colors"
-              onclick={() => switchBranch(siblings[(siblingIndex - 1 + siblings.length) % siblings.length].id)}
-              aria-label="Previous branch"
-            >
-              <Icon icon="heroicons:chevron-left" width="14" height="14" />
-            </button>
-            <span>{siblingIndex + 1}/{siblings.length}</span>
-            <button
-              type="button"
-              class="rounded p-0.5 hover:bg-blackwhite-5 hover:text-text-primary transition-colors"
-              onclick={() => switchBranch(siblings[(siblingIndex + 1) % siblings.length].id)}
-              aria-label="Next branch"
-            >
-              <Icon icon="heroicons:chevron-right" width="14" height="14" />
-            </button>
-          </div>
-        {/if}
-
-        <button
-          type="button"
-          class="rounded-md p-1 transition-colors hover:bg-blackwhite-5 hover:text-text-primary"
-          aria-label="Copy response"
-          onclick={copyContent}
-        >
-          <Icon icon="heroicons:document-duplicate-20-solid" width="16" height="16" />
-        </button>
-
-        {#if message.status === 'complete'}
-          <button
-            type="button"
-            class="rounded-md p-1 transition-colors hover:bg-blackwhite-5 hover:text-text-primary"
-            aria-label="Regenerate response"
-            onclick={() => regenerateChatMessage(message.id)}
-          >
-            <Icon icon="heroicons:arrow-path" width="16" height="16" />
-          </button>
-        {:else if canContinue}
-          <button
-            type="button"
-            class="rounded-md p-1 transition-colors hover:bg-blackwhite-5 hover:text-text-primary"
-            aria-label="Continue response"
-            onclick={() => continueChatMessage(message.id)}
-          >
-            <Icon icon="heroicons:play" width="16" height="16" />
-          </button>
-        {/if}
-
-        {#if onRetry && retryTargetId && isError}
-          <button
-            type="button"
-            class="rounded-md p-1 transition-colors hover:bg-blackwhite-5 hover:text-text-primary"
-            aria-label="Retry this message"
-            onclick={() => onRetry(retryTargetId)}
-          >
-            <Icon icon="heroicons:arrow-path" width="16" height="16" />
-          </button>
-        {/if}
-
-        <button
-          type="button"
-          class="rounded-md p-1 transition-colors hover:bg-blackwhite-5 hover:text-text-primary text-text-secondary hover:text-error"
-          aria-label="Delete message"
-          onclick={() => deleteChatMessage(message.id)}
-        >
-          <Icon icon="heroicons:trash" width="16" height="16" />
-        </button>
-      </div>
-
-      {#if modelLabel || usageLabel || timeLabel}
-        <div class="flex items-center gap-2 text-[11px] text-text-secondary/60">
-          {#if modelLabel}
-            <span class="flex items-center gap-1">
-              <Icon icon="heroicons:cpu-chip" width="12" height="12" />
-              {modelLabel}
-            </span>
+      <!-- One row for everything: actions, the metadata popover, sources and
+           the Deep Dive pill. `flex-wrap` is deliberate — a very narrow side
+           panel wraps the row instead of overflowing it. -->
+      <BitsTooltip.Provider>
+        <div class="mt-0.5 flex w-full flex-wrap items-center gap-1 text-muted">
+          {#if hasSiblings}
+            <div class="flex items-center gap-1 select-none text-xs text-text-secondary">
+              {@render actionBtn(
+                'Previous branch',
+                'heroicons:chevron-left',
+                () => switchBranch(siblings[(siblingIndex - 1 + siblings.length) % siblings.length].id),
+                BTN_NAV,
+              )}
+              <span>{siblingIndex + 1}/{siblings.length}</span>
+              {@render actionBtn(
+                'Next branch',
+                'heroicons:chevron-right',
+                () => switchBranch(siblings[(siblingIndex + 1) % siblings.length].id),
+                BTN_NAV,
+              )}
+            </div>
           {/if}
-          {#if usageLabel}
-            <span class="flex items-center gap-1">
-              <Icon icon="heroicons:chart-bar" width="12" height="12" />
-              {usageLabel}
-            </span>
+
+          {@render actionBtn(
+            'Copy response',
+            'heroicons:document-duplicate-20-solid',
+            copyContent,
+            BTN,
+          )}
+
+          {#if message.status === 'complete'}
+            {@render actionBtn(
+              'Regenerate response',
+              'heroicons:arrow-path',
+              () => regenerateChatMessage(message.id),
+              BTN,
+            )}
+          {:else if canContinue}
+            {@render actionBtn(
+              'Continue response',
+              'heroicons:play',
+              () => continueChatMessage(message.id),
+              BTN,
+            )}
           {/if}
+
+          {#if onRetry && retryTargetId && isError}
+            {@render actionBtn(
+              'Retry this message',
+              'heroicons:arrow-path',
+              () => onRetry(retryTargetId),
+              BTN,
+            )}
+          {/if}
+
+          <ChatMessageMeta
+            modelId={message.modelId}
+            usage={message.usage}
+            createdAt={message.createdAt}
+          />
+
+          {#if hasGroundingRefs}
+            <Tooltip content={sourcesLabel} side="top" delayDuration={300}>
+              {#snippet children({ builder })}
+                <button
+                  type="button"
+                  {...builder}
+                  class="flex items-center gap-0.5 rounded-md px-1 py-1 text-[11px] text-text-secondary/70 hover:bg-blackwhite-5 hover:text-text-primary transition-colors"
+                  onclick={() => (sourcesOpen = !sourcesOpen)}
+                  aria-label={sourcesLabel}
+                >
+                  <Icon icon="heroicons:link" width="14" height="14" />
+                  <span class="tabular-nums">{message.groundingRefs.length}</span>
+                  <Icon icon={sourcesOpen ? 'heroicons:chevron-up' : 'heroicons:chevron-down'} width="12" height="12" />
+                </button>
+              {/snippet}
+            </Tooltip>
+          {/if}
+
+          {#if message.status === 'complete'}
+            <ChatDeepDive section="trigger" {conversation} {message} {onFollowUp} />
+          {/if}
+
           {#if timeLabel}
-            <span class="flex items-center gap-1" title={message.createdAt}>
-              <Icon icon="heroicons:clock" width="12" height="12" />
+            <span class="ml-1 text-[11px] text-text-secondary/60 tabular-nums">
               {timeLabel}
             </span>
           {/if}
         </div>
-      {/if}
+      </BitsTooltip.Provider>
 
       {#if hasGroundingRefs}
-        <button
-          type="button"
-          class="mt-0.5 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-text-secondary/70 hover:bg-blackwhite-5 hover:text-text-primary transition-colors"
-          onclick={() => (sourcesOpen = !sourcesOpen)}
-          aria-label="{sourcesOpen ? 'Hide' : 'Show'} sources"
-        >
-          <Icon icon="heroicons:link" width="12" height="12" />
-          <span>{message.groundingRefs.length} {message.groundingRefs.length === 1 ? 'source' : 'sources'}</span>
-          <Icon icon={sourcesOpen ? 'heroicons:chevron-up' : 'heroicons:chevron-down'} width="12" height="12" />
-        </button>
         <ChatSourceDrawer groundingRefs={message.groundingRefs} open={sourcesOpen} />
       {/if}
 
       {#if message.status === 'complete'}
-        <ChatDeepDive {conversation} {message} {onFollowUp} />
+        <ChatDeepDive section="panel" {conversation} {message} {onFollowUp} />
       {/if}
     {/if}
   {/if}

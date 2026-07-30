@@ -96,12 +96,14 @@
         align="center"
       >
         {#snippet children({ builder })}
+          <!-- `{...builder}` first: the bits-ui trigger props carry their own
+               `onclick`, and the last writer wins in a spread. -->
           <button
+            {...builder}
             class="action-btn-mini font-mono relative p-2.5 text-xs rounded-full border border-border text-text-secondary hover:text-text-primary hover:bg-blackwhite-5 transition-colors duration-125 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             class:animate={showAnimations}
             class:no-delay={skipAnimation}
             onclick={() => handleActionClick(action.key)}
-            {...builder}
             style={skipAnimation ? '' : `animation-delay: ${600 + i * 150}ms`}
           >
             <Icon
